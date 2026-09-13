@@ -425,6 +425,56 @@ on:
         required: false
         type: boolean
         default: false
+      e2e-promotion-only:
+        # ── WHY THIS DEFAULTS TO TRUE, AND WHAT IT COSTS ────────────────────
+        #
+        # Ruben's decision, 2026-09-13: the Playwright suite runs locally and
+        # on the promotion path only. It is the most expensive leg this
+        # workflow produces — dossiq runs three shards at 16 to 25 minutes
+        # each, against seconds for the fast tier — and it was being asked for
+        # on every push to `development` and every pull request into it.
+        #
+        # The queue, not the money, is the constraint. Measured 2026-09-12,
+        # dossiq had 36 of 48 Code Quality push runs on `development`
+        # CANCELLED in one day and went five hours with no successful run: a
+        # drain-the-backlog merge rate kept moving the head while the
+        # concurrency queue killed the pending run behind it. At one point 17
+        # of the fleet's 19 in-flight runs were dossiq's own.
+        #
+        # ⚠️ THIS HAS BEEN TRIED ONCE AND REVERTED, so read the reversal
+        # before widening it further. #618 deferred E2E off pull requests into
+        # `development` and #637 restored it, because deferring to the PUSH
+        # leaves the verdict nowhere: a `development` push run is usually
+        # cancelled before any job starts. That argument does NOT apply here,
+        # because this change does not move the verdict onto the push — it
+        # moves it onto the `development -> beta` and `beta -> main`
+        # promotions, which are pull requests with no merge traffic behind
+        # them, plus `workflow_dispatch` on demand, plus `npx playwright test`
+        # locally. The cost is stated plainly: a defect that only a browser
+        # can see now lands on `development` and is caught at the promotion,
+        # not at the merge. That is the trade that was authorised.
+        #
+        # FAIL-SAFE TOWARDS RUNNING. The decision is made in the `changes` job
+        # (step `e2e-trigger`) and only two events can turn E2E off: a
+        # `pull_request` whose base is not `beta`/`main`, and a `push` to a
+        # branch that is not `beta`/`main`. A `workflow_dispatch`, a
+        # `schedule`, a `merge_group` or any event this workflow has not met
+        # resolves to RUN. The consumers test `!= 'false'`, so a `changes` job
+        # that fails, is cancelled or is deleted publishes the empty string and
+        # the suite runs.
+        #
+        # THE SKIP IS DECLARED, NEVER SILENT. The Quality Report's test-tier
+        # census fails a run whose enabled test job reports `skipped` with no
+        # stated reason — that gate exists because on 2026-08-06 an advisory
+        # deleted the test tier in 16 repos and every run read as unremarkable.
+        # `changes` therefore emits the REASON alongside the boolean, and the
+        # report prints it in the Playwright cell and in the census. Skipping
+        # without a reason would have moved the red from the E2E check to the
+        # aggregator rather than removing it.
+        description: "Run the Playwright E2E suite only on the promotion path — pull requests targeting `beta` or `main`, and pushes to `beta` or `main` — plus `workflow_dispatch` on any branch. Default TRUE: ordinary `development` traffic (pushes to `development` and pull requests into it) reports E2E as a DECLARED skip, with its reason printed in the Quality Report, not as a missing verdict. Set false to restore the previous behaviour, where E2E ran on every push and every pull request except the release/sync ones. The suite is unchanged and still runs locally with `npx playwright test`."
+        required: false
+        type: boolean
+        default: true
       e2e-shards:
         description: "Split the Playwright suite across this many runners, 1 to 8. OPT-IN, default 1, and 1 runs exactly one job with exactly the command line it always ran. Above 1, the E2E job becomes a matrix of legs, each with its own Nextcloud and its own database, each running `npx playwright test --shard=<i>/<n>`. Every leg exports E2E_SHARD_INDEX and E2E_SHARD_TOTAL so the app's config can size its own globalTimeout (it is per process, so per shard). Before any test runs, each leg lists every shard and FAILS if one test the unsharded suite would run is on no shard. Read the note on the playwright job before opting in: Playwright never shards a project that another project depends on, so a config with project `dependencies` can end up running most of its suite on every leg."
         required: false
@@ -734,6 +784,15 @@ jobs:
     outputs:
       code: ${{ steps.decide.outputs.code }}
       reason: ${{ steps.decide.outputs.reason }}
+      # The E2E trigger decision, computed ONCE and read by three places: the
+      # `playwright` job's `if:`, the `hydra-gates-axe` producer probe, and the
+      # Quality Report (both the Playwright cell and the test-tier census).
+      # It lives here rather than being re-typed into each `if:` because the
+      # predicate it replaces WAS re-typed into four places, and the axe job's
+      # copy carries a comment promising it is "byte-for-byte the one on that
+      # job" — a promise nothing checked.
+      e2e: ${{ steps.e2e-trigger.outputs.e2e }}
+      e2e_reason: ${{ steps.e2e-trigger.outputs.e2e_reason }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -845,6 +904,95 @@ jobs:
 
           echo "No changed file matches the code globs, and none carries a source extension."
           emit false "no file in this diff matches the code globs, and none carries a source extension — the heavy tier has nothing to decide about it."
+
+      # ── Does E2E run on THIS trigger? ────────────────────────────────────
+      #
+      # A SEPARATE question from the one above, answered in a separate step so
+      # neither can shadow the other. The step above asks "could this diff
+      # change a test verdict"; this one asks "is this event on the promotion
+      # path". Both must say yes for the Playwright job to run, and each states
+      # its own reason, so a skipped E2E cell always names WHICH rule skipped it.
+      #
+      # THIS STEP RUNS UNCONDITIONALLY, like the one above and for the same
+      # reason: a skipped step publishes an empty output, `'' != 'false'` is
+      # true, and every consumer tests `!= 'false'`. So every failure mode of
+      # this step resolves to running the suite.
+      #
+      # FAIL-SAFE BY CONSTRUCTION. Only two events can answer `false`, and both
+      # are named explicitly. Anything else — `workflow_dispatch` (the
+      # deliberate ask), `schedule` (the nightly sweep), `merge_group`, or an
+      # event this workflow has never met — falls through to `true`. The filter
+      # must PROVE the trigger is ordinary development traffic; it never
+      # assumes it.
+      - name: Does E2E run on this trigger?
+        id: e2e-trigger
+        env:
+          PROMOTION_ONLY: ${{ inputs.e2e-promotion-only }}
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          REF: ${{ github.ref }}
+        run: |
+          set -uo pipefail
+
+          emit_e2e() {
+            echo "e2e=$1" >> "$GITHUB_OUTPUT"
+            echo "e2e_reason=$2" >> "$GITHUB_OUTPUT"
+            {
+              echo "### E2E trigger filter"
+              echo ""
+              echo "- Playwright: **$([ "$1" = true ] && echo RUNS || echo 'NOT RUN (declared)')**"
+              echo "- Reason: $2"
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ "$1" = true ]; then
+              echo "::notice::E2E WILL run — $2"
+            else
+              echo "::notice::E2E deliberately NOT run — $2"
+            fi
+            exit 0
+          }
+
+          # RULE 1 — predates e2e-promotion-only and is independent of it.
+          # A release/ or sync/ branch into `development` carries version
+          # strings and merge commits, and nothing a browser can observe.
+          if [ "$EVENT" = "pull_request" ] && [ "$BASE_REF" = "development" ]; then
+            case "$HEAD_REF" in
+              release/*|sync/*)
+                emit_e2e false "this pull request comes from a release or sync branch, which carries only version strings. E2E runs on the promotions."
+                ;;
+            esac
+          fi
+
+          # RULE 2 — the promotion-path restriction.
+          if [ "$PROMOTION_ONLY" != "true" ]; then
+            emit_e2e true "e2e-promotion-only is off for this repository, so E2E runs on every trigger."
+          fi
+
+          case "$EVENT" in
+            pull_request)
+              case "$BASE_REF" in
+                beta|main)
+                  emit_e2e true "this pull request targets \`${BASE_REF}\`, which is on the promotion path."
+                  ;;
+                *)
+                  emit_e2e false "E2E runs locally and on the promotion path only. This pull request targets \`${BASE_REF:-an unnamed branch}\`, so the suite is asked once per promotion into \`beta\` and \`main\` rather than once per push per open pull request. Run it on any branch from the Actions tab, or locally with npx playwright test."
+                  ;;
+              esac
+              ;;
+            push)
+              case "$REF" in
+                refs/heads/beta|refs/heads/main)
+                  emit_e2e true "this push is to \`${REF#refs/heads/}\`, which is on the promotion path."
+                  ;;
+                *)
+                  emit_e2e false "E2E runs locally and on the promotion path only. This is a push to \`${REF#refs/heads/}\`, which is ordinary development traffic, so the suite runs on the promotions into \`beta\` and \`main\`. Run it on any branch from the Actions tab, or locally with npx playwright test."
+                  ;;
+              esac
+              ;;
+            *)
+              emit_e2e true "event '${EVENT}' is neither a push nor a pull request, so it is not ordinary development traffic. Running the suite."
+              ;;
+          esac
 
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 1 — Four parallel quality gates        ║
@@ -4473,7 +4621,30 @@ jobs:
     # dependency bump is exactly where a browser-observable break appears, and
     # `@nextcloud/axios` 2.6.0 breaking every `@conduction/nextcloud-vue`
     # component is this month's example.
-    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() && !(github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/'))) }}
+    #
+    # ── 2026-09-13: BACK ON THE PROMOTION PATH, AND FURTHER THAN #618 WENT ──
+    #
+    # The paragraphs above are the record of #618 and its reversal in #637, and
+    # they are kept because the reason for the reversal is still true: moving
+    # the verdict onto the `development` PUSH puts it nowhere, since a
+    # `development` push run is usually cancelled before any job starts.
+    #
+    # This change does not do that. It takes E2E off `development` traffic
+    # ENTIRELY — the pushes as well as the pull requests — and leaves it on the
+    # `development -> beta` and `beta -> main` promotions, on
+    # `workflow_dispatch` for any branch, and on `npx playwright test` locally.
+    # A promotion pull request has no merge traffic behind it, so it is not
+    # subject to the cancellation that emptied the push lane.
+    #
+    # The predicate is no longer written here. It is `needs.changes.outputs.e2e`,
+    # decided once in the `changes` job, so the `if:` on this job, the axe
+    # producer probe and the two report sites cannot drift apart — which the
+    # four hand-copied copies of the release/sync predicate could.
+    #
+    # `!= 'false'` for the same reason as `code` above: a `changes` job that
+    # fails, is cancelled or is deleted publishes the EMPTY STRING, and the
+    # suite must run rather than vanish.
+    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && needs.changes.outputs.e2e != 'false' && !cancelled() }}
     runs-on: ubuntu-latest
     # The name carries a matrix expression on purpose. A matrix job whose name
     # does not mention `matrix` gets its values appended by GitHub, and the
@@ -7551,7 +7722,10 @@ jobs:
     if: ${{ inputs.enable-hydra-gates && inputs.enable-axe && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Hydra Gates (axe)"
-    needs: [playwright]
+    # `changes` is here for its `e2e` output ONLY — the producer probe below
+    # reads it. It is not a gate: `!cancelled()` above already suppresses the
+    # implicit `success()` this `needs:` would otherwise impose.
+    needs: [playwright, changes]
     timeout-minutes: 10
 
     steps:
@@ -7570,19 +7744,46 @@ jobs:
           ref: ${{ inputs.hydra-gates-ref }}
           path: gates
 
-      # The producer does not run on a pull request into development from a
-      # release/ or sync/ branch (see the Playwright job's `if:`), so there
-      # is nothing to judge there and saying so is the verdict. The predicate
-      # is byte-for-byte the one on that job, for the reason recorded on the
-      # old in-job step: a skip on the producer and enforcement on the
-      # consumer are two checks over one artefact that cannot both hold.
+      # The producer does not run on every event (see the Playwright job's
+      # `if:`), and where it does not run there is nothing to judge — saying
+      # so IS the verdict. A skip on the producer and enforcement on the
+      # consumer are two checks over one artefact that cannot both hold, and
+      # `enable-axe` is live in three repos today (integriq, filinq,
+      # zaakafhandelapp), so getting this wrong would turn those three red on
+      # every development PR at the aggregator instead of at the E2E check.
+      #
+      # THE PREDICATE IS NO LONGER RE-TYPED HERE. It used to be a hand-copied
+      # duplicate of the Playwright job's `if:`, with a comment promising the
+      # two were "byte-for-byte" identical and nothing checking that they were.
+      # Both now read the same `changes` output, so they cannot disagree.
+      #
+      # `!= 'false'`, matching the producer exactly: an empty output (a
+      # `changes` job that failed, was cancelled or was deleted) means the
+      # producer RAN, so the report is expected and its absence is a real
+      # finding.
       - name: Does the producer run on this event?
         id: producer
+        env:
+          E2E_TRIGGER: ${{ needs.changes.outputs.e2e }}
+          E2E_TRIGGER_REASON: ${{ needs.changes.outputs.e2e_reason }}
+          # INHERITED, fixed here because it is the same defect in the same
+          # step: the probe only ever mirrored ONE of the producer's three
+          # conditions. `enable-path-filtering` is true in all 21 core apps and
+          # `enable-axe` is true in three of them, so a docs-only diff in
+          # integriq, filinq or zaakafhandelapp already skipped Playwright,
+          # left the probe saying "the producer ran", and failed this job for a
+          # report that was never going to exist. A probe that does not mirror
+          # the producer is not a probe.
+          PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
+          PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
         run: |
           set -u
-          if [ "${{ github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/')) }}" = "true" ]; then
+          if [ "${E2E_TRIGGER}" = "false" ]; then
             echo "ran=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::enable-axe is on, but Playwright does not run on a pull request into development from a release/ or sync/ branch, so no axe report exists to judge. gate-33 is withheld here and enforced on the development->beta and beta->main promotions, where the producer runs."
+            echo "::notice::enable-axe is on, but Playwright — the only producer of tests/axe/report.json — does not run on this trigger, so no axe report exists to judge. Reason: ${E2E_TRIGGER_REASON}. gate-33 is withheld here and enforced where the producer runs."
+          elif [ "${PATH_FILTER_CODE}" = "false" ]; then
+            echo "ran=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::enable-axe is on, but Playwright — the only producer of tests/axe/report.json — was skipped by the changed-path filter, so no axe report exists to judge. Reason: ${PATH_FILTER_REASON}. gate-33 is withheld here and enforced on a diff the heavy tier has something to say about."
           else
             echo "ran=true" >> "$GITHUB_OUTPUT"
           fi
@@ -7951,15 +8152,21 @@ jobs:
         env:
           # The SAME three facts the "Gate — a test job that was ENABLED but
           # never ran" step below reads, so the table and the gate classify one
-          # skip one way. Before this, the gate knew a PR into `development`
-          # defers E2E to the promotion run and passed, while this table only
+          # skip one way. Before this, the gate knew a deferred E2E run and
+          # passed, while this table only
           # knew enabled+skipped and stamped the same run "🚨 NO VERDICT" — a
           # deliberate cost control rendered as a missing test tier, on every
           # dev PR, forever (observed on keepiq#479). Env rather than inline
           # `${{ }}`: `reason` is free text and does not belong in the script.
           PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
           PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
-          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/')) }}
+          # The E2E trigger filter's own verdict AND ITS REASON, both from the
+          # `changes` job. The predicate used to be re-typed here, in the
+          # census below and in the axe producer probe — four hand-kept copies
+          # of one rule. It is now decided once and read, so the table, the
+          # gate and the axe job cannot classify one skip three ways.
+          E2E_TRIGGER: ${{ needs.changes.outputs.e2e }}
+          E2E_TRIGGER_REASON: ${{ needs.changes.outputs.e2e_reason }}
         run: |
           set -euo pipefail
 
@@ -8034,8 +8241,8 @@ jobs:
           # from the gate.
           PHPUNIT_SKIP_REASON=""
           PLAYWRIGHT_SKIP_REASON=""
-          if [ "$E2E_PROMOTION_SKIP" = "true" ]; then
-            PLAYWRIGHT_SKIP_REASON="deferred: a release or sync branch carries only version strings, so E2E runs on the merge and on the promotions"
+          if [ "$E2E_TRIGGER" = "false" ]; then
+            PLAYWRIGHT_SKIP_REASON="deferred: ${E2E_TRIGGER_REASON}"
           fi
           if [ "$PATH_FILTER_CODE" = "false" ]; then
             PHPUNIT_SKIP_REASON="not run for this diff — ${PATH_FILTER_REASON}"
@@ -8344,12 +8551,19 @@ jobs:
           # EXISTS" — turning a working cost control into a permanent red.
           PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
           PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
-          # A pull request into `development` deliberately does not run E2E:
-          # the promotion into beta/main does, so it is one run per merge rather
-          # than one per push per open pull request. Without this the census
-          # sees only `skipped` and calls a working cost control "NO VERDICT
-          # EXISTS", which moves the red instead of removing it.
-          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/')) }}
+          # Ordinary `development` traffic deliberately does not run E2E: the
+          # `development -> beta` and `beta -> main` promotions do, so the
+          # suite is asked once per promotion rather than once per push per
+          # open pull request. Without these two the census sees only
+          # `skipped` and calls a working cost control "NO VERDICT EXISTS",
+          # which moves the red to the aggregator instead of removing it.
+          # The E2E trigger filter's own verdict AND ITS REASON, both from the
+          # `changes` job. The predicate used to be re-typed here, in the
+          # census below and in the axe producer probe — four hand-kept copies
+          # of one rule. It is now decided once and read, so the table, the
+          # gate and the axe job cannot classify one skip three ways.
+          E2E_TRIGGER: ${{ needs.changes.outputs.e2e }}
+          E2E_TRIGGER_REASON: ${{ needs.changes.outputs.e2e_reason }}
           JOURNEYDOC_ENABLED: ${{ inputs.enable-journeydoc-capture }}
           JOURNEYDOC_RESULT: ${{ needs['journeydoc-capture'].result }}
         run: |
@@ -8403,8 +8617,8 @@ jobs:
           classify "PHPUnit"            "$PHPUNIT_ENABLED"    "$PHPUNIT_RESULT"    true
           classify "Newman"             "$NEWMAN_ENABLED"     "$NEWMAN_RESULT"
           E2E_REASON=""
-          if [ "$E2E_PROMOTION_SKIP" = "true" ]; then
-            E2E_REASON="This pull request comes from a release or sync branch, which carries only version strings. E2E runs on the merge and on the promotions."
+          if [ "$E2E_TRIGGER" = "false" ]; then
+            E2E_REASON="$E2E_TRIGGER_REASON"
           fi
           classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true "$E2E_REASON"
           classify "Journeydoc capture" "$JOURNEYDOC_ENABLED" "$JOURNEYDOC_RESULT"

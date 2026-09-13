@@ -137,6 +137,32 @@ jobs:
       - name: "Assert the filter skips only what it can prove is irrelevant"
         run: python3 scripts/test-changed-path-filter.py .github/workflows/quality.yml
 
+  e2e-trigger-filter:
+    name: "E2E runs on the promotion path, and its skip is never silent"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # TWO failure shapes, opposite in sign, and the suite has to hold both.
+      #
+      #   * The filter answers `false` where it should answer `true` — the
+      #     fleet loses its browser verdict on the promotion into `beta` or
+      #     `main`, which is the only place it is asked for now, and the run
+      #     stays green. That is the #194 shape with a new cause.
+      #   * The filter answers `false` WITHOUT a reason, or the census stops
+      #     honouring the reason — every development pull request goes red on
+      #     the Quality Report instead of on the E2E check. The red moves; it
+      #     does not go away, and it is then blamed on the aggregator.
+      #
+      # Both scripts are extracted from quality.yml and executed, so a suite
+      # that had stopped reading the shipped text cannot pass the control.
+      - name: "Positive control — a broken fail-safe must fail the suite"
+        run: python3 scripts/test-e2e-trigger-filter.py --positive-control .github/workflows/quality.yml
+
+      - name: "Assert the trigger filter and the report census agree"
+        run: python3 scripts/test-e2e-trigger-filter.py .github/workflows/quality.yml
+
   consolidated-tool-legs:
     name: "A consolidated tool family cannot swallow a failure"
     runs-on: ubuntu-latest
@@ -537,7 +563,7 @@ jobs:
   guard:
     name: "Shared-workflow guard"
     runs-on: ubuntu-latest
-    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, probe, changed-path-filter, consolidated-tool-legs, e2e-shard-partition]
+    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, probe, changed-path-filter, e2e-trigger-filter, consolidated-tool-legs, e2e-shard-partition]
     if: ${{ !cancelled() }}
     steps:
       - name: Assert both guards reached a verdict
@@ -551,12 +577,13 @@ jobs:
           FILTER: ${{ needs['changed-path-filter'].result }}
           LEGS_CONSOLIDATED: ${{ needs['consolidated-tool-legs'].result }}
           SHARD_PARTITION: ${{ needs['e2e-shard-partition'].result }}
+          E2E_TRIGGER: ${{ needs['e2e-trigger-filter'].result }}
         run: |
           set -eu
-          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} probe=${PROBE} changed-path-filter=${FILTER} consolidated-tool-legs=${LEGS_CONSOLIDATED} e2e-shard-partition=${SHARD_PARTITION}"
+          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} probe=${PROBE} changed-path-filter=${FILTER} e2e-trigger-filter=${E2E_TRIGGER} consolidated-tool-legs=${LEGS_CONSOLIDATED} e2e-shard-partition=${SHARD_PARTITION}"
           # `skipped` is failed here on purpose. A guard that did not run is
           # not a guard that passed.
-          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "probe:${PROBE}" "changed-path-filter:${FILTER}" "consolidated-tool-legs:${LEGS_CONSOLIDATED}" "e2e-shard-partition:${SHARD_PARTITION}"; do
+          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "probe:${PROBE}" "changed-path-filter:${FILTER}" "e2e-trigger-filter:${E2E_TRIGGER}" "consolidated-tool-legs:${LEGS_CONSOLIDATED}" "e2e-shard-partition:${SHARD_PARTITION}"; do
             name="${pair%%:*}"; result="${pair##*:}"
             [ "${result}" = "success" ] || {
               echo "::error::${name} did not succeed (result=${result}). A guard that \
