@@ -1406,7 +1406,7 @@ function main() {
 		if (roleLiterals.length > 0) {
 			const resolver = discoverRoleResolver(APP_DIR)
 			if (!resolver) {
-				warn('role-resolvable', '/', `manifest gates on user.primaryRole but no role-resolution service is discoverable (no 'primaryRole' provideInitialState call site under lib/) — role-resolvable cannot be checked`)
+				warn('role-resolvable', '/', `manifest gates on user.primaryRole but no role-resolution service is discoverable (no 'primaryRole' provideInitialState call site under lib/), so role-resolvable cannot be checked`)
 			} else {
 				for (const { ptr, id, literal } of roleLiterals) {
 					if (!resolver.roles.has(literal)) {
@@ -1432,11 +1432,11 @@ function main() {
 			for (const site of groupCallSites) {
 				const rel = path.relative(APP_DIR, site.file)
 				if (site.literal === null) {
-					warn('group-declared', `${rel}:${site.line}`, `isInGroup() call names a dynamically-constructed group id ('${site.lineText}') — not statically resolvable`)
+					warn('group-declared', `${rel}:${site.line}`, `isInGroup() call names a dynamically-constructed group id ('${site.lineText}'), which cannot be resolved statically`)
 					continue
 				}
 				if (!declaredGroups.hasRegisterJson) {
-					warn('group-declared', `${rel}:${site.line}`, `isInGroup($uid, '${site.literal}') cannot be resolved — no lib/Settings/*register*.json in repo`)
+					warn('group-declared', `${rel}:${site.line}`, `isInGroup($uid, '${site.literal}') cannot be resolved: this repo has no lib/Settings/*register*.json`)
 					continue
 				}
 				if (!declaredGroups.groups.has(site.literal)) {
