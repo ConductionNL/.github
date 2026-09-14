@@ -45,7 +45,7 @@ const { spawnSync } = require('child_process')
 
 const DECLARATION = 'lib/Settings/connections.json'
 const SCHEMA_PATH = path.resolve(__dirname, '..', 'schemas', 'connections.schema.json')
-const SOURCE_COMMIT = '3d222e85cff84c520aaee838ff3cb1cd43229cd1'
+const SOURCE_COMMIT = '605a87792a062ebbd38e05e8f598597fcf8a94c4'
 const ANCHOR_DIRS = ['src', 'templates']
 const SKIP_DIRS = new Set(['node_modules', 'vendor', 'dist', 'build', 'custom_apps', '.git'])
 const TEXT_FILE = /\.(vue|js|mjs|cjs|ts|tsx|jsx|php|html|json|md|twig)$/

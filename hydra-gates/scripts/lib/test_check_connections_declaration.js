@@ -136,6 +136,18 @@ const findings = (out) => out.split('\n').filter((l) => l.startsWith('FAIL '))
 	assert(/^\[connections-declaration\] checked 1 declaration file\(s\), 0 finding\(s\)$/m.test(r.stdout), 'clean: the terminal checked line is printed')
 }
 
+// --- ARM 1b: the fields hydra#673 added are clean, not "additional properties" ---
+{
+	const amended = JSON.parse(JSON.stringify(CLEAN))
+	amended.connections.push(
+		{ key: 'email', title: 'Email', adapter: { configKey: 'email_transport_type', simulatedValues: ['', 'null'] } },
+		{ key: 'llm', title: 'Language model', adapter: { configKey: 'llm', jsonPath: 'chat.provider', simulatedValues: ['none'] } },
+		{ key: 'cti', title: 'Telephony', reportedOnly: true },
+	)
+	const r = run(makeApp('amended', { declaration: amended }))
+	assert(r.status === 0 && findings(r.stdout).length === 0, `amended: jsonPath, simulatedValues and reportedOnly validate (got ${r.status}: ${r.stdout.trim()})`)
+}
+
 // --- ARM 2: rule 1, the schema --------------------------------------------------
 {
 	const bad = JSON.parse(JSON.stringify(CLEAN))

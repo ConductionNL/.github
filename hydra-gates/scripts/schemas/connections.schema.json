@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://conduction.nl/schemas/integriq/connections.schema.json",
-  "$comment": "Vendored for gate-116 (connections-declaration) from ConductionNL/integriq lib/Settings/connections.schema.json at commit 3d222e85cff84c520aaee838ff3cb1cd43229cd1 (integriq#1996, development). Integriq owns this file. To update it, copy the file again and change the commit here and in SOURCE_COMMIT in scripts/lib/check_connections_declaration.js.",
+  "$comment": "Vendored for gate-116 (connections-declaration) from ConductionNL/integriq lib/Settings/connections.schema.json at commit 605a87792a062ebbd38e05e8f598597fcf8a94c4 (integriq#1996 amended by #2010, development). Integriq owns this file. To update it, copy the file again and change the commit here and in SOURCE_COMMIT in scripts/lib/check_connections_declaration.js.",
   "title": "Connection declarations",
   "description": "The shape of lib/Settings/connections.json. An app lists its outside connections here, and integriq turns each entry into one connection row. Contract: hydra openspec/changes/connection-registry/design.md, section D2. Integriq's runtime check is lib/Service/ConnectionDeclarationValidator.php, which mirrors this file rule for rule.",
   "type": "object",
@@ -76,7 +76,19 @@
             "configKey": {
               "type": "string",
               "minLength": 1,
-              "description": "App-config key naming the adapter class. Empty in the app's config means a mock answers."
+              "description": "App-config key that selects the adapter: a class name, a provider name or a JSON settings blob."
+            },
+            "jsonPath": {
+              "type": "string",
+              "pattern": "^[^.]+(\\.[^.]+)*$",
+              "description": "Dot path into the value when configKey holds a JSON object, such as chat.provider. A missing path reads as empty."
+            },
+            "simulatedValues": {
+              "type": "array",
+              "description": "The values that mean a mock adapter answers. Compared case-insensitively after trimming. Default: one empty string.",
+              "items": {
+                "type": "string"
+              }
             },
             "simulatedMessage": {
               "type": "string",
@@ -100,6 +112,10 @@
           "type": "string",
           "minLength": 1,
           "description": "Slug of an integriq source template, offered first when an admin links a source."
+        },
+        "reportedOnly": {
+          "type": "boolean",
+          "description": "true means only the app can tell what answers. Integriq then skips the adapter and settings rules. Default false."
         }
       }
     }
