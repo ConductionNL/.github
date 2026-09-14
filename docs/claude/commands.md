@@ -2,7 +2,7 @@
 
 Complete reference for all commands available in the spec-driven development workflow. Commands are organized by domain — click through to the detailed reference for each area.
 
-> **Platform policy.** Commands that interact with a git host (`/create-pr`, `/review-pr`, `/report-out`, `/opsx-plan-to-issues`, `/opsx-apply`, `/opsx-verify`, `/opsx-archive`, etc.) auto-detect the per-repo platform from `git remote get-url origin` and prefer **Codeberg / Gitea / Forgejo** *(primary)* over **GitHub** *(secondary/fallback)* over **GitLab** *(alternative)*. The `gh` calls shown below are the github form; on Codeberg they shell out to `tea` (or REST `POST /api/v1/...` when the operation requires a TTY that `tea` needs). Conduction is migrating to `codeberg.org/Conduction/*` (2026-05-29) — the chain is bidirectional. See [hydra/.claude/skills/PLATFORM-POLICY.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/PLATFORM-POLICY.md) for the canonical reference.
+> **Platform policy.** Commands that interact with a git host (`/create-pr`, `/review-pr`, `/report-out`, `/opsx-plan-to-issues`, `/opsx-apply`, `/opsx-verify`, `/opsx-archive`, etc.) auto-detect the per-repo platform from `git remote get-url origin`. For **ConductionNL work the host is GitHub** — the 2026-05-29 move to Codeberg was reversed (directive 2026-07-17, executed 2026-07-23), so a `codeberg.org` URL found inside a repo is stale data to be fixed, not evidence of where that repo lives. The Codeberg / Gitea / Forgejo path is retained for **customer-run self-hosted instances** and uses REST `POST /api/v1/...` where `tea` would need a TTY; GitLab is the alternative for non-Conduction work. The chain stays bidirectional deliberately. See [hydra/.claude/skills/PLATFORM-POLICY.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/PLATFORM-POLICY.md) for the canonical reference.
 
 ## OpenSpec Commands
 
@@ -172,7 +172,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 
 **Model:** Checked at run time — the command reads your active model from context and stops automatically if you're on Haiku (or anything weaker than Sonnet). Involves parsing CI workflows, detecting branch-protection rules, and reasoning about code diffs where mistakes have real consequences. **Sonnet** for most PRs. **Opus** when the repo uses reusable CI workflows, branch-protection rulesets, or a complex branching strategy — that's where it pays off most.
 
-**Requires:** at least one platform CLI authenticated — `tea login add` (Codeberg, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative)
+**Requires:** the platform CLI for the repo's host authenticated — `gh auth login` (GitHub; all ConductionNL work), `glab auth login` (GitLab), or `tea login add` (a customer's self-hosted Gitea/Forgejo)
 
 ---
 
@@ -202,19 +202,52 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 
 **What it does:**
 
-1. **Detects re-reviews** — checks if anything has changed since your last review; skips if not
-2. **Classifies sensitivity** — auto-detects auth/RBAC/CI code and recommends Strict mode
-3. **Asks strictness** — Quick, Standard, Thorough, or Strict
-4. **Analyzes the diff** — runs in parallel sub-agents for batch mode; looks for bugs, null-safety issues, SQL parity, test coverage gaps, and more
-5. **Posts inline comments** — one finding per comment, severity marked with 🔴/🟡/🟢; never bundles multiple findings in one comment
-6. **Offers local testing (optional)** — when the PR touches frontend or backend code, asks whether to verify the changes locally; locates or clones the target repo, checks Docker is running (starts it or asks the user to), maps detected layers to applicable `/test-*` skills, builds a test plan, gets your approval, then executes — any new issues join the existing findings before the verdict
-7. **Checks CI** — blocks APPROVE if required CI checks are failing
-8. **Submits formal review** — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings)
-9. **Resolves addressed threads** — replies "✅ Resolved in {sha}" to previously raised comments now fixed, and marks threads closed
+1. **Checks batch scope first** — when given several PRs, detects whether one PR's head already contains another's commits (a retargeted stacked branch) and asks how to scope before staging anything. Reads `baseRefName` from the API, never the PR body, which goes stale the moment a branch is retargeted
+2. **Classifies each PR into a lane** — `settled` / `delta` / `full`, before any diff, gate, guide, clone or sub-agent runs. See *Lanes* below
+3. **Classifies sensitivity** — auto-detects auth/RBAC/CI code and recommends Strict mode
+4. **Asks strictness** — Quick, Standard, Thorough, or Strict. Always asked; never auto-selected
+5. **Consumes CI instead of repeating it** — when the repo's own gate job is green on *exactly* the PR's head SHA, that is taken as the evidence. A red gate check still gets a local run
+6. **Analyzes the diff** — parallel sub-agents in batch mode; Quick/delta PRs from one repo may share a single agent (max 4). Sub-agents work to a stated tool-call and report-length budget per strictness mode
+7. **Posts inline comments** — one finding per comment, severity marked with 🔴/🟡/🟢; never bundles multiple findings in one comment
+8. **Offers local testing (optional)** — when the PR touches frontend or backend code, asks whether to verify the changes locally; locates or clones the target repo, checks Docker is running (starts it or asks the user to), maps detected layers to applicable `/test-*` skills, builds a test plan, gets your approval, then executes — any new issues join the existing findings before the verdict
+9. **Checks CI** — blocks APPROVE if required CI checks are failing
+10. **Submits formal review** — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings)
+11. **Handles prior threads by author** — resolves threads *you* opened that are now addressed; on a co-reviewer's thread it posts an acknowledgment reply and leaves the thread for its author to close. Resolving someone else's comment misrepresents their agreement
+12. **Records what the run cost** — one line appended to `~/.claude/metrics/skill-runs.jsonl`, outside any repo. See *Measuring cost* below
+
+**Lanes** — decided per PR before any expensive step:
+
+| Lane | When | What runs |
+| ---- | ---- | --------- |
+| `settled` | Merged/closed **and** no commits since your last review | Nothing. One row in the summary table, nothing posted. A merged PR already carrying your APPROVE never gets a second one |
+| `delta` | Re-review with new commits, or a non-open PR that moved | Analysis scoped to `compare(lastReviewedSha, headSha)` — not the full PR diff |
+| `full` | Open PR you have not reviewed before | The whole pipeline |
+
+The lane is why a third review round costs a fraction of the first: the rest of the PR was already reviewed, and re-reading it is what made every round cost the same.
+
+**Measuring cost:**
+
+```bash
+# what a run cost (after the review; --prs makes batches comparable)
+python3 .claude/skills/review-pr/scripts/skill-metrics.py record --skill review-pr --prs 3 --mode Standard
+
+# compare runs, grouped by the skill's git SHA
+python3 .claude/skills/review-pr/scripts/skill-metrics.py report --skill review-pr
+
+# measure a skill EDIT without running a review at all
+python3 .claude/skills/review-pr/scripts/skill-metrics.py footprint
+
+# reconstruct past runs from transcripts already on disk
+python3 .claude/skills/review-pr/scripts/skill-metrics.py baseline --skill review-pr --all-projects
+```
+
+Claude Code tags every assistant message with `attributionSkill`, so the runtime meter reads real usage rather than estimating it. Sub-agent-internal tokens are **not** measured — sub-agents write no local transcript — so the meter records agent count, model and tool-result volume as proxies instead of inventing a number. Method and caveats: `hydra/.claude/skills/review-pr/references/metrics.md`.
+
+The measurement data lives outside the repo on purpose (per machine, per operator, churns every run). The tooling is in the repo; the measurements are not.
 
 **Model:** Requires Sonnet or Opus — stops immediately on Haiku. Batch mode lets you choose the model for parallel analysis agents (Sonnet default, Opus for security-sensitive batches).
 
-**Requires:** at least one platform CLI authenticated — `tea login add` (Codeberg, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative)
+**Requires:** the platform CLI for the repo's host authenticated — `gh auth login` (GitHub; all ConductionNL work), `glab auth login` (GitLab), or `tea login add` (a customer's self-hosted Gitea/Forgejo)
 
 ---
 
@@ -266,7 +299,7 @@ Daily end-of-day report. Scans local git repos for the user's commits and uncomm
 
 **Maturity:** L6 (9 evals, learnings.md with consolidation pipeline). See `hydra/.claude/skills/report-out/SKILL.md`.
 
-**Requires:** at least one platform CLI authenticated — `tea login add` (Codeberg, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative), `git` configured with `user.name` and `user.email`.
+**Requires:** the platform CLI for the repo's host authenticated — `gh auth login` (GitHub; all ConductionNL work), `glab auth login` (GitLab), or `tea login add` (a customer's self-hosted Gitea/Forgejo), `git` configured with `user.name` and `user.email`.
 
 ---
 
