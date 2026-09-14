@@ -77,7 +77,12 @@
 			"id": "reports-entry",
 			"label": "Reports",
 			"route": "reports-page",
-			"order": 20
+			"order": 20,
+			"visibleIf": {
+				"user.primaryRole": {
+					"in": ["admin", "viewer"]
+				}
+			}
 		},
 		{
 			"id": "app-settings-entry",
