@@ -83,6 +83,18 @@ The compiled output is uploaded as the `frontend-build-output` artifact (tarred,
 
 **Pin your build-critical devDependencies.** A caret on a build plugin means a lockfile regeneration can break the build in a way that used to be invisible and is now blocking.
 
+#### Lockfile sync gate (`Lockfile Sync`) - automatic, warning first
+
+`quality / Lockfile Sync` runs `npm ci --dry-run` and nothing else. It answers one question, in seconds, that sixteen other jobs were each discovering separately: does `package-lock.json` still agree with `package.json`?
+
+It exists because the `main` to `beta` to `development` sync merge can carry `main`'s `package.json` across while keeping `development`'s lockfile. Neither file is individually wrong, the two are separate paths so git reports no conflict, and the result is one broken `npm ci` rendered as sixteen red jobs on decidiq and twenty-three on shillinq (ConductionNL/.github#766). It also blocks every open PR in the repo, because Actions builds `pull_request` runs on the merge of head into base.
+
+**It warns, it does not block.** All 21 core apps resolve this workflow at `@main`, so a gate merged as blocking fails every affected repo the same minute. Measured 2026-09-12 on the toolchain pins (Node 24.11.1, npm 11.19.1) with each repo's own `.npmrc`: 21 of 21 pass on `development` and 21 of 21 on `beta`, so it would fail nothing today. Set `lockfile-sync-blocking: true` per repo once that repo is measured clean, the same shape as `reuse-blocking` and `check-code-blocking`.
+
+Only npm's `EUSAGE` desync answer counts as a finding. Any other non-zero exit is a registry hiccup rather than a fact about the repo, and is reported as no verdict.
+
+The repair is `npm install --package-lock-only` on the branch that is broken, verified with `npm ci` from a deleted `node_modules`. Do not copy the lockfile from `main`: `development` is legitimately ahead on ranges of its own, so the lock has to be regenerated against the `package.json` that is actually there.
+
 #### Custom frontend checks (`frontend-checks`)
 
 Repo-specific quality gates (unit tests, build verification, docs coverage, …) run through the `frontend-checks` input — a JSON array of **npm script names**. Each entry becomes its own `quality / Frontend Check (<script>)` job.

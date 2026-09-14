@@ -11,10 +11,10 @@ This guide walks you through setting up the spec-driven development workflow and
 - **Node.js 20+** (required by OpenSpec CLI)
 - **Global Claude settings installed** — mandatory for all Conduction work; see [global-claude-settings.md](global-claude-settings.md) for the install commands (sets up read-only Bash policy, write-approval hooks, and session-level version checking)
 - **Git-host CLI(s) authenticated** — at least one of the following (preference order, see workstation-setup.md for setup):
-  - **`tea` for Codeberg / Gitea / Forgejo** *(primary)* — `tea login add --name codeberg --url https://codeberg.org --token <PAT>`. Conduction is migrating to `codeberg.org/Conduction/*` as of 2026-05-29.
-  - **`gh` for GitHub** *(secondary/fallback)* — `gh auth login`. Still required while migration is in progress; supports `ConductionNL/*` legacy repos.
-  - **`glab` for GitLab** *(alternative)* — only needed for non-Conduction work.
-- Access to the `Conduction` org on Codeberg AND the `ConductionNL` org on GitHub (both, while migration is in flight)
+  - **`gh` for GitHub** *(primary)* — `gh auth login`. All Conduction work lives under `ConductionNL/*` on GitHub.
+  - **`glab` for GitLab** *(alternative)* — only needed for non-Conduction client work.
+  - **`tea` for Codeberg / Gitea / Forgejo** — only for a non-Conduction repo that genuinely lives on a Forgejo host; never the default.
+- Access to the `ConductionNL` org on GitHub
 - The `apps-extra` workspace cloned with at least one project
 
 **Optional — Container authentication (needed for `/opsx-apply-loop` and `/opsx-pipeline`):**
@@ -167,13 +167,13 @@ Edit the artifacts directly if needed — they're just markdown files.
 /opsx-plan-to-issues
 ```
 
-This converts your tasks into tracking issues on the per-repo platform (Codeberg primary, GitHub fallback, GitLab alternative — auto-detected from `git remote get-url origin`):
+This converts your tasks into tracking issues on the per-repo platform (GitHub primary, GitLab alternative, Forgejo only for non-Conduction repos — auto-detected from `git remote get-url origin`):
 
 - A **tracking issue** with a full checklist (your "epic")
 - **Individual issues** per task with acceptance criteria and spec references
 - A **`plan.json`** file linking everything together
 
-Open the tracking issue URL to see your project-board view (per-repo on Codeberg; cross-repo Kanban exists on GitHub Projects v2 only — no Codeberg equivalent yet).
+Open the tracking issue URL to see your project-board view; cross-repo Kanban lives on GitHub Projects v2.
 
 ### 4e. Start implementing
 
@@ -222,7 +222,7 @@ This merges your delta specs into the main specs and preserves the change for hi
 | Start a new feature            | `/opsx-new <name>`     |
 | Generate all specs at once     | `/opsx-ff`             |
 | Generate specs one at a time   | `/opsx-continue`       |
-| Convert tasks to tracking issues (Codeberg/GitHub) | `/opsx-plan-to-issues` |
+| Convert tasks to tracking issues (GitHub) | `/opsx-plan-to-issues` |
 | Start implementing             | `/opsx-apply`          |
 | Review implementation          | `/opsx-verify`         |
 | Complete and archive           | `/opsx-archive`        |

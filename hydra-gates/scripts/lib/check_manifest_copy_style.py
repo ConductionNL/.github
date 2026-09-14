@@ -46,6 +46,48 @@ FULL-TREE, not diff-scoped. The em-dashes are already in the tree. A
 diff-scoped version would report clean on every PR that does not happen to
 touch the manifest, which is nearly all of them, and the 25 would sit there
 indefinitely wearing a green tick.
+
+THE APP STORE DESCRIPTION, ADDED 2026-09-09, AS A WARNING.
+
+The gate read `src/manifest.json` and nothing else, so `appinfo/info.xml` was
+never checked. That file IS the App Store description: it is the most public
+prose any of these apps ships, the first thing a stranger reads, and the one
+surface no reviewer opens because it is not a screen.
+
+MEASURED 2026-09-09 over all 21 core apps at `development`. Their info.xml
+files carry 477 em-dashes: 204 inside `<description>` / `<summary>`, and 273
+inside XML comments. TWENTY OF TWENTY-ONE apps have at least one in the public
+copy. Only dossiq is clean, and only because it was fixed the same day
+(dossiq#2036), which is what prompted this.
+
+    launchpad 26 · stackiq 22 · pipelinq 22 · openregister 16 · opencatalogi 16
+    decidiq 16 · keepiq 16 · planninq 15 · humaniq 13 · learniq 9 · shillinq 6
+    buildiq 6 · hermiq 6 · integriq 4 · larpinq 3 · thematiq 2 · portaliq 2
+    zaakafhandelapp 2 · filinq 1 · versioniq 1 · dossiq 0
+
+SO IT SHIPS AS A WARNING, NOT A FAILURE. A new scope that blocks on the day it
+lands reddens twenty of twenty-one repositories on inherited debt, and this
+repository is resolved at `@main` by every one of them, so a merge is
+fleet-wide the same minute. The manifest scope stays blocking, because it is
+already green fleet-wide and regressions there must not ship. The App Store
+scope reports and does not block, until the 204 are cleared.
+
+ONLY `<description>` AND `<summary>`. Not the XML comments, even though they
+hold 273 of the 477. A comment is developer prose, addressed to whoever opens
+the file next; voice.md governs what a READER sees. Flagging comments would
+hand every app a chore whose completion changes nothing a user reads, and it
+is the same mistake `_meta` taught this checker once already, where 22 of
+shillinq's 47 findings were build provenance dressed as copy.
+
+THE EXIT CODE IS UNCHANGED, deliberately. `checked N manifest string(s)` still
+counts manifest strings only, and the return value is still driven by manifest
+findings alone, so the runner's empty-scope logic and the acceptance matrix's
+planted-FAIL / clean-PASS arms keep meaning exactly what they meant. The App
+Store findings arrive on their own `warned N` line. One consequence worth
+naming: a repo with an info.xml and NO manifest still reports `na`, and its
+App Store warnings sit in the log unheaded. No fleet app is in that state, and
+turning the advisory into a verdict is the change to make when the 204 are
+gone, not before.
 """
 
 import json
@@ -132,6 +174,64 @@ def _walk(node, path, hits, counter):
             _walk(value, "%s[%d]" % (path, index), hits, counter)
 
 
+# `<description>` and `<summary>` are the two elements a stranger reads on the
+# App Store page. `<name>` is a proper noun and carries no prose. Everything
+# else in info.xml is machinery: versions, dependencies, repair steps, routes.
+APPSTORE_ELEMENTS = ("description", "summary")
+
+# Non-greedy, DOTALL: these elements span lines and carry CDATA. The CDATA
+# wrapper is stripped rather than parsed, because a real XML parser here would
+# turn an unparseable info.xml into this gate's crash instead of
+# gate-manifest-validation's finding.
+APPSTORE_BLOCK = re.compile(
+    r"<(%s)\b[^>]*>(.*?)</\1>" % "|".join(APPSTORE_ELEMENTS), re.S
+)
+CDATA = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.S)
+XML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+
+def _appstore_findings(root):
+    """
+    Collect style findings in the App Store copy of appinfo/info.xml.
+
+    Comments are stripped BEFORE the elements are matched, so a commented-out
+    description cannot produce a finding nobody can act on.
+
+    :param root: repository root to scan.
+    :return: (list of (path, value, reasons), count of strings inspected).
+    """
+    path = os.path.join(root, "appinfo", "info.xml")
+    if not os.path.isfile(path):
+        return [], 0
+
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            xml = handle.read()
+    except OSError as exc:
+        print("SKIP appinfo/info.xml: unreadable (%s)" % exc)
+        return [], 0
+
+    xml = XML_COMMENT.sub("", xml)
+
+    hits = []
+    counted = 0
+    for match in APPSTORE_BLOCK.finditer(xml):
+        element = match.group(1)
+        value = match.group(2)
+        inner = CDATA.search(value)
+        if inner:
+            value = inner.group(1)
+        if not value.strip():
+            continue
+        counted += 1
+        reasons = _findings_for(value)
+        if reasons:
+            line = xml.count("\n", 0, match.start()) + 1
+            hits.append(("appinfo/info.xml:%d <%s>" % (line, element), value, reasons))
+
+    return hits, counted
+
+
 def _manifest_files(root):
     """
     Collect the manifest and every runtime-merged fragment.
@@ -151,6 +251,31 @@ def _manifest_files(root):
     return found
 
 
+def _report_appstore(hits, counted):
+    """
+    Print the App Store findings as a non-blocking advisory.
+
+    :param hits: list of (path, value, reasons).
+    :param counted: how many App Store strings were inspected.
+    :return: None
+    """
+    for where, value, reasons in hits:
+        excerpt = value.strip().replace("\n", " ")
+        excerpt = excerpt if len(excerpt) <= 120 else excerpt[:117] + "..."
+        print("WARN %s: %s" % (where, ", ".join(reasons)))
+        print("     %s" % excerpt)
+
+    if hits:
+        print("")
+        print("The App Store description breaks voice.md §8. This is ADVISORY:")
+        print("it does not fail the gate yet, because 20 of 21 fleet apps carry")
+        print("the same debt (204 findings, measured 2026-09-09) and this")
+        print("repository resolves at @main for all of them. Fix it anyway: this")
+        print("is the first prose a stranger reads about the app.")
+
+    print("warned %d app-store string(s)" % counted)
+
+
 def main(argv):
     """
     Entry point.
@@ -159,8 +284,14 @@ def main(argv):
     :return: 0 clean, 1 findings, 4 no manifest in this repo.
     """
     root = argv[1] if len(argv) > 1 else "."
+
+    # Read the App Store copy FIRST, so its advisory is printed even on a repo
+    # that ships no manifest and therefore returns `na` below.
+    store_hits, store_counted = _appstore_findings(root)
+
     files = _manifest_files(root)
     if not files:
+        _report_appstore(store_hits, store_counted)
         print("checked 0 manifest string(s)")
         return 4
 
@@ -189,7 +320,15 @@ def main(argv):
         print("Replace with a period, a comma, or a colon.")
         print("En-dashes are allowed only between digits, as a numeric range.")
 
+    _report_appstore(store_hits, store_counted)
+
     print("checked %d manifest string(s)" % counter[0])
+
+    # THE RETURN VALUE READS `hits` AND NOT `store_hits`, AND THAT IS THE WHOLE
+    # DESIGN. The App Store scope is advisory until the fleet's 204 findings are
+    # cleared. `test_check_manifest_copy_style.py` asserts an info.xml-only tree
+    # exits 0; wire `store_hits` in here and that arm goes red, which is the
+    # point of it.
     return 1 if hits else 0
 
 

@@ -76,6 +76,15 @@ nothing after it to run. Writing *about* coverage is not coverage
 **Format A slug:** kebab-case of the ``#### Scenario:`` heading text
 (lower-case, punctuation stripped, words joined with ``-``).
 
+A Format A scenario has **two accepted spellings**, and they differ by the
+leading word of the heading. GitHub slugifies the whole heading text, so
+clicking the heading on the rendered spec gives ``scenario-<slug>``; this
+gate's own slug drops the ``Scenario:`` label and is just ``<slug>``. Both
+address the same scenario. Before 2026-09-11 only the second one matched, and
+an anchor copied from the rendered page was parsed, matched nothing and was
+dropped without a word — 42 of dossiq's 330 citations were invisible that way.
+See :func:`covering_ref`.
+
 **Format B slug:** ``<parent-req-slug>-scenario-<n>`` where ``parent-req-slug``
 is the kebab-case of the enclosing ``### REQ-...:`` or ``### Requirement:``
 heading (text after the colon, or the full heading if no colon), and ``<n>`` is
@@ -106,13 +115,29 @@ directly after the spec's title / ``## Purpose`` section header. This is the
 correct mechanism for pure-backend or API-contract specs that are covered by
 Newman/PHPUnit instead of Playwright.
 
+A new scenario is not excludable
+================================
+
+When a base is available the gate also asks which scenarios the change ADDED:
+a ref present in the HEAD version of a touched spec and absent from its base
+version (every scenario of a spec file the change created counts). For those,
+an ``@e2e exclude`` does not satisfy the gate. Only a running test does. They
+are reported on their own lines as ``new scenario without a test`` and counted
+separately on the summary line, because the remedy differs from an existing
+uncovered scenario's: an existing one can be waived with a reason, a new one is
+written together with its test or not yet. Existing scenarios keep the
+exclusion semantics above unchanged.
+
 Diff scope
 ==========
 
-In gate mode (default), the gate is diff-scoped via ``HYDRA_GATE_BASE_REF``
-(default ``origin/development``): only scenarios in spec files that are ADDED or
-MODIFIED in the PR are checked. Scenarios in untouched spec files are never
-flagged.
+In gate mode (default), the gate is scoped to the change whenever the runner
+hands it a base through ``HYDRA_GATE_BASE_REF``, which it now does on every
+run that has a delta base and not only under ``--scope-to-diff``: only
+scenarios in spec files that are ADDED or MODIFIED relative to that base are
+checked, and scenarios in untouched spec files are never flagged. Without a
+base (a ``workflow_dispatch``, a plain local run) every spec in the repository
+is swept, which is the audit mode.
 
 Exit code is a STATUS, not a count: ``0`` pass, ``1`` fail, ``2`` error. The
 number of findings is on stdout, in the ``FAIL — <n> scenario(s)`` summary
@@ -137,6 +162,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Container
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -168,7 +194,26 @@ def _slugify(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 # Headings — Format A (classic)
-_SCENARIO_RE = re.compile(r"^#{4}\s+Scenario:\s*(.+)", re.IGNORECASE)
+# 🔴 AN IDENTIFIER MAY SIT BETWEEN "Scenario" AND THE COLON, and OpenSpec's own
+# parser accepts it: `#### Scenario PDOK-01a: BRT Achtergrondkaart` is a
+# scenario to `openspec show --json` and passes `openspec validate --strict`.
+# This regex used to require `Scenario:` verbatim, so every such heading was
+# not merely uncovered but INVISIBLE: never required, never credited, never
+# counted. Measured 2026-09-11: 663 of dossiq's scenarios, 155 of pipelinq's
+# and 5 of shillinq's were outside the gate that way, and a spec written only
+# in that form reported zero findings while nothing in it was measured.
+#
+# The identifier is kept in the name, so the slug is `pdok-01a-brt-...`. That
+# is not a choice of taste: GitHub's anchor for the heading is
+# `scenario-pdok-01a-brt-...`, which `covering_ref` already accepts as the
+# GitHub spelling of exactly that slug. Dropping the identifier would make the
+# anchor a developer copies from the rendered page miss by the id.
+#
+# A plain `#### Scenario: x` matches with no identifier and slugs exactly as it
+# did before, so no scenario the gate already saw changes its ref.
+_SCENARIO_RE = re.compile(
+    r"^#{4}\s+Scenario(?:\s+(?P<id>[^:\n]*?))?\s*:\s*(?P<text>.+)", re.IGNORECASE
+)
 # Headings — any ### heading that may parent scenarios (Requirement: OR REQ-*: patterns)
 _REQUIREMENT_RE = re.compile(r"^#{3}\s+(?:Requirement:|REQ-[A-Z0-9_-]+:)\s*(.*)", re.IGNORECASE)
 _PURPOSE_RE = re.compile(r"^(#{1,2}\s+(?:Purpose|.*Specification))", re.IGNORECASE)
@@ -408,10 +453,25 @@ def parse_spec_scenarios(spec_path: Path) -> list[dict]:
     """
     spec_name = spec_name_for(spec_path)
     try:
-        lines = spec_path.read_text(encoding="utf-8").splitlines()
+        text = spec_path.read_text(encoding="utf-8")
     except OSError:
         return []
+    return parse_spec_text(text, spec_name)
 
+
+def parse_spec_text(text: str, spec_name: str) -> list[dict]:
+    """Parse spec markdown held in memory; see :func:`parse_spec_scenarios`.
+
+    Split out so the BASE version of a touched spec (``git show base:path``)
+    can be parsed with the same rules as the HEAD version. That is what lets
+    the gate tell a scenario this change ADDED from one it merely sits next
+    to, without writing the base file to disk.
+
+    :param text: The spec markdown.
+    :param spec_name: The spec identity refs are built from.
+    :return: Scenario dicts, same shape as :func:`parse_spec_scenarios`.
+    """
+    lines = text.splitlines()
     results: list[dict] = []
 
     # ---- detect a whole-spec exclusion: @e2e exclude before the first ### heading
@@ -507,7 +567,9 @@ def parse_spec_scenarios(spec_path: Path) -> list[dict]:
             _flush_scenario_a()
             _flush_alt_item()
             in_alt_scenarios_block = False
-            current_scenario_a = scen_m.group(1).strip()
+            _sid = (scen_m.group("id") or "").strip()
+            _stext = scen_m.group("text").strip()
+            current_scenario_a = f"{_sid} {_stext}" if _sid else _stext
             in_scenario_a = True
             continue
 
@@ -1832,6 +1894,76 @@ class _PlaywrightScope:
         return False
 
 
+# ---------------------------------------------------------------------------
+# A FORMAT A SCENARIO HAS TWO SPELLINGS, AND THE GATE ONLY KNEW ONE
+# ---------------------------------------------------------------------------
+#
+# A Format A heading reads:
+#
+#     #### Scenario: REQ-ZAK-004b Empty dossier shows upload CTA
+#
+# `_SCENARIO_RE` captures only the text AFTER `Scenario:`, so the gate's slug
+# is `req-zak-004b-empty-dossier-shows-upload-cta`. GitHub slugifies the WHOLE
+# heading text, leading word included, so clicking that heading on the rendered
+# page hands a developer
+# `#scenario-req-zak-004b-empty-dossier-shows-upload-cta`.
+#
+# The two disagree by exactly `scenario-`. An anchor copied from the rendered
+# spec parsed fine, matched nothing, and was dropped in silence: the scenario
+# then reported as `missing @e2e`, which is indistinguishable from nobody
+# having written a test. Measured in dossiq on 2026-09-11: 42 of 330 citations
+# carried the GitHub spelling and none of them credited anything.
+#
+# So both spellings address the same scenario. The alias is built FROM the
+# scenario's own slug (add the prefix) rather than by stripping a prefix off a
+# citation, because adding is unambiguous and stripping is not: a slug that
+# genuinely begins with the word "Scenario" would lose a real word.
+_GITHUB_SCENARIO_PREFIX = "scenario-"
+
+
+def github_anchor_ref(ref: str) -> str | None:
+    """The ``<spec>::<slug>`` spelling GitHub's heading anchor would produce.
+
+    ``things::foo-does-bar`` -> ``things::scenario-foo-does-bar``. Returns
+    ``None`` for anything that is not a ``<spec>::<slug>`` pair.
+    """
+    spec, sep, slug = ref.partition("::")
+    if not sep or not spec or not slug:
+        return None
+    return f"{spec}::{_GITHUB_SCENARIO_PREFIX}{slug}"
+
+
+def covering_ref(
+    ref: str,
+    refs: Container[str],
+    declared: Container[str] | None = None,
+) -> str | None:
+    """Which member of *refs* addresses the scenario *ref*, if any.
+
+    The exact ref wins outright; the GitHub spelling is only ever a FALLBACK,
+    consulted when the exact one is absent. That ordering is what makes this
+    purely additive: no scenario that was credited before can stop being
+    credited, because its exact ref is still tried first and still decides.
+
+    *declared* is the set of refs the specs under inspection actually declare.
+    It exists for one case: a scenario whose heading TEXT begins with the word
+    "Scenario" gets the Format A slug ``scenario-x``, which is also the GitHub
+    spelling of a sibling scenario slugged ``x``. An anchor written for the
+    former must not also credit the latter. When the fallback spelling is
+    itself a declared scenario, it belongs to that scenario and this one does
+    not get it. No such heading exists anywhere in the fleet today (searched
+    2026-09-11), which is why this is a guard and not a workaround.
+    """
+    if ref in refs:
+        return ref
+    alias = github_anchor_ref(ref)
+    if alias is None or alias == ref:
+        return None
+    if declared is not None and alias in declared:
+        return None
+    return alias if alias in refs else None
+
+
 def collect_covered_refs(app_dir: Path) -> set[str]:
     """Return the set of ``<spec>::<slug>`` refs found in any e2e test file.
 
@@ -1993,6 +2125,54 @@ def changed_spec_files(base_ref: str, app_dir: Path) -> set[str]:
     return paths
 
 
+def _diff_base_commit(base_ref: str, app_dir: Path) -> str:
+    """The commit the diff is measured from: the merge base when there is one.
+
+    ``changed_spec_files`` diffs ``base...HEAD``, which compares against the
+    merge base, so the base version of a file has to be read from the same
+    commit or a spec edited on the base branch since the fork would show its
+    base-side scenarios as "added" here. Falls back to the ref itself when no
+    merge base exists (the two-dot fallback in ``changed_spec_files``).
+    """
+    merge_base = _git(["merge-base", base_ref, "HEAD"], app_dir).strip()
+    return merge_base or base_ref
+
+
+def added_scenario_refs(base_ref: str, app_dir: Path,
+                        touched: set[str]) -> set[str]:
+    """Refs of scenarios that exist at HEAD and did not exist at the base.
+
+    A scenario is ADDED when its ref is absent from the base version of the
+    same spec file, which includes every scenario of a spec file the change
+    created. A renamed heading therefore counts as added: its ref is new and
+    no existing anchor can cover it, which is the honest reading.
+
+    Only ``touched`` files are compared, because an untouched file cannot
+    carry an added scenario, and reading the base version of every spec in
+    the repository on every run is what this gate is being scoped away from.
+
+    :param base_ref: The delta base the caller resolved.
+    :param app_dir: The app root.
+    :param touched: Relative paths of spec files in the diff.
+    :return: The set of ``<spec>::<slug>`` refs added by this change.
+    """
+    base = _diff_base_commit(base_ref, app_dir)
+    added: set[str] = set()
+    for rel in touched:
+        spec_md = app_dir / rel
+        if not spec_md.is_file():
+            continue
+        spec_name = spec_name_for(spec_md)
+        head_refs = {s["ref"] for s in parse_spec_scenarios(spec_md)}
+        # An absent base version (file created by this change) reads as empty
+        # stdout, so every scenario in it is added. `_git` already swallows
+        # the non-zero exit git uses for "no such path at that commit".
+        base_text = _git(["show", f"{base}:{rel}"], app_dir)
+        base_refs = {s["ref"] for s in parse_spec_text(base_text, spec_name)} if base_text else set()
+        added |= head_refs - base_refs
+    return added
+
+
 # ---------------------------------------------------------------------------
 # Gate number for self-identification in output lines
 # ---------------------------------------------------------------------------
@@ -2064,19 +2244,27 @@ def run_report(app_dir: Path) -> int:
     # reclassifying it would move a number nobody could reconcile against the
     # gate's own verdict; listing it lets the two be compared.
     thin: list[dict] = []
+    # Both spellings of a Format A slug address the same scenario; see
+    # `covering_ref`. The evidence maps are keyed by the ref the TEST wrote, so
+    # the class has to be read under the ref that actually did the covering —
+    # looking it up under the scenario's own ref would miss and fall back to
+    # EVIDENCE_BEHAVIOUR, quietly promoting every GitHub-spelled anchor to the
+    # strongest class it has.
+    declared_refs = {s["ref"] for s in all_scenarios}
     for s in all_scenarios:
+        hit = covering_ref(s["ref"], covered_refs, declared_refs)
         if s["excluded"] and not s["bare_exclude"]:
             totals["excluded"] += 1
-        elif s["ref"] in covered_refs:
+        elif hit is not None:
             totals["covered"] += 1
-            klass = evidence.get(s["ref"], EVIDENCE_BEHAVIOUR)
+            klass = evidence.get(hit, EVIDENCE_BEHAVIOUR)
             if klass != EVIDENCE_BEHAVIOUR:
                 totals["covered_thinly"] += 1
                 thin.append({
                     "ref": s["ref"], "spec": s["spec"],
                     "scenario": s["scenario"], "evidence": klass,
                 })
-            if evidence_loose.get(s["ref"], EVIDENCE_BEHAVIOUR) != EVIDENCE_BEHAVIOUR:
+            if evidence_loose.get(hit, EVIDENCE_BEHAVIOUR) != EVIDENCE_BEHAVIOUR:
                 totals["covered_thinly_max"] += 1
         else:
             totals["uncovered"] += 1
@@ -2165,6 +2353,10 @@ def run_gate(app_dir: Path) -> int:
         return EXIT_NOT_APPLICABLE
 
     base_ref = os.environ.get("HYDRA_GATE_BASE_REF")
+    # The scenarios this change ADDED, by ref. Empty on a full sweep: with no
+    # base there is no "before", so nothing can be called new. See the loop
+    # below for what "new" changes about the verdict.
+    added_refs: set[str] = set()
     if base_ref:
         touched = changed_spec_files(base_ref, app_dir)
         if not touched:
@@ -2178,32 +2370,117 @@ def run_gate(app_dir: Path) -> int:
                 f"--scope-to-diff --base <root-commit>."
             )
             return EXIT_EMPTY_SCOPE
+        added_refs = added_scenario_refs(base_ref, app_dir, touched)
     else:
         touched = all_specs
 
     covered_refs, dead_refs = collect_ref_status(app_dir)
 
     findings: list[str] = []
+    # Advisory only: printed, never counted into the exit code. See the
+    # cited-exclusion branch below for why this is not a finding.
+    contradictions: list[str] = []
+    # A NEW SCENARIO IS NOT EXCLUDABLE, and it is reported on its own line.
+    #
+    # An `@e2e exclude <reason>` waives a scenario that predates the test
+    # suite: legacy debt that a PR touching the file next to it must not be
+    # blocked on (the ADR-020 reading this gate has always had). A scenario
+    # WRITTEN BY THIS CHANGE is not legacy. The author is in the file, the
+    # behaviour is being specified now, and the cheapest way to satisfy the
+    # gate was to type the exclusion under the heading in the same commit.
+    # Measured 2026-08-16 across the fleet: nldesign carried 585 of 786
+    # scenarios excluded before the gate was ever demoted, and the demotion
+    # note (.github#477) names mass exclusion as the remedy that empties the
+    # gate of meaning. So for an ADDED scenario an exclusion does not count;
+    # only a running test does. Existing scenarios keep the old semantics.
+    #
+    # Reported separately because the remedy differs: an existing uncovered
+    # scenario can be excluded with a reason, a new one cannot. The two are
+    # counted in one total (the runner reads that number) and the new ones are
+    # named in their own count on the summary line.
+    new_without_test: list[str] = []
     for rel in sorted(touched):
         spec_md = app_dir / rel
         if not spec_md.is_file():
             continue
         scenarios = parse_spec_scenarios(spec_md)
+        # The refs this spec declares, so `covering_ref` can refuse to hand one
+        # scenario's anchor to another. Per spec file is enough: a ref carries
+        # its spec name, so two files can never contend for the same anchor.
+        declared_refs = {s["ref"] for s in scenarios}
         for s in scenarios:
+            if s["ref"] in added_refs \
+                    and covering_ref(s["ref"], covered_refs, declared_refs) is None:
+                if s["excluded"]:
+                    # A bare marker keeps the "without reason" wording the
+                    # reasonless-marker probe in test_exclusion_reason.py
+                    # looks for: two defects on one line, both named.
+                    how = (
+                        "excluded with `@e2e exclude` in the same change"
+                        if not s["bare_exclude"]
+                        else "excluded with a bare `@e2e exclude` without reason (reason required)"
+                    )
+                elif covering_ref(s["ref"], dead_refs, declared_refs) is not None:
+                    how = "tagged only by a test that does not run"
+                else:
+                    how = "no @e2e tag"
+                new_without_test.append(
+                    f"{s['ref']} — new scenario without a test ({how}). "
+                    f"This change ADDS the scenario, so an exclusion does not "
+                    f"satisfy it: write the Playwright test that proves it, "
+                    f"or leave the scenario out until it can be proven."
+                )
+                continue
             if s["excluded"] and not s["bare_exclude"]:
-                # Legitimately excluded — not required
+                # Legitimately excluded — not required.
+                #
+                # BUT A CITED EXCLUSION IS TWO STATEMENTS THAT DISAGREE. The
+                # spec says no test can prove this scenario; a running test
+                # says it does. Exactly one of them is wrong, and until now
+                # neither the gate nor a reader had any way to notice: the
+                # `continue` below is unconditional, so the test's claim was
+                # discarded in silence.
+                #
+                # Both directions happen. Sometimes the test caught up and the
+                # exclusion is stale; sometimes the citation overclaims and the
+                # exclusion is right. The gate cannot tell which, so it names
+                # the pair and asks for a decision rather than guessing.
+                #
+                # ADVISORY, NOT BLOCKING, deliberately. Measured on dossiq
+                # 2026-09-12: 31 citations sit on an excluded scenario, in 8
+                # files. Failing on that would redden the fleet on inherited
+                # debt the moment this lands, which is how a useful check gets
+                # switched off. It prints and does not touch the exit code.
+                cited_by = covering_ref(s["ref"], covered_refs, declared_refs)
+                if cited_by is not None:
+                    contradictions.append(
+                        f"{s['ref']} — the spec marks this scenario `@e2e "
+                        f"exclude` and a RUNNING test cites it (as "
+                        f"`{cited_by}`). One of the two is wrong: either the "
+                        f"exclusion is stale and should go, or the citation "
+                        f"claims a scenario its test does not prove."
+                    )
                 continue
             if s["bare_exclude"]:
                 # Bare @e2e exclude without reason — non-compliant, flag it
                 findings.append(
                     f"{s['ref']} — @e2e exclude without reason (reason required)"
                 )
-            elif s["ref"] in dead_refs:
+                continue
+            # ASKED BEFORE `dead_refs` ON PURPOSE. `collect_ref_status` keeps
+            # the two disjoint (a ref that goes live is popped from dead), so
+            # for an exact match this order is the same verdict as the old
+            # one. It differs only where one spelling of a scenario is live
+            # and the other is dead, and there the live one is the truth.
+            if covering_ref(s["ref"], covered_refs, declared_refs) is not None:
+                continue
+            dead_by = covering_ref(s["ref"], dead_refs, declared_refs)
+            if dead_by is not None:
                 # Named, but not by a running test. Saying "missing @e2e" here
                 # would send someone to add a tag that is already visible in
                 # the file, so the finding names the mechanism instead — and
                 # the two mechanisms need different remedies.
-                reason = dead_refs[s["ref"]]
+                reason = dead_refs[dead_by]
                 if reason.startswith("named only in PROSE"):
                     findings.append(
                         f"{s['ref']} — {reason}, or exclude the scenario with a "
@@ -2216,18 +2493,28 @@ def run_gate(app_dir: Path) -> int:
                         f"not coverage: unskip it, give it a body, or replace the tag "
                         f"with a reason-bearing `@e2e exclude`."
                     )
-            elif s["ref"] not in covered_refs:
-                findings.append(f"{s['ref']} — missing @e2e")
+                continue
+            findings.append(f"{s['ref']} — missing @e2e")
 
     for line in sorted(set(findings)):
         print(line)
+    for line in sorted(set(new_without_test)):
+        print(line)
+    for line in sorted(set(contradictions)):
+        print(f"[gate-{GATE_NUM}] WARN {line}")
 
-    count = len(set(findings))
+    new_count = len(set(new_without_test))
+    count = len(set(findings)) + new_count
     if count == 0:
         print(f"[gate-{GATE_NUM}] e2e-coverage: PASS — {len(covered_refs)} reference(s) in e2e suite")
         return EXIT_PASS
+    # ONE summary line, and the total comes first: the runner reads
+    # `FAIL — <n> scenario` off this line, and the new-scenario count rides
+    # behind it so a reader sees both numbers without a second grep.
     print(
-        f"[gate-{GATE_NUM}] e2e-coverage: FAIL — {count} scenario(s) without a running e2e test"
+        f"[gate-{GATE_NUM}] e2e-coverage: FAIL — {count} scenario(s) without a "
+        f"running e2e test, {new_count} of them new scenario(s) without a test "
+        f"(an @e2e exclude does not satisfy a scenario this change adds)"
     )
     return EXIT_FAIL
 

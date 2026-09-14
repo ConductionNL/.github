@@ -29,3 +29,6 @@ jobs:
         env:
           TEST_REPO_DIR: ${{ github.workspace }}
         run: bash global-settings/tests/test-block-write-commands.sh
+
+      - name: Run no-polling hook tests
+        run: bash global-settings/tests/test-block-polling.sh

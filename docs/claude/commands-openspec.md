@@ -26,7 +26,7 @@ openspec/changes/add-publication-search/
 **Tips:**
 
 - Use descriptive kebab-case names: `add-dark-mode`, `fix-cors-headers`, `refactor-object-service`
-- The name becomes a tracking-issue label on whichever platform the target repo lives on (Codeberg primary, GitHub fallback, GitLab alternative), so keep it readable
+- The name becomes a tracking-issue label on whichever platform the target repo lives on (GitHub primary, GitLab alternative, Forgejo only for non-Conduction repos), so keep it readable
 
 ---
 
@@ -230,7 +230,7 @@ Archive multiple completed changes at once.
 
 **Phase:** Full Lifecycle (experimental)
 
-Automated apply→verify loop for a single change in a specific app. Runs the implementation loop inside an isolated Docker container, optionally runs targeted tests on the host, then archives and syncs the tracking issue on the per-repo platform (Codeberg primary, GitHub fallback, GitLab alternative).
+Automated apply→verify loop for a single change in a specific app. Runs the implementation loop inside an isolated Docker container, optionally runs targeted tests on the host, then archives and syncs the tracking issue on the per-repo platform (GitHub primary, GitLab alternative, Forgejo only for non-Conduction repos).
 
 **Usage:**
 
@@ -248,7 +248,7 @@ Automated apply→verify loop for a single change in a specific app. Runs the im
 4. Checks the Nextcloud environment is running
 5. Reads `test-plan.md` (if present) and classifies which test commands to include in the loop
 6. Asks whether to include a test cycle (tests run **outside the container** against the live Nextcloud app)
-7. Builds and starts an isolated Docker container — mounts the app directory + shared `.claude/` skills (read-only); no git, no host-host API (Codeberg/GitHub/GitLab calls happen on the host after the container exits)
+7. Builds and starts an isolated Docker container — mounts the app directory + shared `.claude/` skills (read-only); no git, no host-host API (GitHub/GitLab/Forgejo calls happen on the host after the container exits)
 8. Inside the container: runs `/opsx-apply` → `/opsx-verify` in a loop (max 5 iterations)
    - CRITICAL issues retrigger the loop; WARNING issues also retrigger but never block archive
    - At max iterations with only warnings remaining, archive still proceeds
@@ -258,7 +258,7 @@ Automated apply→verify loop for a single change in a specific app. Runs the im
 11. **If test cycle enabled and deferred tests exist:** asks about multi-agent/broad tests from the test-plan that were excluded from the loop; runs them once if confirmed, with one final apply→verify if they fail
 12. Runs `/opsx-archive` on the host (after tests pass or tests skipped)
 13. Commits all changes in the app repo with a generated commit message
-14. Syncs the tracking issue on the per-repo platform (Codeberg/GitHub/GitLab): updates checkboxes, posts a completion comment, prompts to close
+14. Syncs the tracking issue on the per-repo platform (GitHub/GitLab/Forgejo): updates checkboxes, posts a completion comment, prompts to close
 15. Asks about test scenario conversion (deferred from archive)
 16. Shows a final report with iterations used, tasks completed, and what's next
 
@@ -266,7 +266,7 @@ Automated apply→verify loop for a single change in a specific app. Runs the im
 
 **Container design:** The container mounts the app directory at `/workspace` and the shared `.claude/` at `/workspace/.claude` (read-only). This gives the container's Claude session access to all shared skills without requiring git or remote API access. Each app is isolated — the container only touches one app directory.
 
-**Container limitations:** Remote API operations (Codeberg / GitHub / GitLab), `docker compose exec`, browser tests, and git commands are not available inside the container — all handled on the host after the container exits. Tests always run on the host against the live Nextcloud environment.
+**Container limitations:** Remote API operations (GitHub / GitLab / Forgejo), `docker compose exec`, browser tests, and git commands are not available inside the container — all handled on the host after the container exits. Tests always run on the host against the live Nextcloud environment.
 
 **Cap impact:** High — runs apply + verify sequentially (up to 5 iterations), optionally followed by targeted tests (up to 3 test iterations). Each iteration is a full implementation + verification pass.
 
@@ -339,7 +339,7 @@ Get an overview of the current project's OpenSpec setup and active changes.
 
 ## Retrofit Commands
 
-Used to bring legacy apps under the `@spec` annotation convention defined in [ADR-003 §Spec traceability](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md). Apps built spec-first via `/opsx-apply` already carry the tags — retrofit is the one-time pass for apps that predate the convention. Run the three skills in order: scan → annotate → reverse-spec. See the [Retrofit Playbook](retrofit.md) for prerequisites, bucket definitions, and roll-out order.
+Used to bring legacy apps under the `@spec` annotation convention defined in [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md). Apps built spec-first via `/opsx-apply` already carry the tags — retrofit is the one-time pass for apps that predate the convention. Run the three skills in order: scan → annotate → reverse-spec. See the [Retrofit Playbook](retrofit.md) for prerequisites, bucket definitions, and roll-out order.
 
 ---
 

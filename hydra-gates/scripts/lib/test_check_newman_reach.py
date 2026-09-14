@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -160,6 +162,79 @@ class NewmanReachTest(unittest.TestCase):
                            description="@newman exclude"))
         self.assertEqual(self._codes(), ["V2", "V5"])
 
+    def test_V1_does_not_count_a_collection_that_recorded_why_it_does_not_run(self):
+        # 🔴 THE DEFECT IN #757. V1 was raised from every committed collection
+        # whenever Newman was off, so a repo that had given each one a reason
+        # was still told it carried unrun work, and the Fix line printed
+        # underneath offered exactly the exclusion that could not help.
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_OFF)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"],
+                           description="@newman exclude the ZGW API is still in "
+                                       "progress, this suite fails at 95 percent"))
+        self.assertEqual(self._codes(), [])
+
+    def test_V1_still_counts_the_collections_that_recorded_nothing(self):
+        # The half that must not be lost: one reason does not excuse the rest,
+        # and V1 names only the ones still unaccounted for.
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_OFF)
+        _write(self.root, "tests/integration/excused.postman_collection.json",
+               _collection(["{{base_url}}/api/things"],
+                           description="@newman exclude owned by the supplier"))
+        _write(self.root, "tests/integration/silent.postman_collection.json",
+               _collection(["{{base_url}}/api/other"]))
+
+        findings = cnr.analyse(self.root)["findings"]
+        self.assertEqual([f["code"] for f in findings], ["V1"])
+        self.assertEqual(findings[0]["paths"],
+                         ["tests/integration/silent.postman_collection.json"])
+        self.assertIn("1 collection(s)", findings[0]["detail"])
+
+    def test_V1_still_counts_a_bare_exclusion_and_V5_still_names_it(self):
+        # An exclusion with no reason is not a reason. It stays counted, and
+        # keeps its own finding.
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_OFF)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"],
+                           description="@newman exclude"))
+        self.assertEqual(self._codes(), ["V1", "V5"])
+
+    def _pass_line(self) -> str:
+        """The line `--mode gate` prints, captured."""
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cnr.main(["x", str(self.root)])
+        return buf.getvalue()
+
+    def test_the_pass_line_does_not_claim_CI_runs_what_it_does_not(self):
+        # 🔴 A PASS THAT READS LIKE THE WRONG PASS. Since V1 honours
+        # exclusions there are two ways to have no findings, and they must not
+        # print the same sentence. dossiq passed this gate while reading
+        # "922 request(s) ... all reachable by CI and all asserting something"
+        # on a run where `enable-newman: false` meant not one of them ran.
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_OFF)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"],
+                           description="@newman exclude the ZGW API is still in "
+                                       "progress, this suite fails at 95 percent"))
+
+        line = self._pass_line()
+        self.assertIn("0 finding(s)", line)
+        self.assertNotIn("reachable by CI", line)
+        self.assertIn("record why they do not", line)
+        self.assertIn("0 of 1 committed request(s) run", line)
+
+    def test_the_pass_line_still_says_reachable_when_CI_does_run_them(self):
+        # The other half: a repo whose suite genuinely runs keeps the sentence
+        # that says so, or this fix would make every pass read like an excuse.
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_ON)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"]))
+
+        line = self._pass_line()
+        self.assertIn("all reachable by CI", line)
+        self.assertNotIn("record why they do not", line)
+
     def test_an_exclusion_on_its_own_line_of_a_longer_description_is_found(self):
         _write(self.root, ".github/workflows/code-quality.yml", _CALLER_ON)
         _write(self.root, "tests/newman/a.postman_collection.json",
@@ -227,6 +302,53 @@ class NewmanReachTest(unittest.TestCase):
         self.assertEqual(
             cnr.main(["x", str(self.root / "nope")]), cnr.EXIT_ERROR
         )
+
+    # -- the verdict word belongs to the runner (.github#729) ---------------
+    #
+    # This gate is report-only until an app sets
+    # HYDRA_GATE_NEWMAN_REACH_BLOCKING=1, and that switch lives in
+    # run-hydra-gates.sh. A helper that prints FAIL is asserting an outcome it
+    # cannot know: the runner then emits WARNING for the same gate, 45 lines
+    # apart, and the reader who was told to "count the named FAIL lines" counts
+    # a failure that did not happen. Both arms below run the REAL main(), so
+    # they fail if the word comes back in either direction.
+
+    def _stdout_of(self, argv):
+        import contextlib
+        import io as _io
+        buf = _io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cnr.main(argv)
+        return rc, buf.getvalue()
+
+    def test_the_finding_verdict_states_a_count_and_no_verdict_word(self):
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_OFF)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"]))
+        rc, out = self._stdout_of(["x", str(self.root)])
+        self.assertEqual(rc, cnr.EXIT_FAIL)
+        verdict = [ln for ln in out.splitlines() if ln.startswith("[gate-112]")]
+        self.assertTrue(verdict, "the helper printed no [gate-112] line at all")
+        for word in ("FAIL", "PASS", "WARNING"):
+            for ln in verdict:
+                self.assertNotIn(
+                    word, ln,
+                    f"the helper printed the verdict word {word!r} on {ln!r}; "
+                    "only run-hydra-gates.sh knows whether this blocks",
+                )
+        self.assertIn("1 finding(s)", out)
+
+    def test_the_clean_verdict_states_a_count_and_no_verdict_word(self):
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_ON)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"]))
+        rc, out = self._stdout_of(["x", str(self.root)])
+        self.assertEqual(rc, cnr.EXIT_PASS)
+        for ln in out.splitlines():
+            if ln.startswith("[gate-112]"):
+                for word in ("FAIL", "PASS", "WARNING"):
+                    self.assertNotIn(word, ln)
+        self.assertIn("0 finding(s)", out)
 
 
 if __name__ == "__main__":

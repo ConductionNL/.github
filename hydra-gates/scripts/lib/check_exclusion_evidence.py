@@ -68,6 +68,28 @@ A reason resolves when a token in it matches something on disk:
 Deliberately generous. The question is "can a reader find what this names",
 not "is this the best possible citation".
 
+THE VERDICT WORD BELONGS TO THE RUNNER (.github#729)
+===================================================
+
+This helper prints a COUNT and never a verdict word. It cannot print one
+honestly: whether its findings block a merge is decided in
+``run-hydra-gates.sh``, from ``HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING``, in a place
+this process cannot see. It used to print ``FAIL`` anyway, the runner
+``cat``-ed that log to stdout, and the runner's own ``WARNING`` landed 45
+lines further down. A single run then carried two contradicting verdicts for
+one gate, the ``FAIL`` one arriving first and inside the ``RESULT: N GATE(S)
+FAILED`` block.
+
+That is not cosmetic. The instruction this package gives its readers — and
+gives its agents — is "read the exit code, then the named FAIL lines". Two
+readers followed it on two separate executions of this gate and both counted
+a failure that had not happened.
+
+So: the exit code carries the answer (0/1/2/4), the runner chooses the word,
+and the line below states what was measured. ``test_gate_acceptance_matrix.sh``
+now refuses any run in which one gate emits more than one verdict line, which
+is what makes this a rule rather than a habit.
+
 Usage::
 
     python3 scripts/lib/check_exclusion_evidence.py [app-dir]
@@ -141,6 +163,43 @@ _TAGS = ("e2e", "spec", "contract", "visual")
 _PHP_TEST_RE = re.compile(r"\b([A-Z][A-Za-z0-9_]*Test)(?:\.php)?(?:::(\w+))?\b")
 # `bankStatementWizard.spec.js`, `useGridManager.spec.ts`
 _JS_SPEC_RE = re.compile(r"\b([A-Za-z0-9_.\-]+\.spec\.[cm]?[jt]s)\b")
+
+# `{Map,Roadmap,Search,Wiki}PageEditor.spec.js` names four files in the shell's
+# own brace syntax. Reading it literally finds no such file and reports one
+# missing spec where four exist, so the citation that spells out exactly which
+# four is punished for being specific.
+_BRACE_RE = re.compile(
+    r"\{([A-Za-z0-9_.\-]+(?:,[A-Za-z0-9_.\-]+)+)\}"
+    r"([A-Za-z0-9_.\-]*\.spec\.[cm]?[jt]s)\b"
+)
+
+
+def _expand_braces(reason: str) -> list[str]:
+    """Yield every JS spec name a reason cites, expanding brace groups.
+
+    :param reason: The exclusion reason.
+    :return: Spec file names, brace groups expanded to their members.
+    """
+    names: list[str] = []
+    rest = reason
+    for group, tail in _BRACE_RE.findall(reason):
+        names.extend(f"{m}{tail}" for m in group.split(","))
+    # Remove the brace forms before the plain scan, or the tail alone
+    # ("PageEditor.spec.js") is picked up as a fifth, non-existent file.
+    rest = _BRACE_RE.sub(" ", reason)
+    names.extend(_JS_SPEC_RE.findall(rest))
+    return names
+
+
+def reason_has_star(reason: str, cls: str, method: str) -> bool:
+    """Say whether the reason spells this citation with a trailing ``*``.
+
+    :param reason: The exclusion reason.
+    :param cls:    The cited class.
+    :param method: The cited method.
+    :return: True when ``Cls::method*`` appears in the reason.
+    """
+    return f"{cls}::{method}*" in reason
 _COLLECTION_RE = re.compile(r"\b([A-Za-z0-9_.\-]+\.postman_collection\.json)\b")
 _GATE_RE = re.compile(r"\bgate-(\d{1,3})\b")
 
@@ -221,12 +280,23 @@ class _Artifacts:
             # Measured on the two it got wrong: launchpad's
             # AcknowledgementServiceTest::isOutstanding and decidiq's
             # BoardMeetingServiceTest::getNoticeDeadlineInfo, 2 of 33 findings.
-            if method and method.startswith("test") and method not in known:
+            #
+            # A TRAILING `*` NAMES A FAMILY, and buildiq writes them:
+            # `CopilotServiceTest::testHealthReports*` stands for the three
+            # methods that begin with it. Reading the `*` as a literal and
+            # demanding an exact `testHealthReports` accuses a citation that is
+            # more precise than a bare class name, not less.
+            if method and reason_has_star(reason, cls, method):
+                if any(k.startswith(method) for k in known):
+                    resolved.append(token + "*")
+                else:
+                    missing.append(token + "*")
+            elif method and method.startswith("test") and method not in known:
                 missing.append(token)
             else:
                 resolved.append(token)
 
-        for name in _JS_SPEC_RE.findall(reason):
+        for name in _expand_braces(reason):
             (resolved if name in self.js_specs else missing).append(name)
         for name in _COLLECTION_RE.findall(reason):
             (resolved if name in self.collections else missing).append(name)
@@ -269,6 +339,51 @@ def classify(reason: str, artifacts: _Artifacts) -> tuple[str, dict]:
     return NO_CLAIM, {}
 
 
+# How many lines after the marker may still belong to its reason. Reasons in
+# the fleet run to five wrapped lines; ten is slack without being a licence to
+# swallow a whole scenario if a terminator is ever missed.
+_MAX_CONTINUATION_LINES = 10
+
+# A line that starts one of these starts something ELSE, so the reason ended on
+# the line before. `-` and `*` are the scenario's own GIVEN/WHEN/THEN bullets,
+# which is the over-capture that would invent findings: their prose mentions
+# service and controller names constantly.
+_ENDS_REASON = ("-", "*", "+", "#", ">", "|", "<!--", "@", "```")
+
+
+def _joined_reason(first: str, lines: list[str], n: int) -> str:
+    """Join a reason with the lines it wraps onto.
+
+    The gate read one line and stopped, so a citation that wrapped past the
+    marker's line was invisible. It undercounted rather than over-reported,
+    which is the worse direction for a gate: a PASS meant less than it looked.
+    Measured on integriq, three exclusions cited the same non-existent
+    Playwright spec and only one was reported, because in the other two the
+    marker and the filename sat on different lines.
+
+    :param first: The reason text matched on the marker's own line.
+    :param lines: Every line of the spec file.
+    :param n:     The marker's 1-based line number.
+    :return:      The reason, with its continuation lines folded in.
+    """
+    parts = [first.strip()]
+    # An HTML-comment marker ends at `-->`, wherever that falls.
+    in_comment = "<!--" in lines[n - 1] and "-->" not in lines[n - 1]
+    for line in lines[n:n + _MAX_CONTINUATION_LINES]:
+        stripped = line.strip()
+        if in_comment:
+            parts.append(stripped.replace("-->", "").strip())
+            if "-->" in line:
+                break
+            continue
+        if not stripped:
+            break
+        if stripped.startswith(_ENDS_REASON):
+            break
+        parts.append(stripped)
+    return " ".join(p for p in parts if p).strip()
+
+
 def analyse(app_dir: Path) -> dict:
     """Classify every exclusion in the app's specs.
 
@@ -293,7 +408,7 @@ def analyse(app_dir: Path) -> dict:
                 m = rex.search(line)
                 if not m:
                     continue
-                reason = (m.group("reason") or "").strip()
+                reason = _joined_reason(m.group("reason") or "", lines, n)
                 if not is_reason_bearing(reason or None):
                     # A bare marker is gate-16/19's finding, not this gate's.
                     continue
@@ -369,16 +484,17 @@ def main(argv: list[str]) -> int:
     )
 
     if not result["unresolved"]:
+        # NO VERDICT WORD HERE — see THE VERDICT WORD BELONGS TO THE RUNNER.
         print(
-            f"[gate-{GATE_NUM}] {GATE_NAME}: PASS — every exclusion that names "
-            f"an artifact names one that exists."
+            f"[gate-{GATE_NUM}] {GATE_NAME}: 0 unresolved — every exclusion "
+            f"that names an artifact names one that exists."
         )
         return EXIT_PASS
 
     print(
-        f"[gate-{GATE_NUM}] {GATE_NAME}: FAIL — {t[UNRESOLVED]} exclusion(s) "
-        f"cite a test nothing in this repo answers to. They read as verified "
-        f"and are not."
+        f"[gate-{GATE_NUM}] {GATE_NAME}: {t[UNRESOLVED]} unresolved — that many "
+        f"exclusion(s) cite a test nothing in this repo answers to. They read "
+        f"as verified and are not."
     )
     for f in result["unresolved"][:40]:
         print(f"  {f['file']}:{f['line']}  @{f['tag']} exclude -> "

@@ -35,7 +35,10 @@ WHAT IT REPORTS
 
 **V1 — collections exist and Newman is switched off.** Every request in the
 repo is dead. The caller sets ``enable-newman: false``, or never sets it and
-the input defaults to false.
+the input defaults to false. A collection carrying a reason-bearing
+``@newman exclude`` is not counted: the repo has said why that one does not
+run, which is what the exclusion is for. A BARE exclusion still counts, and is
+reported again as V5.
 
 **V2 — a collection outside the configured path.** It runs nowhere. Either move
 it under ``newman-collection-path``, point that input at it, or delete it. A
@@ -57,6 +60,28 @@ A collection is excluded by putting ``@newman exclude <reason>`` in its
 ``info.description``. That field is the only place a Postman collection can
 carry a comment, and it survives a round trip through the Postman UI. The
 reason must be reason-bearing, exactly as gate-16 and gate-19 require.
+
+THE VERDICT WORD BELONGS TO THE RUNNER (.github#729)
+===================================================
+
+This helper prints a COUNT and never a verdict word. It cannot print one
+honestly: whether its findings block a merge is decided in
+``run-hydra-gates.sh``, from ``HYDRA_GATE_NEWMAN_REACH_BLOCKING``, in a place
+this process cannot see. It used to print ``FAIL`` anyway, the runner
+``cat``-ed that log to stdout, and the runner's own ``WARNING`` landed 45
+lines further down. A single run then carried two contradicting verdicts for
+one gate, the ``FAIL`` one arriving first and inside the ``RESULT: N GATE(S)
+FAILED`` block.
+
+That is not cosmetic. The instruction this package gives its readers — and
+gives its agents — is "read the exit code, then the named FAIL lines". Two
+readers followed it on two separate executions of this gate and both counted
+a failure that had not happened.
+
+So: the exit code carries the answer (0/1/2/4), the runner chooses the word,
+and the line below states what was measured. ``test_gate_acceptance_matrix.sh``
+now refuses any run in which one gate emits more than one verdict line, which
+is what makes this a rule rather than a habit.
 
 Usage::
 
@@ -250,17 +275,30 @@ def analyse(app_dir: Path) -> dict:
     findings: list[dict] = []
     live = [r for r in rows if not r["excluded"] or r["bare_exclude"]]
 
-    if rows and not enabled:
+    # 🔴 `live`, NOT `rows`, AND THAT IS THE FIX FOR #757.
+    #
+    # V1 used to be raised from every committed collection, so a repo that had
+    # recorded a reason for each one was still reported as carrying unrun
+    # work. The Fix line printed underneath offers `@newman exclude <reason>`
+    # as a remedy, and it was a remedy that could not work: while Newman is
+    # off, no exclusion changed the verdict. Measured on dossiq, which
+    # deleted four dead collections and gave the other ten a reason, and still
+    # read `922 request(s) across 10 collection(s) ... Not one of them has
+    # ever run.`
+    #
+    # A bare exclusion stays in `live` by construction, so an exclusion with
+    # no reason still counts here, and V5 reports it separately below.
+    if live and not enabled:
         findings.append({
             "code": "V1",
             "detail": (
-                f"{sum(r['requests'] for r in rows)} request(s) across "
-                f"{len(rows)} collection(s) are committed, and this repo's "
+                f"{sum(r['requests'] for r in live)} request(s) across "
+                f"{len(live)} collection(s) are committed, and this repo's "
                 f"caller does not enable Newman"
                 + (f" ({wf})" if wf else " (no caller workflow found)")
                 + ". Not one of them has ever run."
             ),
-            "paths": [r["path"] for r in rows],
+            "paths": [r["path"] for r in live],
         })
     else:
         for r in live:
@@ -319,6 +357,10 @@ def analyse(app_dir: Path) -> dict:
             "requests": sum(r["requests"] for r in rows),
             "requests_that_run": sum(r["requests"] for r in rows if r["runs"]),
             "assertions": sum(r["assertions"] for r in rows),
+            # Collections carrying a reason-bearing `@newman exclude`. The pass
+            # line needs it: a repo can now pass with NOTHING running, and
+            # saying those requests are "reachable by CI" would be false.
+            "excused": sum(1 for r in rows if r["excluded"] and not r["bare_exclude"]),
         },
         "findings": findings,
     }
@@ -358,15 +400,32 @@ def main(argv: list[str]) -> int:
     findings = result["findings"]
     t = result["totals"]
     if not findings:
-        print(
-            f"[gate-{GATE_NUM}] {GATE_NAME}: PASS — {t['requests']} request(s) "
-            f"in {t['collections']} collection(s), all reachable by CI and all "
-            f"asserting something."
-        )
+        # NO VERDICT WORD HERE — see THE VERDICT WORD BELONGS TO THE RUNNER.
+        #
+        # 🔴 TWO WAYS TO PASS, AND THEY MUST NOT READ THE SAME. Since V1 began
+        # honouring exclusions, a repo passes either because CI runs its
+        # collections or because it has written down why each one does not.
+        # The second used to print "all reachable by CI", which is the
+        # opposite of true on a repo with `enable-newman: false`: dossiq read
+        # "922 request(s) ... all reachable by CI and all asserting something"
+        # on a run where not one of them executed.
+        if t["excused"]:
+            print(
+                f"[gate-{GATE_NUM}] {GATE_NAME}: 0 finding(s). "
+                f"{t['requests_that_run']} of {t['requests']} committed "
+                f"request(s) run; {t['excused']} of {t['collections']} "
+                f"collection(s) record why they do not."
+            )
+        else:
+            print(
+                f"[gate-{GATE_NUM}] {GATE_NAME}: 0 finding(s). {t['requests']} "
+                f"request(s) in {t['collections']} collection(s), all reachable "
+                f"by CI and all asserting something."
+            )
         return EXIT_PASS
 
     print(
-        f"[gate-{GATE_NUM}] {GATE_NAME}: FAIL — {len(findings)} finding(s). "
+        f"[gate-{GATE_NUM}] {GATE_NAME}: {len(findings)} finding(s). "
         f"{t['requests_that_run']} of {t['requests']} committed request(s) run."
     )
     for f in findings:

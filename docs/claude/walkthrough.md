@@ -297,11 +297,11 @@ Edit the files directly if needed. Once you're satisfied, move to Phase 2.
 /opsx-plan-to-issues
 ```
 
-Claude detects the per-repo platform from `git remote get-url origin` (Codeberg primary, GitHub fallback, GitLab alternative) and responds with the appropriate URLs:
+Claude detects the per-repo platform from `git remote get-url origin` (GitHub primary, GitLab alternative, Forgejo only for non-Conduction repos) and responds with the appropriate URLs:
 
-> **Created tracking issues on Codeberg:**
+> **Created tracking issues on GitHub:**
 >
-> Tracking issue: https://codeberg.org/Conduction/opencatalogi/issues/42
+> Tracking issue: https://github.com/ConductionNL/opencatalogi/issues/42
 >
 > - `[OpenSpec] add-publication-search`
 >
@@ -314,7 +314,7 @@ Claude detects the per-repo platform from `git remote get-url origin` (Codeberg 
 >
 > Saved: `openspec/changes/add-publication-search/plan.json`
 
-On legacy `ConductionNL/*` repos still on github.com, the same skill returns `https://github.com/ConductionNL/<app>/issues/...` URLs instead. Open the tracking issue to see the full checklist; per-repo project boards work on both platforms (no cross-repo kanban on Codeberg yet).
+Open the tracking issue to see the full checklist. Per-repo project boards work per repository; cross-repo kanban lives on GitHub Projects v2.
 
 ## Phase 3: Implementation
 
@@ -467,7 +467,7 @@ After this flow, you have:
 1. **Working code** — SearchController and SearchService implemented
 2. **Spec documentation** — `openspec/specs/search/spec.md` describes the current behavior
 3. **Audit trail** — The full change preserved in `openspec/changes/archive/`
-4. **Tracking-issue history (Codeberg primary, GitHub for legacy repos)** — Tracking issue #42 with all sub-issues closed
+4. **Tracking-issue history (GitHub)** — Tracking issue #42 with all sub-issues closed
 5. **Review report** — `review.md` confirming spec compliance
 
 The next time someone needs to modify search behavior, they'll find the spec, understand the current requirements, and write delta specs for their changes.

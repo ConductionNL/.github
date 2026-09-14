@@ -138,12 +138,25 @@ You can configure:
 
 Hard-blocked patterns — Claude cannot perform these even with user approval:
 
-- **Config files**: `Edit`/`Write` of `~/.claude/settings.json`, `hooks/*`, `settings-version`, `settings-repo-path`, `settings-repo-url`, `settings-repo-ref`, `user-hooks.json`
+- **Config files**: `Edit` of `~/.claude/settings.json`, `hooks/*`, `settings-version`, `settings-repo-path`, `settings-repo-url`, `settings-repo-ref`, `user-hooks.json` — see [Why there are no `Write(...)` rules](#why-there-are-no-write-rules)
 - **System**: `sudo`, `su`, `shutdown`, `reboot`, `halt`, `poweroff`, `mkfs`, `dd if=`
 - **GitHub destructive**: `gh pr merge`, `gh repo delete`, `gh release delete`
 - **Git destructive**: `git reset --hard`, `git clean -f/-fd/-fdx`, `git filter-branch`, `git filter-repo`, `git reflog expire/delete`, `git update-ref -d`, `git config --global`, `git checkout --`, `git restore --` (file restore; `git restore --staged` is allowed), `git push --force/-f`, `git rebase`
 - **Filesystem destructive**: `rm -rf`, `rm -Rf`
 - **Package managers (arbitrary code execution)**: `pip install`, `npm install`
+
+#### Why there are no `Write(...)` rules
+
+An `Edit(path)` rule covers **every** file-editing tool — Write, MultiEdit and NotebookEdit included. A `Write(path)` rule is not matched by file-permission checks at all, so it protects nothing on its own. Claude Code says so itself when it validates the config:
+
+```
+Write(~/.claude/settings.json) is not matched by file permission checks — only Edit(path)
+rules are. Use Edit(~/.claude/settings.json) instead (Edit rules cover all file-editing tools).
+```
+
+Up to v2.4.4 the deny list carried a `Write(...)` twin for each of the seven config paths. They were inert — every one already had the `Edit(...)` rule that does the work — and they were removed in v2.4.5. Layer 1 is unchanged in strength: the seven `Edit(...)` rules still hard-block Write, MultiEdit and NotebookEdit on those paths.
+
+When adding a new protected path, write the `Edit(...)` rule only.
 
 ### 2. `permissions.allow`
 
@@ -283,8 +296,8 @@ Restart Claude Code or run `/hooks`. From then on your hooks fire alongside the 
 
 `settings.json` does not read an `mcpServers` key ([Claude Code docs](https://code.claude.com/docs/en/debug-your-config#check-common-causes)), so MCP servers are **not** part of the global settings. Versions up to 2.4.0 shipped a dead `mcpServers` block with 7 Playwright browsers; it never loaded anything and was removed in 2.4.1. Configure MCP servers at one of the two supported scopes instead:
 
-- **Project scope** — `.mcp.json` at the repository root, committed so the whole team gets the same servers. Hydra ships one with the 7-browser pool; a workspace that symlinks Hydra's `.claude/skills` symlinks its `.mcp.json` the same way. See [playwright-setup.md](playwright-setup.md).
-- **User scope** — `claude mcp add --scope user …`, stored in `~/.claude.json` and loaded in every project on your machine. See [playwright-setup.md → User scope](playwright-setup.md#user-scope-all-projects-on-this-machine).
+- **Project scope** — `.mcp.json` at the repository root, committed so the whole team gets the same servers. Hydra ships one with `browser-1` only; the seven-browser pool is opt-in under `.claude/mcp/` (shared server, URL entries). A workspace that symlinks Hydra's `.claude/skills` symlinks `.mcp.json` and `.claude/mcp` the same way. See [playwright-setup.md](playwright-setup.md).
+- **User scope** — `claude mcp add --scope user …`, stored in `~/.claude.json` and loaded in every project on your machine. See [playwright-setup.md → The pool in VS Code](playwright-setup.md#the-pool-in-vs-code).
 
 When both define the same server name, the project-scope entry wins.
 
@@ -386,7 +399,7 @@ rm ~/.claude/sound-config.sh
 
 | File                              | Deny-list rule                  | Content hook            | `chattr +i`             |
 | --------------------------------- | ------------------------------- | ----------------------- | ----------------------- |
-| `~/.claude/hooks/sound-notify.sh` | ✅ `Edit/Write(~/.claude/hooks/*)` | ✅ matches `hooks/?` regex | ✅ applied on install     |
+| `~/.claude/hooks/sound-notify.sh` | ✅ `Edit(~/.claude/hooks/*)`      | ✅ matches `hooks/?` regex | ✅ applied on install     |
 | `~/.claude/sound-config.sh`       | ❌ (intentional — user preference) | ❌ (not in protected list) | ❌ (not applied)         |
 
 The wrapper is protected the same way every other hook script is — Claude cannot Edit or Write it, cannot use a Bash `cat > ...` trick to overwrite it, and the kernel refuses even root writes while the immutable bit is set.
@@ -398,14 +411,14 @@ The config file is intentionally **not** protected because:
 - Locking it would force a `sudo chattr -i / +i` dance for every sound tweak, defeating the point of a user-configurable feature.
 - The [`update-config` skill](commands.md) uses `Edit`/`Write` to modify `~/.claude/` config on user request; keeping `sound-config.sh` unprotected lets that skill help users enable/tune sounds naturally.
 
-If you personally want to prevent Claude from touching `sound-config.sh` in your local setup, add `"Edit(~/.claude/sound-config.sh)"` and `"Write(~/.claude/sound-config.sh)"` to a **project** `.claude/settings.json` deny list — that overlays on top of the global settings without needing a global settings change.
+If you personally want to prevent Claude from touching `sound-config.sh` in your local setup, add `"Edit(~/.claude/sound-config.sh)"` to a **project** `.claude/settings.json` deny list — that overlays on top of the global settings without needing a global settings change, and the one `Edit` rule covers Write too.
 
 ## Relationship to this repo's `.claude/settings.json`
 
 Project `settings.json` in `.claude/` enables MCP servers and project-specific permissions. That is separate from the global Bash policy above:
 
 1. Global `~/.claude/settings.json` + hooks for Bash safety and version checking.
-2. Project `.claude/settings.json` (and `settings.local.json` if used) for workspace-specific MCP.
+2. Project `.claude/settings.json` (and `settings.local.json` if used) for workspace-specific MCP, per-project permission grants, and your per-repo model default (see [Troubleshooting](#troubleshooting)).
 
 ## Verification
 
@@ -415,3 +428,114 @@ After installing (see [README](../../global-settings/README.md)), verify:
 - `find . -exec` should prompt
 - `rm -rf` should be hard-blocked
 - Status panel appears at session start
+
+## Troubleshooting
+
+### `/model` or the model picker fails with `EPERM: operation not permitted, open '~/.claude/settings.json'`
+
+**Symptom.** Switching models in the VSCode extension — via the model picker or by typing `/model <name>` — pops an error notification:
+
+```
+Failed to set model: EPERM: operation not permitted, open '/home/<user>/.claude/settings.json'
+```
+
+**Cause.** This is the kernel immutable lock (protection layer 4 from the [README's security model](../../global-settings/README.md#security-model--defense-in-depth)) doing exactly what it is meant to do — it just has a side effect the install steps don't mention. The VSCode extension persists every model switch by rewriting `~/.claude/settings.json` with `{"model": "<name>"}`. That write is hard-wired to the user-settings file; it does not consult the project or local settings scopes. With the immutable bit set, the kernel refuses the write and the extension surfaces the `EPERM`.
+
+What still works and what does not, while the lock is on:
+
+| Action                                 | Effect                                                                                                                                                                                                                                  |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typing `/model <name>` in the chat     | **Works for the session.** Claude Code applies the switch in memory, then tries to persist it; when the locked file refuses the write it reports "Set model to … for this session only" and moves on. Nothing is lost.                  |
+| The model picker in the UI             | **Does nothing, and this is what raises the toast.** The extension writes the settings file *before* pushing the switch to the CLI, so the failed write aborts the switch. It is the only code path that reports `Failed to set model`. |
+| Claude Code's startup model migrations | Silently log `Failed to migrate … model setting` — harmless.                                                                                                                                                                            |
+
+**Fix — pin your default model in project-local settings (recommended).** `model` is a regular settings key ("Override the default model used by Claude Code") and the local scope takes precedence over the user scope, so the shared locked file never needs to change. Pin the model you want *every* session to start on — `opus` is the sensible default; more expensive models are then an explicit per-session choice (next paragraph):
+
+```bash
+# Run from anywhere inside the repo you work in.
+# Claude Code resolves the local-settings scope to the *git root*, not the cwd
+# (observed with Claude Code 2.1.263, 2026-09) — so write it there.
+# In a linked git worktree, --show-toplevel gives the worktree while Claude Code's
+# canonical scope is the main repo root (git rev-parse --git-common-dir). Both are
+# read, but the canonical root is the durable place to put it.
+ROOT="$(git rev-parse --show-toplevel)"
+mkdir -p "$ROOT/.claude"
+cat > "$ROOT/.claude/settings.local.json" <<'JSON'
+{
+  "model": "opus"
+}
+JSON
+```
+
+Append `[1m]` to the value (`"opus[1m]"`) if you want the 1M-context variant — a bare `"opus"` in the local scope overrides an `"opus[1m]"` in the user scope and silently drops you back to the standard context window.
+
+Merge the key into the file if it already exists (Claude Code stores per-project permission grants there too). The file is meant to stay out of git — check with `git check-ignore -v "$ROOT/.claude/settings.local.json"`; add `**/.claude/settings.local.json` to your global ignore file (`~/.config/git/ignore`) if it isn't.
+
+This file is **not** covered by the deny list, the guard hooks, or the immutable lock — all three protect `~/.claude/` only, so Claude can edit it. That is deliberate, for the same reason as `sound-config.sh` (see [What's blocked from Claude, what isn't](#whats-blocked-from-claude-what-isnt)): your model choice is a cost-and-capability preference, not security policy, and it never affects which commands Claude may run. The deny rules and hooks stay in the kernel-locked user file.
+
+Restart the session and verify which model is actually served:
+
+```bash
+# The VSCode extension ships its own CLI and does not put `claude` on your PATH.
+# If `command -v claude` comes up empty, point at the bundled binary instead.
+# VSCode keeps several extension versions during an upgrade, so take the newest
+# match by modification time rather than letting the glob expand to more than
+# one path — a plain lexicographic sort would pick e.g. 1.9.0 over 1.10.0.
+CLAUDE="$(command -v claude || ls -1dt ~/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude 2>/dev/null | head -1)"
+"$CLAUDE" -p "Reply with exactly the word ok" --output-format json | jq '.modelUsage | keys'
+```
+
+The result should list the model you pinned (e.g. `["claude-opus-5"]`). Swapping the value to `"sonnet"` and re-running is a quick control test that the file is what decides.
+
+`"env": {"ANTHROPIC_MODEL": "opus"}` in the same file also works, and takes precedence over `model` rather than being equivalent to it. Prefer `model`: it is a first-class settings key, so `/model` reports it back to you as the workspace default.
+
+**Switching to another model for one session (e.g. Fable).** Type the command in the chat — don't use the picker:
+
+```
+/model fable
+```
+
+The CLI confirms with "Set model to Fable 5.1 for this session only" and the switch is live. The "for this session only" wording is Claude Code telling you the persist was refused — nothing was lost, and the next session starts on your pinned default again. Reach for the picker instead and you get the `Failed to set model: EPERM` toast with no switch at all. That split is the intended behaviour under this setup: the default stays the cheaper model, and using a heavier one is a deliberate, visible act each time.
+
+**Fix — one-off switch.** If you only need to change the persisted model once, run the unlock step from [README → Updating](../../global-settings/README.md#updating) in your own terminal, switch the model in Claude Code, then run the relock step. Don't skip the relock.
+
+**Fix — keep `settings.json` unlocked, lock everything else.** If you switch models with the picker often enough that the two fixes above are friction rather than protection, drop just that one file from the relock list:
+
+```bash
+# Note: no $HOME/.claude/settings.json in this list.
+sudo chattr +i $HOME/.claude/hooks/*.sh $HOME/.claude/settings-version
+```
+
+Be clear about what this costs. `settings.json` carries `permissions.deny` and the hook wiring, so it is the file an attacker would most want to edit — you are giving up layer 4 on exactly that file. What still defends it: the `permissions.deny` rules that block the Edit/Write tools, plus the protected-path guards in `block-write-commands.sh` and `block-config-tool-writes.sh`. The deny rules themselves live *in* `settings.json`, i.e. in the file you just unlocked — but the two hooks that enforce the same boundary stay kernel-locked, and they deny every edit to `settings.json` regardless of what the deny list says. That is what keeps the unlock bounded: a session cannot rewrite the deny list, because the locked hooks stop it before it gets there. That is a real position to take, not a broken setup; it is weaker than pinning the model project-locally and keeping all four layers, which stays the recommendation.
+
+**What not to do.**
+
+- Don't leave the lock off *entirely* "because the picker is annoying" — unlocking the hooks along with the settings file disarms the only protection layer that survives a compromised hook chain. Dropping `settings.json` alone from the relock (previous fix) is a bounded trade; unlocking `hooks/*.sh` is not.
+- Don't add `model` to the shared `global-settings/settings.json`. It is a per-user preference, it would be overwritten on every settings update, and the file is still locked — the picker would keep failing.
+
+### An update fails with `Permission denied` after you ran `sudo chattr -i`
+
+**Symptom.** You cleared the immutable bit, told Claude to update, and it stops partway:
+
+```
+/bin/bash: line 6: /home/<user>/.claude/hooks/block-write-commands.sh: Permission denied
+```
+
+`lsattr` shows no `i` flag, so the unlock did land. `ls -l` shows why it failed anyway:
+
+```
+-r-xr-xr-x 1 <user> <user>  block-write-commands.sh     ← mode 555, nobody can write it
+-r--r--r-- 1 <user> <user>  settings-version            ← mode 444
+```
+
+**Cause.** Two protections sit on these files and the update instructions historically only cleared one. Claude installs every hook with `chmod 555` and `settings-version` with `chmod 444` — the only modes `block-write-commands.sh` lets it use on a protected path (`chmod 644`, `chmod u+w` and `chattr` are all hard-denied, so a session can never widen its own access). Those modes then persist into the *next* update, where they block the write that `chattr -i` was supposed to enable. Claude cannot clear them and is explicitly told not to route around them with `rm`/`mv`/`cp` — all of which are denied on protected paths as well.
+
+**Fix.** Run the mode reset yourself and let Claude continue — this is step 1 of [README → Updating](../../global-settings/README.md#updating), which now includes it:
+
+```bash
+chmod u+w $HOME/.claude/settings.json $HOME/.claude/hooks/*.sh $HOME/.claude/settings-version
+```
+
+No `sudo` — you own the files; the privileged half was the `chattr -i`.
+
+**Partially-updated `~/.claude/` is expected here, and safe.** The update writes one file per command and `settings-version` last, precisely so a denial leaves the version marker *behind* rather than ahead. A half-installed tree therefore still reports itself as outdated at the next session start, and re-running the update finishes the job. Nothing needs to be undone by hand.

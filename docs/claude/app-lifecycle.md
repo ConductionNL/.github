@@ -129,8 +129,8 @@ Each app should have a `project.md` at its root. This file is loaded by Claude a
 
 ## Repository
 
-- **GitHub**: https://codeberg.org/Conduction/<repo-name>
-- **Organization**: Conduction (Codeberg, primary) / ConductionNL (GitHub, legacy)
+- **GitHub**: https://github.com/ConductionNL/<repo-name>
+- **Organization**: ConductionNL (GitHub)
 - **Container mount**: /var/www/html/custom_apps/<appname>
 
 ## Architecture
@@ -253,7 +253,7 @@ openspec/
   "version": "0.1.0",
   "license": "EUPL-1.2",
   "author": "Conduction B.V.",
-  "repository": "https://codeberg.org/Conduction/my-app",
+  "repository": "https://github.com/ConductionNL/my-app",
   "dependencies": {
     "requiresOpenRegister": true,
     "additionalCiApps": [
@@ -384,7 +384,7 @@ After completing the steps above, confirm:
 /app-verify my-app         # Verify
 ```
 
-> **Legacy app without `@spec` annotations?** If the app predates the spec traceability convention ([ADR-003](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md)), run the [Retrofit Playbook](retrofit.md) before feature work — `/opsx-coverage-scan` → `/opsx-annotate` → `/opsx-reverse-spec`.
+> **Legacy app without `@spec` annotations?** If the app predates the spec traceability convention ([ADR-003](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)), run the [Retrofit Playbook](retrofit.md) before feature work — `/opsx-coverage-scan` → `/opsx-annotate` → `/opsx-reverse-spec`.
 
 ### Periodic health check
 

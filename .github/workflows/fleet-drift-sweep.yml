@@ -1,4 +1,5 @@
-# Fleet drift sweep — re-run every app's Code Quality against `development`.
+# Fleet drift sweep — re-run every app's Code Quality against `development`,
+# in full, once a day.
 #
 # ══════════════════════════════════════════════════════════════════════════
 # WHY THIS EXISTS: A GREEN BADGE IS A VERDICT ABOUT A MOMENT, NOT A STATE
@@ -17,6 +18,37 @@
 # Measured 2026-08-19: of 21 swept apps, exactly ONE (pipelinq) had any
 # scheduled run at all. The other twenty could only be re-measured by a human
 # pushing a commit.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHY IT IS DAILY, AND WHY A DISPATCH IS THE FULL RUN
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Since 2026-09-12 this sweep is the fleet's guarantee that every app gets ONE
+# FULL RUN PER DAY on `development`, whatever its pull requests are allowed to
+# skip. Two inputs on the shared quality workflow let a caller thin out its
+# PR runs, and both are correct on a PR and wrong as the ONLY measurement:
+#
+#   enable-path-filtering   skips PHPUnit and Playwright on a diff that
+#                           touches no code path. Decided by the `changes`
+#                           job from the PR's diff (or a push's before..after).
+#   reduce-pr-matrix        runs ONE PHP version and ONE Nextcloud server on
+#                           a pull request into development, instead of the
+#                           full declared matrix.
+#
+# A `workflow_dispatch` run is subject to NEITHER, by construction rather than
+# by configuration: the `changes` job runs everything for any event that is
+# not a push or a pull_request ("the diff for it is undefined"), and the
+# matrix reduction is keyed on `github.event_name == 'pull_request'`. The SBOM
+# job runs on `github.ref == refs/heads/development`, which `--ref
+# development` satisfies. Newman and Playwright run when the app's own wrapper
+# enables them; a dispatch carries no inputs of its own, so "full" here means
+# "everything the app's code-quality.yml is configured to run", measured on
+# the whole tree with the whole matrix. That is what a daily verdict has to
+# mean, and it is why this workflow needs no `with:` block.
+#
+# The cost is 21 full runs a day. The alternative is what the 2026-08-19
+# measurement found: an app that is red under today's gates and green on the
+# fleet page for as long as nobody pushes to it.
 #
 # ══════════════════════════════════════════════════════════════════════════
 # WHY IT LIVES HERE AND NOT AS A CRON IN EACH APP
@@ -57,11 +89,14 @@ name: Fleet drift sweep
 
 on:
   schedule:
-    # Fridays 06:00 UTC. CRON IS UTC AND DOES NOT KNOW ABOUT SUMMER TIME, so
-    # this is 08:00 Amsterdam in summer and 07:00 in winter. That drift is
-    # accepted deliberately: the alternative is two crons and a date check,
-    # and nothing here needs to land at a precise local hour.
-    - cron: "0 6 * * 5"
+    # Every day at 03:00 UTC (was Fridays 06:00 until 2026-09-12; see "WHY IT
+    # IS DAILY" above). Before the European working day, so a red is waiting
+    # in the morning rather than landing mid-afternoon. CRON IS UTC AND DOES
+    # NOT KNOW ABOUT SUMMER TIME, so this is 05:00 Amsterdam in summer and
+    # 04:00 in winter. That drift is accepted deliberately: the alternative is
+    # two crons and a date check, and nothing here needs to land at a precise
+    # local hour.
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       ref:

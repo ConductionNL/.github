@@ -59,12 +59,12 @@ Open VS Code and install these extensions (`Ctrl+Shift+X`):
 
 | Extension           | ID                           | Purpose                                                        |
 | ------------------- | ---------------------------- | -------------------------------------------------------------- |
-| Gitea               | gitea.gitea-vscode           | Codeberg/Gitea PR + issue sidebar (Conduction's primary git host) — see [Codeberg Auth Setup](./codeberg-auth-setup.md) |
+| Gitea               | gitea.gitea-vscode           | Codeberg/Gitea PR + issue sidebar — only for non-Conduction Forgejo repos; see [Codeberg Auth Setup](./codeberg-auth-setup.md) |
 | PowerShell          | ms-vscode.powershell         | PowerShell 7 scripting (`.ps1` files)                          |
 | GitLens             | eamodio.gitlens              | Advanced Git history, blame, line annotations                  |
 | GitHub Copilot Chat | github.copilot-chat          | AI pair programmer (requires Copilot license)                  |
 | YAML                | redhat.vscode-yaml           | Syntax & validation for `docker-compose.yml` and OpenSpec YAML |
-| GitHub Actions      | github.vscode-github-actions | View and validate CI/CD workflows (legacy GitHub repos)        |
+| GitHub Actions      | github.vscode-github-actions | View and validate CI/CD workflows (all ConductionNL repos)     |
 | Makefile Tools      | ms-vscode.makefile-tools     | Makefile support (`make check-strict`)                         |
 | Pylance             | ms-python.vscode-pylance     | Enhanced Python type checking and IntelliSense                 |
 
@@ -177,6 +177,8 @@ ${EDITOR:-nano} ~/.claude/sound-config.sh   # flip SOUND_ENABLED=1
 
 Restart Claude Code after installing. For the full reference (permissions table, hook behavior, update flow, sound config details, troubleshooting) see **[global-claude-settings.md](./global-claude-settings.md)** and the canonical **[`global-settings/README.md`](../../global-settings/README.md)**.
 
+> **Later, when you update**, unlocking is two commands, not one: `sudo chattr -i …` clears the kernel flag, and a plain `chmod u+w …` clears the read-only mode that the previous update left behind. Claude is hard-denied both `chattr` and any write-enabling `chmod`, so it cannot do the second one for you — it can only stop and ask. The full sequence is in [`global-settings/README.md` → Updating](../../global-settings/README.md#updating).
+
 > **Keep in sync:** if you add or rename a hook in `global-settings/`, update **both** this block and the one in `global-settings/README.md` (or add your hook to both).
 
 ---
@@ -204,11 +206,18 @@ sudo mv composer.phar /usr/local/bin/composer
 
 ### Git-host CLIs
 
-Conduction's primary platform is **Codeberg / Gitea / Forgejo** (under the `Conduction` org as of 2026-05-29). GitHub is the secondary/fallback host (former primary; the migration is bidirectional). GitLab is an alternative for non-Conduction work. Install the CLIs you need:
+Conduction's platform is **GitHub** (under the `ConductionNL` org). The 2026-05-29 move to Codeberg was reversed — directive 2026-07-17, executed 2026-07-23 — so `gh` is the CLI you actually need. GitLab (`glab`) is an alternative for non-Conduction client work; Gitea/Forgejo (`tea`) only for a repo that genuinely lives on a Forgejo host, never as a default. Install the CLIs you need:
 
-See **[Codeberg Authentication Setup](./codeberg-auth-setup.md)** for the full Codeberg onboarding guide — SSH key generation, `keychain` for passphrase persistence across shells, `tea` CLI install + token scopes, VS Code Gitea extension, and how to switch existing repo remotes.
+**[Codeberg Authentication Setup](./codeberg-auth-setup.md)** remains available for that last case — SSH key generation, `keychain` for passphrase persistence across shells, `tea` CLI install + token scopes, VS Code Gitea extension, and how to switch existing repo remotes. You do not need it for ConductionNL work.
 
-Quick smoke test after following that guide:
+Quick smoke test — this is the one that matters for ConductionNL work:
+
+```bash
+ssh -T git@github.com     # expect: "Hi <user>! You've successfully authenticated..."
+gh auth status            # expect: "Logged in to github.com account <user>"
+```
+
+Only if you also set up a non-Conduction Forgejo host, per the Codeberg guide above:
 
 ```bash
 ssh -T git@codeberg.org   # expect: "Hi <user>! ... but Forgejo does not provide shell access."
@@ -216,21 +225,22 @@ tea login list            # expect: one row, name=codeberg, your username
 ```
 
 ```bash
-# Codeberg / Gitea / Forgejo — PRIMARY
+# GitHub — PRIMARY (the ConductionNL org: code, PRs and issues)
+sudo apt install -y gh
+gh auth login
+
+# GitLab — ALTERNATIVE (non-Conduction client work)
+sudo apt install -y glab
+glab auth login
+
+# Codeberg / Gitea / Forgejo — only for a non-Conduction repo that genuinely
+# lives on a Forgejo host. Not needed for ConductionNL work.
 sudo apt install -y tea                          # if available, else:
 # wget -O /usr/local/bin/tea https://dl.gitea.com/tea/0.10.0/tea-0.10.0-linux-amd64
 # sudo chmod +x /usr/local/bin/tea
 tea login add --name codeberg --url https://codeberg.org --token <PAT>
 # Token from https://codeberg.org/user/settings/applications
 # Scopes: read:repository, write:repository, read:issue, write:issue
-
-# GitHub — SECONDARY (still required while migration is in progress)
-sudo apt install -y gh
-gh auth login
-
-# GitLab — ALTERNATIVE
-sudo apt install -y glab
-glab auth login
 ```
 
 **Caveat for Claude Code users:** `tea pulls create` / `tea issues create` need a controlling TTY and fail from Claude's Bash tool. Claude-driven workflows fall back to REST `POST /api/v1/...` using the token from `~/.config/tea/config.yml`. Read-only `tea login list/default` is TTY-safe.
@@ -284,6 +294,18 @@ npx playwright install chromium
 
 > If the MCP server reports a different revision is needed (e.g. after a `@playwright/mcp` update), run the install from the npx cache that the MCP server uses. You can find it at `~/.npm/_npx/` — look for the directory containing `@playwright/mcp`.
 
+### Shared Playwright MCP server (recommended)
+
+Projects ship only `browser-1` in `.mcp.json`. The parallel-testing pool (`browser-2`…`browser-7`) points at one shared server, so it costs no processes per session. Install it once from the hydra checkout; it runs as a systemd user unit and starts with your WSL session:
+
+```bash
+cd ~/hydra
+scripts/playwright-mcp-server.sh install-service
+for i in 2 3 4 5 7; do claude mcp add --scope user --transport http "browser-$i" http://localhost:8931/mcp; done
+```
+
+See [playwright-setup.md](./playwright-setup.md) for the why and the fallbacks.
+
 ### OpenSpec CLI
 
 Used by all `/opsx-*` commands for spec-driven development:
@@ -315,13 +337,13 @@ For running Claude Code with a local Qwen model (privacy, cost reduction, offlin
 
 Most workstation flows don't need the Hydra repo cloned locally — Hydra normally runs in containers, triggered by an issue label. Clone it when you want to **follow along with the [Hydra tutorial series](https://conduction.nl/academy/?series=hydra-tutorial)**, read the canonical `CLAUDE.md`, or use the `clean-env` / `hydra-gate-*` skills shipped in `hydra/.claude/skills/`.
 
-Access is restricted to the [`Conduction/hydra`](https://codeberg.org/Conduction/hydra) repo on Codeberg — ask your team lead first. Once granted:
+Access is restricted to the [`ConductionNL/hydra`](https://github.com/ConductionNL/hydra) repo on GitHub (private) — ask your team lead first. Once granted:
 
 ```bash
 # Clone inside your apps-extra workspace, alongside the project repos
 # (matches the workspace layout in getting-started.md)
 cd path/to/apps-extra
-git clone git@codeberg.org:Conduction/hydra.git
+git clone git@github.com:ConductionNL/hydra.git
 cd hydra
 cat CLAUDE.md
 ```
@@ -336,9 +358,9 @@ node --version        # v20.x+
 php --version         # 8.1+
 composer --version    # 2.x
 docker --version      # 24+
-tea --version         # 0.10+ — Codeberg/Gitea/Forgejo CLI (primary)
-gh --version          # 2.x+ — GitHub CLI (secondary/fallback)
+gh --version          # 2.x+ — GitHub CLI (primary)
 glab --version        # 1.x+ — GitLab CLI (alternative, optional)
+tea --version         # 0.10+ — Codeberg/Gitea/Forgejo CLI (non-Conduction only, optional)
 openspec --version    # 1.x
 npx playwright --version  # 1.x
 ```

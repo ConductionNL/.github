@@ -43,7 +43,7 @@ proposal.md ──► specs.md ──► design.md ──► tasks.md ──► 
 - **Tasks** — breakdown into implementable units
 - **Issues** — tasks become trackable tracking issues with an epic
 
-Org-wide specs (test coverage baselines, API patterns, NL Design System compliance, i18n requirements) live in the [`openspec/`](https://codeberg.org/Conduction/.github/tree/main/openspec) directory of this repository. Individual apps extend these with app-specific specs.
+Org-wide specs (test coverage baselines, API patterns, NL Design System compliance, i18n requirements) live in the [`openspec/`](https://github.com/ConductionNL/.github/tree/main/openspec) directory of this repository. Individual apps extend these with app-specific specs.
 
 ## Claude Code
 

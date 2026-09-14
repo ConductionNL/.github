@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: EUPL-1.2
-"""Gate-46 spec-anchor-existence — does the `@spec` tag point at something real?
+"""Gate-46 spec-anchor-existence — does the tag point at something real?
+
+Reads `@spec` and `@e2e`, which are written with the same target grammar and
+mean the same thing in opposite directions: this code implements that
+requirement, this test proves it.
 
 Gate-16 checks that a `@spec` tag is PRESENT. This gate checks that its
 target RESOLVES: the file exists, and — when the tag carries a `#fragment`
@@ -96,10 +100,31 @@ import sys
 # the shape below is 0.0000s. Same family as the `py/redos` CodeQL raised on
 # gate-28's tail rule in this change; found by sweeping the other regexes it
 # adds rather than by waiting for the alert.
+#
+# BOTH TRACEABILITY TAGS, NOT ONLY `@spec` (.github#726).
+#
+# `@e2e openspec/...` is written with the identical target grammar and means
+# the identical thing — this test proves that requirement — and until this
+# change no gate resolved one. Measured across the 21 fleet apps: 1,964 `@e2e`
+# anchors, 194 of them dangling, against 55,720 `@spec` anchors with ONE
+# unresolved. The gate was never wrong; it read four fifths of the corpus.
+#
+# The measurement is reproducible and was NOT a reimplementation: every `@e2e`
+# target was rewritten to `@spec` in a probe file outside the repo and run
+# through THIS helper with cwd set to the app, so the numbers are this
+# resolver's own semantics. That probe also established the two facts this
+# widening depends on — every `@e2e` line carrying an `openspec/` path already
+# matches the shape below, and no such tag lives outside `tests/`, which is
+# already enumerated.
+#
+# The tag NAME is captured so the finding can say which one it came from, and
+# so the runner can block on `@spec` while reporting `@e2e`. That split is the
+# whole reason the group exists; do not collapse it back to a non-capturing
+# group without moving the label somewhere else.
 TAG = re.compile(
     r'^[^\S\n]*(?:(?:\*+/?|//+|\#(?!\[)|/\*+|<!--|[-+]|\d+\.)[^\S\n]*)?'
     r'(?:\[[ xX~\-]\][^\S\n]*)?'
-    r'@spec\s+(openspec/[^\s`\'"]+)',
+    r'@(spec|e2e)\s+(openspec/[^\s`\'"]+)',
     re.MULTILINE,
 )
 DATE = re.compile(r'\b\d{4}-\d{2}-\d{2}\b')
@@ -542,18 +567,19 @@ def scan_files(files: list[str], root: str | None = None) -> list[str]:
         except OSError:
             continue
         for m in TAG.finditer(src):
-            target = m.group(1)
+            tag, target = m.group(1), m.group(2)
             if '#' in target:
                 path, frag = target.split('#', 1)
             else:
                 path, frag = target, None
             candidates = resolve(path, root, archive_index, capability_index)
             if not candidates:
-                findings.append(f"{fp}: @spec target file not found → {target}")
+                findings.append(f"{fp}: @{tag} target file not found → {target}")
                 continue
             if frag and path.endswith('.md'):
                 if not any(has_anchor(c, frag) for c in candidates):
-                    findings.append(f"{fp}: @spec anchor not found in {path} → #{frag}")
+                    findings.append(
+                        f"{fp}: @{tag} anchor not found in {path} → #{frag}")
     return findings
 
 
