@@ -727,6 +727,56 @@ def _component_files(app_dir: str) -> list[tuple[str, dict]]:
     return found
 
 
+# ---------------------------------------------------------------------------
+# A CATALOGUE SCHEMA ALREADY HOLDS ITS ROWS, AND INVENTING MORE DUPLICATES THEM
+# ---------------------------------------------------------------------------
+#
+# Most schemas that carry seeded rows WANT demo rows beside them: dossiq seeds
+# 38 such schemas and every one of them takes three generated demo objects with
+# no slug collision, because more demo cases is the point.
+#
+# A catalogue is the exception. Its seeded rows are the complete, curated
+# truth, not a sample. dossiq's `dossiqIntegration` is one: twelve rows with
+# stable human slugs (`integration-brp`, `integration-zgw`) from
+# `lib/Settings/register.d/96-integrations.json`, and that list IS the set of
+# connections the app supports. `ImportHandler` upserts a seed object on
+# (register, schema, slug), so three machine-slugged rows never collapse into
+# the twelve: an instance with demo data installed carried two BRP rows and two
+# ZGW rows.
+#
+# That is not cosmetic. It broke dossiq's `integrations-page.spec.ts` twice,
+# and both failures read as product defects rather than as duplicate data: one
+# died on a Playwright strict-mode violation with two rows matching /BRP/i, and
+# the other read `status: error` for StUF out of an invented row claiming a
+# circuit was open on a connection nobody had measured, which is the exact
+# claim that test exists to forbid. dossiq pinned the removal with a guard
+# test, and the gate then contradicted the guard: satisfying `--check`
+# reintroduced the defect the guard existed to prevent.
+#
+# 🔴 THIS CANNOT BE INFERRED. "Has seeded rows" does not distinguish a
+# catalogue from the 38 schemas that legitimately carry both; measured on
+# dossiq, such a rule would exempt 38 schemas to fix 1 and gut the gate. The
+# difference is what the rows MEAN, so the app states it:
+#
+#     "dossiqIntegration": { "x-openregister-catalogue": true, ... }
+#
+# on the schema definition in the app's own descriptor. Nothing is generated
+# for a catalogue and nothing is demanded of it.
+def _catalogue_schemas(app_dir: str) -> set[str]:
+    """Schema names the app declares as catalogues.
+
+    Read from every non-mock descriptor, so a schema defined apart from the
+    file that declares its register is still seen.
+    """
+    catalogues: set[str] = set()
+    for _path, data in _component_files(app_dir):
+        block = _as_dict(data.get("components", {}).get("schemas"))
+        for name, sch in block.items():
+            if isinstance(sch, dict) and sch.get("x-openregister-catalogue") is True:
+                catalogues.add(name)
+    return catalogues
+
+
 def _descriptors(app_dir: str) -> list[tuple[str, dict]]:
     """The subset that DECLARES a register — the authority on register->schema.
 
@@ -861,6 +911,7 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
 
     _set_icon_scope(app_dir)
     decl_registers, owns, definitions = _register_schema_map(app_dir, app_id)
+    catalogues = _catalogue_schemas(app_dir)
 
     registers: dict[str, Any] = {}
     schemas: dict[str, Any] = {}
@@ -881,6 +932,10 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
         }
 
         for sch_name in carried_names:
+            # A catalogue's rows are the app's own curated list; see
+            # `_catalogue_schemas`. Generating more duplicates them at import.
+            if sch_name in catalogues:
+                continue
             sch = definitions[sch_name]
             schemas.setdefault(sch_name, _strip_code_refs(sch))
             carried = keep.get((reg_slug, sch_name), [])
@@ -1272,10 +1327,21 @@ def check(app_dir: str, app_id: str, per_schema: int, only: set[str] | None = No
                         in_scope_pairs.append(pair)
 
     checked = failures = 0
+    catalogues = _catalogue_schemas(app_dir)
     for reg_slug, sch_name in in_scope_pairs:
         sch = definitions.get(sch_name)
         checked += 1
         key = (reg_slug, sch_name)
+        # A DECLARED CATALOGUE IS EXEMPT, AND SAYS SO. Demanding demo rows for
+        # one is how this gate came to contradict a guard test written to stop
+        # the duplicates it caused. See `_catalogue_schemas`.
+        if sch_name in catalogues:
+            print(
+                f"SKIP {app_id}: register '{reg_slug}' schema '{sch_name}' declares "
+                f"x-openregister-catalogue, so its rows are the app's own curated list "
+                f"and demo data would duplicate them at import (ADR-111 rule 1 does not apply)."
+            )
+            continue
         count = have.get(key, 0)
         if count < per_schema:
             failures += 1

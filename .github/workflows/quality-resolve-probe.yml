@@ -137,6 +137,32 @@ jobs:
       - name: "Assert the filter skips only what it can prove is irrelevant"
         run: python3 scripts/test-changed-path-filter.py .github/workflows/quality.yml
 
+  e2e-trigger-filter:
+    name: "E2E runs on the promotion path, and its skip is never silent"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # TWO failure shapes, opposite in sign, and the suite has to hold both.
+      #
+      #   * The filter answers `false` where it should answer `true` — the
+      #     fleet loses its browser verdict on the promotion into `beta` or
+      #     `main`, which is the only place it is asked for now, and the run
+      #     stays green. That is the #194 shape with a new cause.
+      #   * The filter answers `false` WITHOUT a reason, or the census stops
+      #     honouring the reason — every development pull request goes red on
+      #     the Quality Report instead of on the E2E check. The red moves; it
+      #     does not go away, and it is then blamed on the aggregator.
+      #
+      # Both scripts are extracted from quality.yml and executed, so a suite
+      # that had stopped reading the shipped text cannot pass the control.
+      - name: "Positive control — a broken fail-safe must fail the suite"
+        run: python3 scripts/test-e2e-trigger-filter.py --positive-control .github/workflows/quality.yml
+
+      - name: "Assert the trigger filter and the report census agree"
+        run: python3 scripts/test-e2e-trigger-filter.py .github/workflows/quality.yml
+
   consolidated-tool-legs:
     name: "A consolidated tool family cannot swallow a failure"
     runs-on: ubuntu-latest
@@ -164,6 +190,28 @@ jobs:
 
       - name: "Assert every tool's own exit code reaches the family verdict"
         run: python3 scripts/test-consolidated-tool-legs.py .github/workflows/quality.yml
+
+  e2e-shard-partition:
+    name: "A sharded E2E run cannot lose a test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # `e2e-shards` splits the Playwright suite across runners, and each leg
+      # lists every shard before any test runs. A test on NO shard would let
+      # every leg go green without it, so that step refuses to continue. This
+      # job runs the SHIPPED program, extracted from quality.yml, against real
+      # Playwright projects: a lossless split must pass, a config that drops a
+      # file on one shard must fail by name, and an empty suite must fail.
+      #
+      # POSITIVE CONTROL FIRST, same discipline as the jobs above: remove the
+      # refusal and require the lossy case to stop failing.
+      - name: "Positive control, removing the refusal must fail the suite"
+        run: python3 scripts/test-e2e-shard-partition.py --positive-control .github/workflows/quality.yml
+
+      - name: "Assert the partition step refuses a lost test"
+        run: python3 scripts/test-e2e-shard-partition.py .github/workflows/quality.yml
 
   coverage-gate-can-fail:
     name: "The spec-coverage threshold can fail a run"
@@ -515,7 +563,7 @@ jobs:
   guard:
     name: "Shared-workflow guard"
     runs-on: ubuntu-latest
-    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, probe, changed-path-filter, consolidated-tool-legs]
+    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, probe, changed-path-filter, e2e-trigger-filter, consolidated-tool-legs, e2e-shard-partition]
     if: ${{ !cancelled() }}
     steps:
       - name: Assert both guards reached a verdict
@@ -528,12 +576,14 @@ jobs:
           PROBE: ${{ needs.probe.result }}
           FILTER: ${{ needs['changed-path-filter'].result }}
           LEGS_CONSOLIDATED: ${{ needs['consolidated-tool-legs'].result }}
+          SHARD_PARTITION: ${{ needs['e2e-shard-partition'].result }}
+          E2E_TRIGGER: ${{ needs['e2e-trigger-filter'].result }}
         run: |
           set -eu
-          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} probe=${PROBE} changed-path-filter=${FILTER} consolidated-tool-legs=${LEGS_CONSOLIDATED}"
+          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} probe=${PROBE} changed-path-filter=${FILTER} e2e-trigger-filter=${E2E_TRIGGER} consolidated-tool-legs=${LEGS_CONSOLIDATED} e2e-shard-partition=${SHARD_PARTITION}"
           # `skipped` is failed here on purpose. A guard that did not run is
           # not a guard that passed.
-          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "probe:${PROBE}" "changed-path-filter:${FILTER}" "consolidated-tool-legs:${LEGS_CONSOLIDATED}"; do
+          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "probe:${PROBE}" "changed-path-filter:${FILTER}" "e2e-trigger-filter:${E2E_TRIGGER}" "consolidated-tool-legs:${LEGS_CONSOLIDATED}" "e2e-shard-partition:${SHARD_PARTITION}"; do
             name="${pair%%:*}"; result="${pair##*:}"
             [ "${result}" = "success" ] || {
               echo "::error::${name} did not succeed (result=${result}). A guard that \

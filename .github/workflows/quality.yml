@@ -347,7 +347,7 @@ on:
         # almost certainly be red, and some of that red will not be the app's
         # to fix. Default-on would therefore have blocked the fleet on core
         # Nextcloud defects on day one.
-        description: "Run axe-core (@axe-core/playwright) against the app's routes inside the Playwright job and publish tests/axe/report.json, which is the file hydra-gates gate-33 consumes. OPT-IN, default false. Gate-33 fails on `serious`/`critical` violations only; without this the report does not exist and gate-33 reports SKIPPED, which is what it has done in every repo in the fleet since it was written. Requires enable-playwright (the report is produced by that job, against its Nextcloud instance) and is only consumed when enable-hydra-gates is also true. SETTING THIS TRUE IS AN OPT-IN TO ENFORCEMENT, NOT TO A BEST EFFORT: if no usable axe report reaches the hydra-gates job — because Playwright was skipped or failed, or because the report was rejected by the provenance check — that job now FAILS with a named reason instead of going green with gate-33 silently SKIPPED. Leave it false, deliberately and visibly, for any repo not ready to enforce it. Measured against a vanilla Nextcloud 34 with no app installed, core's own pages already carry serious/critical violations — expect the first run in a repo to be red, which is exactly why this is off by default."
+        description: "Run axe-core (@axe-core/playwright) against the app's routes inside the Playwright job and publish tests/axe/report.json, which is the file hydra-gates gate-33 consumes. OPT-IN, default false. Gate-33 fails on `serious`/`critical` violations only; without this the report does not exist and gate-33 reports SKIPPED, which is what it has done in every repo in the fleet since it was written. Requires enable-playwright (the report is produced by that job, against its Nextcloud instance) and is only consumed when enable-hydra-gates is also true. SETTING THIS TRUE IS AN OPT-IN TO ENFORCEMENT, NOT TO A BEST EFFORT: gate-33 is judged by the separate 'Hydra Gates (axe)' job (the only gates job that waits on Playwright; the other gates no longer do), and if no usable axe report reaches it — because Playwright was skipped or failed, or because the report was rejected by the provenance check — that job FAILS with a named reason instead of going green with gate-33 silently SKIPPED, and the main gates job accounts for gate-33 by name as judged elsewhere. Leave it false, deliberately and visibly, for any repo not ready to enforce it. Measured against a vanilla Nextcloud 34 with no app installed, core's own pages already carry serious/critical violations — expect the first run in a repo to be red, which is exactly why this is off by default."
         required: false
         type: boolean
         default: false
@@ -425,6 +425,61 @@ on:
         required: false
         type: boolean
         default: false
+      e2e-promotion-only:
+        # ── WHY THIS DEFAULTS TO TRUE, AND WHAT IT COSTS ────────────────────
+        #
+        # Ruben's decision, 2026-09-13: the Playwright suite runs locally and
+        # on the promotion path only. It is the most expensive leg this
+        # workflow produces — dossiq runs three shards at 16 to 25 minutes
+        # each, against seconds for the fast tier — and it was being asked for
+        # on every push to `development` and every pull request into it.
+        #
+        # The queue, not the money, is the constraint. Measured 2026-09-12,
+        # dossiq had 36 of 48 Code Quality push runs on `development`
+        # CANCELLED in one day and went five hours with no successful run: a
+        # drain-the-backlog merge rate kept moving the head while the
+        # concurrency queue killed the pending run behind it. At one point 17
+        # of the fleet's 19 in-flight runs were dossiq's own.
+        #
+        # ⚠️ THIS HAS BEEN TRIED ONCE AND REVERTED, so read the reversal
+        # before widening it further. #618 deferred E2E off pull requests into
+        # `development` and #637 restored it, because deferring to the PUSH
+        # leaves the verdict nowhere: a `development` push run is usually
+        # cancelled before any job starts. That argument does NOT apply here,
+        # because this change does not move the verdict onto the push — it
+        # moves it onto the `development -> beta` and `beta -> main`
+        # promotions, which are pull requests with no merge traffic behind
+        # them, plus `workflow_dispatch` on demand, plus `npx playwright test`
+        # locally. The cost is stated plainly: a defect that only a browser
+        # can see now lands on `development` and is caught at the promotion,
+        # not at the merge. That is the trade that was authorised.
+        #
+        # FAIL-SAFE TOWARDS RUNNING. The decision is made in the `changes` job
+        # (step `e2e-trigger`) and only two events can turn E2E off: a
+        # `pull_request` whose base is not `beta`/`main`, and a `push` to a
+        # branch that is not `beta`/`main`. A `workflow_dispatch`, a
+        # `schedule`, a `merge_group` or any event this workflow has not met
+        # resolves to RUN. The consumers test `!= 'false'`, so a `changes` job
+        # that fails, is cancelled or is deleted publishes the empty string and
+        # the suite runs.
+        #
+        # THE SKIP IS DECLARED, NEVER SILENT. The Quality Report's test-tier
+        # census fails a run whose enabled test job reports `skipped` with no
+        # stated reason — that gate exists because on 2026-08-06 an advisory
+        # deleted the test tier in 16 repos and every run read as unremarkable.
+        # `changes` therefore emits the REASON alongside the boolean, and the
+        # report prints it in the Playwright cell and in the census. Skipping
+        # without a reason would have moved the red from the E2E check to the
+        # aggregator rather than removing it.
+        description: "Run the Playwright E2E suite only on the promotion path — pull requests targeting `beta` or `main`, and pushes to `beta` or `main` — plus `workflow_dispatch` on any branch. Default TRUE: ordinary `development` traffic (pushes to `development` and pull requests into it) reports E2E as a DECLARED skip, with its reason printed in the Quality Report, not as a missing verdict. Set false to restore the previous behaviour, where E2E ran on every push and every pull request except the release/sync ones. The suite is unchanged and still runs locally with `npx playwright test`."
+        required: false
+        type: boolean
+        default: true
+      e2e-shards:
+        description: "Split the Playwright suite across this many runners, 1 to 8. OPT-IN, default 1, and 1 runs exactly one job with exactly the command line it always ran. Above 1, the E2E job becomes a matrix of legs, each with its own Nextcloud and its own database, each running `npx playwright test --shard=<i>/<n>`. Every leg exports E2E_SHARD_INDEX and E2E_SHARD_TOTAL so the app's config can size its own globalTimeout (it is per process, so per shard). Before any test runs, each leg lists every shard and FAILS if one test the unsharded suite would run is on no shard. Read the note on the playwright job before opting in: Playwright never shards a project that another project depends on, so a config with project `dependencies` can end up running most of its suite on every leg."
+        required: false
+        type: number
+        default: 1
       enable-coverage-guard:
         description: "Enforce the coverage ratchet — READ-ONLY, never commits. On a PULL REQUEST the merge base is measured in the phpunit job and the change must not reduce coverage against it; the floor is measured, not typed, so it cannot go stale and there is nothing for an author to keep up to date. On a PUSH the committed .coverage-baseline is enforced as a conservative fail-safe floor (below it fails; above it is fine). PRs may raise that floor but never lower it. Requires scripts/coverage-guard.php supporting --against; the workflow probes for it and fails loudly rather than silently downgrading the check."
         required: false
@@ -729,6 +784,15 @@ jobs:
     outputs:
       code: ${{ steps.decide.outputs.code }}
       reason: ${{ steps.decide.outputs.reason }}
+      # The E2E trigger decision, computed ONCE and read by three places: the
+      # `playwright` job's `if:`, the `hydra-gates-axe` producer probe, and the
+      # Quality Report (both the Playwright cell and the test-tier census).
+      # It lives here rather than being re-typed into each `if:` because the
+      # predicate it replaces WAS re-typed into four places, and the axe job's
+      # copy carries a comment promising it is "byte-for-byte the one on that
+      # job" — a promise nothing checked.
+      e2e: ${{ steps.e2e-trigger.outputs.e2e }}
+      e2e_reason: ${{ steps.e2e-trigger.outputs.e2e_reason }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -840,6 +904,95 @@ jobs:
 
           echo "No changed file matches the code globs, and none carries a source extension."
           emit false "no file in this diff matches the code globs, and none carries a source extension — the heavy tier has nothing to decide about it."
+
+      # ── Does E2E run on THIS trigger? ────────────────────────────────────
+      #
+      # A SEPARATE question from the one above, answered in a separate step so
+      # neither can shadow the other. The step above asks "could this diff
+      # change a test verdict"; this one asks "is this event on the promotion
+      # path". Both must say yes for the Playwright job to run, and each states
+      # its own reason, so a skipped E2E cell always names WHICH rule skipped it.
+      #
+      # THIS STEP RUNS UNCONDITIONALLY, like the one above and for the same
+      # reason: a skipped step publishes an empty output, `'' != 'false'` is
+      # true, and every consumer tests `!= 'false'`. So every failure mode of
+      # this step resolves to running the suite.
+      #
+      # FAIL-SAFE BY CONSTRUCTION. Only two events can answer `false`, and both
+      # are named explicitly. Anything else — `workflow_dispatch` (the
+      # deliberate ask), `schedule` (the nightly sweep), `merge_group`, or an
+      # event this workflow has never met — falls through to `true`. The filter
+      # must PROVE the trigger is ordinary development traffic; it never
+      # assumes it.
+      - name: Does E2E run on this trigger?
+        id: e2e-trigger
+        env:
+          PROMOTION_ONLY: ${{ inputs.e2e-promotion-only }}
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          REF: ${{ github.ref }}
+        run: |
+          set -uo pipefail
+
+          emit_e2e() {
+            echo "e2e=$1" >> "$GITHUB_OUTPUT"
+            echo "e2e_reason=$2" >> "$GITHUB_OUTPUT"
+            {
+              echo "### E2E trigger filter"
+              echo ""
+              echo "- Playwright: **$([ "$1" = true ] && echo RUNS || echo 'NOT RUN (declared)')**"
+              echo "- Reason: $2"
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ "$1" = true ]; then
+              echo "::notice::E2E WILL run — $2"
+            else
+              echo "::notice::E2E deliberately NOT run — $2"
+            fi
+            exit 0
+          }
+
+          # RULE 1 — predates e2e-promotion-only and is independent of it.
+          # A release/ or sync/ branch into `development` carries version
+          # strings and merge commits, and nothing a browser can observe.
+          if [ "$EVENT" = "pull_request" ] && [ "$BASE_REF" = "development" ]; then
+            case "$HEAD_REF" in
+              release/*|sync/*)
+                emit_e2e false "this pull request comes from a release or sync branch, which carries only version strings. E2E runs on the promotions."
+                ;;
+            esac
+          fi
+
+          # RULE 2 — the promotion-path restriction.
+          if [ "$PROMOTION_ONLY" != "true" ]; then
+            emit_e2e true "e2e-promotion-only is off for this repository, so E2E runs on every trigger."
+          fi
+
+          case "$EVENT" in
+            pull_request)
+              case "$BASE_REF" in
+                beta|main)
+                  emit_e2e true "this pull request targets \`${BASE_REF}\`, which is on the promotion path."
+                  ;;
+                *)
+                  emit_e2e false "E2E runs locally and on the promotion path only. This pull request targets \`${BASE_REF:-an unnamed branch}\`, so the suite is asked once per promotion into \`beta\` and \`main\` rather than once per push per open pull request. Run it on any branch from the Actions tab, or locally with npx playwright test."
+                  ;;
+              esac
+              ;;
+            push)
+              case "$REF" in
+                refs/heads/beta|refs/heads/main)
+                  emit_e2e true "this push is to \`${REF#refs/heads/}\`, which is on the promotion path."
+                  ;;
+                *)
+                  emit_e2e false "E2E runs locally and on the promotion path only. This is a push to \`${REF#refs/heads/}\`, which is ordinary development traffic, so the suite runs on the promotions into \`beta\` and \`main\`. Run it on any branch from the Actions tab, or locally with npx playwright test."
+                  ;;
+              esac
+              ;;
+            *)
+              emit_e2e true "event '${EVENT}' is neither a push nor a pull request, so it is not ordinary development traffic. Running the suite."
+              ;;
+          esac
 
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 1 — Four parallel quality gates        ║
@@ -2490,7 +2643,7 @@ jobs:
 
           # ── Default allowlist (EUPL-1.2 / AGPL-3.0 compatible) ──
           DEFAULT_ALLOWLIST='[
-            "MIT", "ISC", "BSD-2-Clause", "BSD-3-Clause", "0BSD",
+            "MIT", "MIT-0", "ISC", "BSD-2-Clause", "BSD-3-Clause", "0BSD",
             "Apache-2.0",
             "LGPL-2.0-only", "LGPL-2.0-or-later",
             "LGPL-2.1-only", "LGPL-2.1-or-later",
@@ -3387,7 +3540,19 @@ jobs:
           # install cost. Making it conditional would mean a mysql leg silently
           # falling back to the else-branch of the install below and testing
           # sqlite while its name said mysql.
-          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, mysqli, pdo_mysql, zip, gd, curl, xml, json
+          #
+          # xdebug-3.5.3 IS A PIN, NOT CLUTTER. `coverage: xdebug` alone enables
+          # whatever Xdebug the packaged PHP carries, and between 2026-09-09 and
+          # 2026-09-10 that became Xdebug 3.6.0alpha1 on both PHP 8.3 and 8.4
+          # (PECL's newest release is still 3.5.3). The openregister suite went
+          # from ~3.5 min to ~39.6 min under it (about 12x: jobs 102466575014
+          # vs 102811468997), so every PHPUnit leg hit the 45-minute cap and
+          # was cancelled. setup-php runs `extensions` before `coverage`, so
+          # this builds 3.5.3 from PECL first and `coverage: xdebug` then finds
+          # it loaded and keeps it.
+          # Lift the pin only once Xdebug 3.6 is STABLE and a PHPUnit leg has
+          # been measured to be no slower under it than under 3.5.3.
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, mysqli, pdo_mysql, zip, gd, curl, xml, json, xdebug-3.5.3
           coverage: xdebug
           tools: composer:v2
 
@@ -4456,9 +4621,82 @@ jobs:
     # dependency bump is exactly where a browser-observable break appears, and
     # `@nextcloud/axios` 2.6.0 breaking every `@conduction/nextcloud-vue`
     # component is this month's example.
-    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() && !(github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/'))) }}
+    #
+    # ── 2026-09-13: BACK ON THE PROMOTION PATH, AND FURTHER THAN #618 WENT ──
+    #
+    # The paragraphs above are the record of #618 and its reversal in #637, and
+    # they are kept because the reason for the reversal is still true: moving
+    # the verdict onto the `development` PUSH puts it nowhere, since a
+    # `development` push run is usually cancelled before any job starts.
+    #
+    # This change does not do that. It takes E2E off `development` traffic
+    # ENTIRELY — the pushes as well as the pull requests — and leaves it on the
+    # `development -> beta` and `beta -> main` promotions, on
+    # `workflow_dispatch` for any branch, and on `npx playwright test` locally.
+    # A promotion pull request has no merge traffic behind it, so it is not
+    # subject to the cancellation that emptied the push lane.
+    #
+    # The predicate is no longer written here. It is `needs.changes.outputs.e2e`,
+    # decided once in the `changes` job, so the `if:` on this job, the axe
+    # producer probe and the two report sites cannot drift apart — which the
+    # four hand-copied copies of the release/sync predicate could.
+    #
+    # `!= 'false'` for the same reason as `code` above: a `changes` job that
+    # fails, is cancelled or is deleted publishes the EMPTY STRING, and the
+    # suite must run rather than vanish.
+    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && needs.changes.outputs.e2e != 'false' && !cancelled() }}
     runs-on: ubuntu-latest
-    name: "E2E Tests (Playwright)"
+    # The name carries a matrix expression on purpose. A matrix job whose name
+    # does not mention `matrix` gets its values appended by GitHub, and the
+    # unsharded job would then render as "E2E Tests (Playwright) (1)". With the
+    # expression, one leg keeps the exact name it has always had.
+    #
+    # The readable text stays OUTSIDE the expression. A skipped matrix job is
+    # never expanded, so its row shows the name template as written, the way
+    # the skipped PHPUnit row shows `${{ matrix.php-version }}`. Written as one
+    # whole expression, the skipped E2E row in every repo without Playwright
+    # read as a line of expression source (quality-selftest run 34595801159).
+    name: E2E Tests (Playwright${{ inputs.e2e-shards > 1 && format(', shard {0} of {1}', matrix.shard, inputs.e2e-shards) || '' }})
+    # ── SHARDING (opt-in, `e2e-shards`) ─────────────────────────────────────
+    #
+    # One leg when `e2e-shards` is 1, which is every caller until one opts in.
+    # Above 1, one leg per shard, each on its own runner with its own
+    # Nextcloud and its own Postgres.
+    #
+    # THE REQUIRED CHECK IS UNTOUCHED. The legs are one job, `playwright`, and
+    # `needs.playwright.result` is `failure` when any leg fails. Quality Report
+    # already lists `playwright` in its `needs:`, so a red shard reaches the
+    # required check with no new job and no aggregator in between. There is no
+    # merge job for a failure to hide behind.
+    #
+    # `fail-fast: false` IS LOAD-BEARING. The default cancels every sibling the
+    # moment one leg fails, and a cancelled leg prints no tally and uploads no
+    # report. That is the exact loss `globalTimeout` exists to prevent, so one
+    # red shard must leave the others running to their own verdict.
+    #
+    # EACH SHARD KEEPS ITS OWN REPORT. Every leg prints its own tally, and
+    # uploads its own HTML report and traces under a name carrying the shard.
+    # There is no `merge-reports` step. A merged report is only as complete as
+    # the shards that reached it, and a shard cancelled at the job cap leaves
+    # no blob behind, so the merged tally would be missing exactly the shard
+    # that went wrong while looking whole. Per-shard reports cannot do that.
+    #
+    # ⚠️ READ THIS BEFORE OPTING IN. Playwright never shards a project that
+    # another project lists in `dependencies`, and it never shards a
+    # `teardown` project either. It runs them in full on every shard. A
+    # config whose main project is a dependency of a small one therefore runs
+    # nearly everything on every leg. Measured on dossiq: every one of four
+    # shards listed all 361 tests of its main project. The partition step
+    # below reports that as a warning, because it is the slow direction, not
+    # the lossy one.
+    #
+    # The lookup table expands 1..8. Anything else falls back to one leg, and
+    # the partition step then fails that leg by name, so a typo cannot quietly
+    # turn sharding off.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON('{"1":[1],"2":[1,2],"3":[1,2,3],"4":[1,2,3,4],"5":[1,2,3,4,5],"6":[1,2,3,4,5,6],"7":[1,2,3,4,5,6,7],"8":[1,2,3,4,5,6,7,8]}')[format('{0}', inputs.e2e-shards)] || fromJSON('[1]') }}
     # `frontend-build` is a dependency purely so its artifact is available to
     # download — NOT a gate. The `if:` above contains `!cancelled()`, which
     # suppresses the implicit `success()` on needs, so a failed or skipped
@@ -4973,6 +5211,137 @@ jobs:
           fi
           echo "Found $TESTS Playwright test file(s) in $TEST_PATH."
 
+      # ── THE SHARDS MUST COVER THE SUITE (only when `e2e-shards` is not 1) ──
+      #
+      # A sharding bug that LOSES a test is the worst thing this change could
+      # do. It would reproduce the defect this workflow keeps fighting: a test
+      # that never ran, in a run that reads green. Playwright's own `--shard`
+      # does not drop tests, but an app's config can, for instance by routing
+      # projects on E2E_SHARD_INDEX. So each leg proves it before any test runs.
+      #
+      # It lists the suite the unsharded job would run, then lists every shard
+      # with the env that shard gets, and compares. A test on no shard FAILS
+      # this leg, naming the test. A test on more than one shard is reported,
+      # not failed: that is Playwright running a dependency or teardown project
+      # in full on every leg, which costs time and loses nothing. Listing is
+      # cheap, about four seconds per call on dossiq's 394 tests.
+      #
+      # Every leg runs it, not just one, so the proof does not depend on any
+      # single leg surviving. `scripts/test-e2e-shard-partition.py` in
+      # ConductionNL/.github runs this exact program against a lossy fixture
+      # and requires it to fail.
+      - name: Prove the shards cover the whole suite
+        if: ${{ inputs.e2e-shards != 1 }}
+        env:
+          SHARDS_INPUT: ${{ inputs.e2e-shards }}
+          E2E_SHARD_INDEX: ${{ matrix.shard }}
+          BASE_URL: http://localhost:8080
+          NEXTCLOUD_URL: http://localhost:8080
+          NC_BASE_URL: http://localhost:8080
+          ADMIN_USER: admin
+          ADMIN_PASSWORD: admin
+          NC_ADMIN_USER: admin
+          NC_ADMIN_PASS: admin
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$SHARDS_INPUT" | grep -Eq '^[1-8]$'; then
+            echo "::error::e2e-shards is '${SHARDS_INPUT}'. It must be a whole number from 1 to 8. This leg ran the suite as ONE shard instead, so the value you set is not in effect."
+            exit 1
+          fi
+          export E2E_SHARD_TOTAL="$SHARDS_INPUT"
+          cd server/apps/${{ inputs.app-name }}
+          CONFIG="${{ inputs.playwright-test-path }}/playwright.config.ts"
+          if [ ! -f "$CONFIG" ] && [ -f "playwright.config.ts" ]; then
+            CONFIG="playwright.config.ts"
+          fi
+          export CONFIG
+          python3 - <<'SHARD_PARTITION_PY'
+          import collections, json, os, subprocess, sys, tempfile
+
+          CONFIG = os.environ["CONFIG"]
+          TOTAL = int(os.environ["E2E_SHARD_TOTAL"])
+          ME = int(os.environ["E2E_SHARD_INDEX"])
+          SUMMARY = os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull
+          NPX = os.environ.get("SHARD_PARTITION_NPX", "npx")
+
+
+          def listing(index, total, shard):
+              """Every test Playwright would run, as (project, file, line, column, title)."""
+              fd, path = tempfile.mkstemp(suffix=".json")
+              os.close(fd)
+              env = dict(os.environ, E2E_SHARD_INDEX=str(index), E2E_SHARD_TOTAL=str(total),
+                         PLAYWRIGHT_JSON_OUTPUT_NAME=path)
+              args = [NPX, "playwright", "test", f"--config={CONFIG}", "--list", "--reporter=json"]
+              if shard:
+                  args.append(f"--shard={index}/{total}")
+              proc = subprocess.run(args, env=env, capture_output=True, text=True)
+              label = f"shard {index}/{total}" if shard else "the unsharded suite"
+              if proc.returncode != 0:
+                  sys.stderr.write(proc.stdout[-4000:] + proc.stderr[-4000:])
+                  print(f"::error::Could not list {label} (exit {proc.returncode}). No partition can be proven, so this leg does not run.")
+                  sys.exit(1)
+              with open(path, encoding="utf-8") as handle:
+                  report = json.load(handle)
+              if report.get("errors"):
+                  print(f"::error::Listing {label} reported load errors: {json.dumps(report['errors'])[:1500]}")
+                  sys.exit(1)
+              keys = []
+
+              def walk(suite):
+                  for spec in suite.get("specs", []):
+                      for test in spec.get("tests", []):
+                          keys.append((test.get("projectName", ""), spec["file"], spec["line"], spec["column"], spec["title"]))
+                  for child in suite.get("suites", []):
+                      walk(child)
+
+              for suite in report.get("suites", []):
+                  walk(suite)
+              return keys
+
+
+          whole = listing(1, 1, False)
+          if not whole:
+              print("::error::The unsharded suite lists ZERO tests. There is nothing to shard, and a green run here would mean nothing.")
+              sys.exit(1)
+
+          seen = collections.Counter()
+          sizes = {}
+          for index in range(1, TOTAL + 1):
+              keys = listing(index, TOTAL, True)
+              sizes[index] = len(keys)
+              seen.update(set(keys))
+
+          missing = sorted(set(whole) - set(seen))
+          extra = sorted(set(seen) - set(whole))
+          repeated = sorted(k for k, n in seen.items() if n > 1)
+
+          with open(SUMMARY, "a", encoding="utf-8") as out:
+              out.write(f"### Shard partition, seen from shard {ME} of {TOTAL}\n\n")
+              out.write(f"The unsharded suite lists {len(whole)} tests.\n\n| Shard | Tests |\n|---|---|\n")
+              for index, size in sizes.items():
+                  out.write(f"| {index}{' (this leg)' if index == ME else ''} | {size} |\n")
+              out.write(f"\nOn no shard: **{len(missing)}**. On more than one shard: {len(repeated)}.\n")
+
+          print(f"Unsharded suite: {len(whole)} tests. Per shard: {sizes}.")
+
+          if repeated:
+              projects = collections.Counter(k[0] for k in repeated)
+              print(f"::warning::{len(repeated)} tests run on more than one shard ({dict(projects)}). Playwright runs a project listed in `dependencies`, or named as a `teardown`, in full on every shard. That costs time on every leg and loses nothing.")
+          if sizes[ME] >= 0.9 * len(whole):
+              print(f"::warning::This shard lists {sizes[ME]} of {len(whole)} tests. Sharding is buying almost nothing here, most likely because the main project is a dependency of another project.")
+          for index, size in sizes.items():
+              if size == 0:
+                  print(f"::warning::Shard {index} of {TOTAL} lists no tests. It costs a runner and checks nothing; lower e2e-shards.")
+          if extra:
+              print(f"::warning::{len(extra)} tests appear on a shard but not in the unsharded suite, so the sharded run is not the same suite. First: {extra[0]}")
+          if missing:
+              for key in missing[:25]:
+                  print(f"::error::On NO shard: [{key[0]}] {key[1]}:{key[2]} {key[4]}")
+              print(f"::error::{len(missing)} of {len(whole)} tests would run on no shard. Each leg would go green without them, so this leg refuses to run at all.")
+              sys.exit(1)
+          print(f"OK: all {len(whole)} tests are on at least one of the {TOTAL} shards.")
+          SHARD_PARTITION_PY
+
       - name: Start PHP built-in server
         # Started AFTER the slow setup phases (npm ci, playwright install,
         # frontend build) so the server is not idle for minutes — that's
@@ -5248,7 +5617,14 @@ jobs:
           if [ ! -f "$CONFIG" ] && [ -f "playwright.config.ts" ]; then
             CONFIG="playwright.config.ts"
           fi
-          npx playwright test --config="$CONFIG"
+          # Empty unless `e2e-shards` is above 1, so one leg runs the exact
+          # command line this step always ran.
+          SHARD_ARGS=()
+          if [ "$E2E_SHARD_TOTAL" -gt 1 ]; then
+            SHARD_ARGS=(--shard="${E2E_SHARD_INDEX}/${E2E_SHARD_TOTAL}")
+            echo "Running shard ${E2E_SHARD_INDEX} of ${E2E_SHARD_TOTAL}."
+          fi
+          npx playwright test --config="$CONFIG" "${SHARD_ARGS[@]}"
         # This step exported only BASE_URL / ADMIN_USER / ADMIN_PASSWORD, but a
         # survey of the 21 fleet repos found 15 whose config resolves the target
         # as `process.env.NEXTCLOUD_URL || 'http://localhost:8080'` and never
@@ -5272,6 +5648,13 @@ jobs:
           NC_ADMIN_USER: admin
           NC_ADMIN_PASS: admin
           COLLECT_COVERAGE: ${{ inputs.enable-playwright-coverage }}
+          # Which shard this leg is, for the app's own config. `globalTimeout`
+          # is per Playwright process, so per shard, and only the app knows
+          # what budget a shard of its suite needs. 1 of 1 when not sharded.
+          # A value outside 1..8 ran as one leg and was failed by the
+          # partition step before this one, so it never reaches here.
+          E2E_SHARD_INDEX: ${{ matrix.shard }}
+          E2E_SHARD_TOTAL: ${{ (inputs.e2e-shards >= 1 && inputs.e2e-shards <= 8) && inputs.e2e-shards || 1 }}
 
       # ── THE SERVER'S OWN ACCOUNT OF A 5xx, WHICH THIS JOB USED TO DISCARD ───
       #
@@ -5354,7 +5737,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: nextcloud-log-e2e
+          name: nextcloud-log-e2e${{ inputs.e2e-shards > 1 && format('-shard-{0}-of-{1}', matrix.shard, inputs.e2e-shards) || '' }}
           path: ${{ runner.temp }}/nextcloud-log
           retention-days: 7
           if-no-files-found: ignore
@@ -5384,8 +5767,12 @@ jobs:
       # runner was embedded here deliberately. That was true until #161/#166/#168
       # and is exactly the instruction that must not survive: inlining it is what
       # made the whole workflow unresolvable fleet-wide.)
+      #
+      # SHARDED, AXE RUNS ON SHARD 1 ONLY. It measures routes, not the suite,
+      # so every shard would produce the same report, and two legs uploading
+      # the one `axe-report` artifact the gates job reads would collide.
       - name: Checkout the axe runner
-        if: ${{ inputs.enable-axe && !cancelled() }}
+        if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() }}
         uses: actions/checkout@v4
         with:
           repository: ConductionNL/.github
@@ -5399,7 +5786,7 @@ jobs:
       # then as "the axe report never arrived", which points the reader at
       # Playwright — the one place the fault is not.
       - name: Assert the axe runner exists at the pinned ref
-        if: ${{ inputs.enable-axe && !cancelled() }}
+        if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() }}
         env:
           GATES_REF: ${{ inputs.hydra-gates-ref }}
         run: |
@@ -5412,7 +5799,7 @@ jobs:
           echo "axe runner present at ref ${GATES_REF}."
 
       - name: Install axe-core
-        if: ${{ inputs.enable-axe && !cancelled() }}
+        if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() }}
         run: |
           set -euo pipefail
           cd server/apps/${{ inputs.app-name }}
@@ -5461,7 +5848,7 @@ jobs:
 
       - name: Run axe-core against the app routes
         id: axe
-        if: ${{ inputs.enable-axe && !cancelled() }}
+        if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() }}
         env:
           AXE_BASE_URL: http://localhost:8080
           AXE_USER: admin
@@ -5525,7 +5912,7 @@ jobs:
         # Only when the runner succeeded. A failed runner has deliberately left
         # no file, and `if-no-files-found: error` keeps that honest rather than
         # publishing an empty artifact the gates job would then try to read.
-        if: ${{ inputs.enable-axe && !cancelled() && steps.axe.outcome == 'success' }}
+        if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() && steps.axe.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: axe-report
@@ -5941,7 +6328,7 @@ jobs:
         # you need them. Extra paths are harmless: unmatched ones are ignored.
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report${{ inputs.e2e-shards > 1 && format('-shard-{0}-of-{1}', matrix.shard, inputs.e2e-shards) || '' }}
           path: |
             server/apps/${{ inputs.app-name }}/playwright-report/
             server/apps/${{ inputs.app-name }}/tests/e2e/playwright-report/
@@ -5953,7 +6340,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces
+          name: playwright-traces${{ inputs.e2e-shards > 1 && format('-shard-{0}-of-{1}', matrix.shard, inputs.e2e-shards) || '' }}
           path: |
             server/apps/${{ inputs.app-name }}/test-results/
             server/apps/${{ inputs.app-name }}/tests/e2e/test-results/
@@ -6708,82 +7095,59 @@ jobs:
   # The package is checked out as a SIBLING of the app checkout, not inside it,
   # so nothing in the gate package can ever be mistaken for app code under scan.
   hydra-gates:
-    # `!cancelled()` is load-bearing, not decoration. `needs:` below implies
-    # `success()` on the Playwright job, which would make this whole job vanish
-    # for every repo that has the gates on and Playwright off — the gates would
-    # stop running on a majority of the fleet, silently, as a side effect of
-    # wiring up ONE gate's input. `!cancelled()` suppresses that implicit
-    # `success()`, so a skipped or failed Playwright job still lets the gates
-    # run and reach their own verdict.
-    #
-    # MEASURED, not assumed — ConductionNL/.github run 30909727531, a harness
-    # that reproduced this exact `needs:`/`if:` pair three times in one run and
-    # drove the producer into each of its three states:
-    #
-    #   producer succeeded -> gates RAN   (needs.playwright.result=success)
-    #   producer FAILED    -> gates RAN   (needs.playwright.result=failure)
-    #   producer SKIPPED   -> gates RAN   (needs.playwright.result=skipped)
-    #
-    # Do not "simplify" this to a bare `inputs.enable-hydra-gates`: that
-    # restores the implicit `success()` and deletes the job with no red, no
-    # skip and no trace whenever Playwright does not succeed.
+    # `!cancelled()` is load-bearing, not decoration, even now that this job
+    # has no `needs:`. It keeps the gates reporting when the RUN is being
+    # cancelled around them or another leg has failed, so a PR keeps its
+    # mechanical feedback while someone fixes an unrelated job. The measured
+    # `needs:`/`if:` history (run 30909727531: producer succeeded, failed and
+    # skipped, gates RAN each time) now belongs to `hydra-gates-axe` below,
+    # which is the job that still carries the Playwright edge; the note lives
+    # there.
     if: ${{ inputs.enable-hydra-gates && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Hydra Gates"
-    # ── WHY THIS JOB DEPENDS ON PLAYWRIGHT (and why removing it failed) ────
+    # ── NO `needs:`, AND THAT IS THE POINT ─────────────────────────────────
     #
-    # gate-33 (axe-core) consumes `tests/axe/report.json`, which can only be
-    # produced by a browser against a booted instance. This job has neither: it
-    # is a checkout, a shell script and python. The Playwright job is the only
-    # place in this file with both, so the report is produced there and handed
-    # over as an artifact — and an artifact cannot be downloaded before the job
-    # that uploads it has finished. Hence the edge.
+    # This job used to carry `needs: [playwright]`, for exactly one input:
+    # gate-33 (axe-core) reads `tests/axe/report.json`, which only the
+    # Playwright job can produce. The edge put a ~2 minute job behind
+    # security -> frontend-build -> playwright, so the sixty-odd static gates
+    # reported at roughly t+30 minutes on every PR in the fleet, for a report
+    # that no fleet repo had opted into (`enable-axe` defaults false and was
+    # set nowhere on 2026-09-12). Measured in the velocity diagnosis of that
+    # day: the gates' verdict was the last one to land, and the one most
+    # often waited on.
     #
-    # REMOVING THIS EDGE WAS ATTEMPTED IN #326 AND REVERTED. Recorded here so
-    # the next person does not spend the same day on it.
+    # #326 tried to remove the edge and was reverted, because it moved the
+    # axe refusal in front of the checkout and took the other 63 gates down
+    # with it (run 31370581318, ZERO `[gate-*]` lines). The note that
+    # replaced it said the honest fix was two jobs, and that is what this is:
     #
-    # The reasoning was: `enable-axe` is opt-in and defaults false, a survey of
-    # all 20 consumers on both `main` and `development` found ZERO setting it,
-    # and this file's own input docs record gate-33 as SKIPPED "in every repo in
-    # the fleet since it was written". So the edge looked like pure
-    # serialisation — it put a 31s job behind php-quality -> frontend-build ->
-    # playwright, roughly t+7m instead of t+31s, for an input never produced.
+    #   hydra-gates       this job. Every gate the package can run from a
+    #                     checkout. No producer, no edge, starts at t+0.
+    #   hydra-gates-axe   the one gate whose input comes from a browser.
+    #                     `needs: [playwright]`, runs only when `enable-axe`
+    #                     is set, judges the report with the same helper
+    #                     this package's gate-33 uses, and reports its own
+    #                     row in the Quality Report.
     #
-    # TWO THINGS KILLED IT.
+    # The accounting stays honest across the split. With `enable-axe` set
+    # this job hands the runner `--axe-external`, and gate-33 then reports
+    # NOT APPLICABLE *to this job* by name, pointing at the job that judges
+    # it — it is excluded from this job's coverage tally rather than
+    # silently SKIPPED, and `hydra-gates-require-full-coverage` keeps its
+    # meaning: a missing or rejected report still fails the run, in the axe
+    # job, with the producer's state quoted. Without `enable-axe` nothing
+    # changes: gate-33 reports NOT APPLICABLE exactly as before.
     #
-    # 1. THE SURVEY WAS A SNAPSHOT, NOT A PROPERTY. docudesk#423 is open to set
-    #    `enable-axe: true`. "No consumer does X" is a fact with an expiry date,
-    #    and building a structural decision on one means the decision expires
-    #    with it — silently, in someone else's repository.
+    # Nothing here reads a built asset: the gates open source files, the app
+    # manifest and the routes table, and install the app's node dependencies
+    # in-job for gate-60. So there is no `frontend-build` edge either.
     #
-    # 2. THE REPLACEMENT WAS WORSE THAN THE PROBLEM. With the edge gone, an
-    #    `enable-axe: true` caller cannot receive the artifact, so the job
-    #    refused the configuration up front. MEASURED on run 31370581318:
-    #    ZERO `[gate-*]` lines were emitted. The refusal sat before the
-    #    checkout, so gate-33 produced no verdict AND NEITHER DID THE OTHER 63.
-    #    It did not `_skip` with a named reason and it did not `_pass` — the
-    #    whole job died. That is precisely the outcome the note on the
-    #    `axe-check` step below already forbids: a gate that suppresses sixty
-    #    other gates to report itself is its own kind of outage. The axe failure
-    #    is RECORDED there and RAISED at the END for exactly this reason.
-    #
-    # WHAT WAS KEPT INSTEAD. `php-quality` was removed from the `needs:` of
-    # phpunit, newman and playwright, where it gated nothing (see the note on
-    # the phpunit job). Playwright therefore starts earlier, and this job's
-    # verdict lands at roughly t+4.8m rather than t+7m — a real improvement with
-    # no new machinery and no case that has never been exercised.
-    #
-    # THE WAY TO GET FULL PARALLELISM, if someone wants it: `needs:` cannot be
-    # conditional in GitHub Actions, so it requires two mutually exclusive jobs
-    # (one with the edge for `enable-axe`, one without), which today would mean
-    # duplicating ~120 lines of steps for a security-critical runner — and two
-    # copies that can drift is the failure mode this file exists to document.
-    # Extract these steps into a composite action referenced as
-    # `ConductionNL/.github/.github/actions/hydra-gates@main` FIRST (note: a
-    # bare `./` path in a reusable workflow resolves against the CALLER's
-    # checkout, not this repo), then the two jobs become thin. That is a
-    # separate change with its own testing, not a rider on a caching PR.
-    needs: [playwright]
+    # `!cancelled()` stays load-bearing even without a `needs:`: it keeps this
+    # job running when the workflow's OTHER legs are cancelled or failing,
+    # which is how a PR keeps its mechanical feedback while someone fixes an
+    # unrelated Playwright job.
     timeout-minutes: 20
 
     steps:
@@ -7021,140 +7385,6 @@ jobs:
         # fail-open. If this step is ever removed, both gates say so.
         run: npm --prefix gates/hydra-gates install --no-save --no-audit --no-fund ajv
 
-      # ── gate-33's subject, handed over from the Playwright job ─────────────
-      #
-      # continue-on-error so that a missing artifact does not abort the job
-      # here with download-artifact's own generic message. The absence is
-      # handled one step down, where it can be named — and, since `enable-axe`
-      # is an explicit opt-in to enforcement, where it FAILS. It is not
-      # tolerated: continue-on-error moves the verdict, it does not soften it.
-      - name: Download the axe-core report
-        id: axe-download
-        if: ${{ inputs.enable-axe }}
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: axe-report
-          path: app/tests/axe
-
-      # A downloaded file is not the same as a report. An artifact that
-      # extracted but is empty, truncated, or came from a run that analysed
-      # nothing would be read by gate-33 as a CLEAN accessibility result —
-      # verified: gate-33 reports PASS on a file containing exactly `{}`. That
-      # is the one outcome worse than today's loud skip, because it converts
-      # "never measured" into "measured clean".
-      #
-      # So the file is checked against the provenance the runner writes, and
-      # DELETED if it does not hold up — gate-33 can then never read a rejected
-      # file as a clean run.
-      #
-      # Deletion alone is not enough, and this is the second half of the same
-      # defect. `enable-axe: true` is an explicit request for accessibility
-      # ENFORCEMENT, not for a best-effort attempt. Before this step failed
-      # closed, the two ways of having no measurement — the artifact never
-      # arrived (Playwright skipped, or crashed before its axe step), and the
-      # artifact arrived but was rejected here — both ended in gate-33
-      # reporting SKIPPED and the gates job reporting a plain green tick. A
-      # `::notice` buried in a three-thousand-line log is not a verdict: the
-      # absence of the check looked exactly like the check succeeding, which is
-      # the shape this whole file exists to eliminate.
-      #
-      # So with `enable-axe` set, no usable report is a FAILURE with a named
-      # reason and the producer's resolved state quoted in it. The way to not
-      # enforce axe is `enable-axe: false` — one line in the caller, visible in
-      # a diff and attributable to a person — not a silent green in a log.
-      #
-      # A/B on this file, same caller and same inputs (gates on, axe on,
-      # Playwright — the only producer — off), the arms differing only in which
-      # quality.yml they called:
-      #
-      #   before, quality.yml@main : run 30910234160, Hydra Gates SUCCESS
-      #                              "##[notice]No axe report was downloaded"
-      #                              "[gate-33] axe-core: SKIPPED"
-      #   after,  this branch      : run 30910908474, Hydra Gates FAILURE
-      #                              gates still ran and reported in full
-      #
-      # And the control that bounds the blast radius: the same inputs with
-      # `enable-axe: false` — the fleet default and openbuild's live config, the
-      # only repo with the gates enabled — run 30911069404, Hydra Gates SUCCESS
-      # with both axe steps SKIPPED. Nothing that is green today turns red.
-      #
-      # Not measured end to end, and worth knowing why: the case where
-      # Playwright RUNS AND FAILS. Attempted in run 30911499894 by turning
-      # `enable-playwright` on, but this repo is not a Nextcloud app, so the
-      # security jobs failed first and the Playwright job's own
-      # `needs.security.result != 'failure'` guard turned it back into a skip.
-      # The gates job failed correctly there anyway, because what this step
-      # branches on is whether a usable report exists, not how the producer
-      # resolved — the producer's state appears only in the error text. That
-      # the gates job SURVIVES a genuinely failed producer is the thing that
-      # needed measuring, and run 30909727531 measured it directly.
-      #
-      # The failure is RECORDED here and RAISED at the end of the job, not
-      # thrown from this step. Measured first as a plain `exit 1` (run
-      # 30910345294): it aborted the job before `Run the Hydra gates`, so a
-      # missing axe artifact took the other sixty gates down with it and the PR
-      # lost all mechanical feedback until someone fixed an unrelated Playwright
-      # job. A gate that suppresses sixty other gates to report itself is its
-      # own kind of outage. So this step always exits 0, the gates run and print
-      # their full report, and the job is failed afterwards.
-      - name: The axe report must exist and hold up
-        id: axe-check
-        if: ${{ inputs.enable-axe && !(github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/'))) }}
-        env:
-          PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
-        run: |
-          set -uo pipefail
-          REPORT="${GITHUB_WORKSPACE}/app/tests/axe/report.json"
-          if [ ! -f "${REPORT}" ]; then
-            echo "unmeasured=absent" >> "$GITHUB_OUTPUT"
-            echo "::error::enable-axe is set, but NO axe report reached this job — gate-33 will measure nothing and this run carries no accessibility verdict at all. The Playwright job, which is the only producer of tests/axe/report.json, resolved '${PLAYWRIGHT_RESULT}'. Fix that job (enable-axe also requires enable-playwright), or set enable-axe: false to state deliberately that this repo does not enforce axe yet. The remaining gates still run below; this job will fail at the end."
-            exit 0
-          fi
-          echo "Downloaded $(wc -c < "${REPORT}") byte(s) into ${REPORT}."
-          python3 - "${REPORT}" <<'PYVALIDATE' && VALID=0 || VALID=$?
-          import json, sys
-          path = sys.argv[1]
-          def reject(why):
-              print("::warning::axe report rejected: " + why + " Deleting it so gate-33 skips loudly instead of reading it as a clean accessibility run.")
-              sys.exit(1)
-          try:
-              with open(path) as f:
-                  data = json.load(f)
-          except Exception as e:
-              reject("it does not parse as JSON (%s)." % e)
-          if not isinstance(data, dict):
-              reject("the top level is %s, not an object." % type(data).__name__)
-          if not isinstance(data.get('violations'), list):
-              reject("there is no `violations` array — that is the only key gate-33 reads.")
-          engine = data.get('testEngine') or {}
-          if engine.get('name') != 'axe-core':
-              reject("testEngine is %r, so this file did not come from axe-core." % (engine,))
-          if data.get('selfTest', {}).get('detected') is not True:
-              reject("the runner's positive control is not recorded as detected, so axe was never shown capable of reporting a violation on this run.")
-          routes = data.get('routesAnalysed')
-          if not isinstance(routes, list) or len(routes) == 0:
-              reject("it records ZERO routes analysed. An empty violations array from zero routes is an absent measurement, not a clean one.")
-          for r in routes:
-              if not (200 <= int(r.get('status', 0)) < 400):
-                  reject("route %s answered HTTP %s." % (r.get('url'), r.get('status')))
-              if int(r.get('passes', 0)) + int(r.get('violations', 0)) == 0:
-                  reject("route %s produced no axe results at all." % r.get('url'))
-          blocking = [v for v in data['violations'] if v.get('impact') in ('serious', 'critical')]
-          print("axe report OK: %d route(s), %d violation(s), %d serious/critical (axe-core %s, generated %s)."
-                % (len(routes), len(data['violations']), len(blocking),
-                   engine.get('version'), data.get('generatedAt')))
-          for r in routes:
-              print("  route %s -> HTTP %s | passes=%s violations=%s" % (r.get('url'), r.get('status'), r.get('passes'), r.get('violations')))
-          sys.exit(0)
-          PYVALIDATE
-          if [ "${VALID}" -ne 0 ]; then
-            rm -f "${REPORT}"
-            echo "unmeasured=rejected" >> "$GITHUB_OUTPUT"
-            echo "Removed ${REPORT} so gate-33 cannot read it as a clean accessibility run."
-            echo "::error::enable-axe is set and the axe report was REJECTED for the reason above, so this run has no accessibility verdict. A rejected report is the same amount of evidence as no report: none. Fix the producer, or set enable-axe: false. The remaining gates still run below; this job will fail at the end."
-          fi
-
       # ── Which SCOPE is this run entitled to, and why ────────────────────────
       #
       # A FORCED RUN MUST PRODUCE A VERDICT. It did not.
@@ -7353,53 +7583,30 @@ jobs:
           fi
           # gate-33's input is the ONE input this runner cannot make for itself
           # — it comes from a browser in the Playwright job, and only when the
-          # caller opted in. Telling the runner what the caller undertook is
-          # what lets it distinguish "this repo has not opted into runtime
-          # accessibility enforcement" (not applicable; the choice is a visible
-          # line in the caller's workflow) from "it DID opt in and the report
-          # never arrived" (a real gap, and it fails). Without this the runner
-          # has to guess, and guessing "unverified" in both cases is what made
-          # --require-full-coverage unusable in every repo in the fleet.
+          # caller opted in. Since the split (see the note at the top of this
+          # job) that input is judged by the `hydra-gates-axe` job, from the
+          # same package, and this job never sees it. So the runner is told
+          # the report is judged EXTERNALLY: gate-33 then reports NOT
+          # APPLICABLE to this job by name, pointing at the job that owns it,
+          # and stays out of this job's coverage tally. Without the flag the
+          # runner would read "enable-axe set, no report" as a structural gap
+          # and, under --require-full-coverage, fail this job for a report
+          # that was never supposed to arrive here.
           #
-          # Gated on the same probe, because `--axe-enabled` arrived in the same
-          # release as the categories and the OLD wrapper's argument parser ends
-          # in `*) APP_DIR="$1"` — an unrecognised flag is swallowed as a
-          # POSITIONAL and CLOBBERS the app dir set moments earlier. A v1.0.1
-          # pin handed this flag aborts with
-          # `FATAL: --app-dir '--axe-enabled' is not a directory. No gate ran.`
-          # and exits 99: every gate lost, for a flag the caller never typed.
-          # WITHHELD ON A PULL REQUEST INTO `development`, and this guard must
-          # stay byte-for-byte in step with the one on the axe-report download
-          # step above. The Playwright job is the ONLY producer of
-          # tests/axe/report.json and does not run there by design, so telling
-          # the runner the caller opted in makes gate-33 APPLICABLE with no
-          # input — which `--require-full-coverage` counts as a coverage gap and
-          # turns into a failed job. Not hypothetical: it took zaakafhandelapp
-          # #515 red on `62 of 63 applicable gates ran`, gate-33 the one, over a
-          # change that touched nothing but tests/e2e.
-          #
-          # This pairing was shipped once (#622) and a refactor (#606) dropped
-          # BOTH halves of it. #637 restored the E2E-off-development-PRs half
-          # today; this restores the half that has to travel with it. A skip on
-          # the producer and enforcement on the consumer are two checks over one
-          # artefact that cannot both be satisfied.
-          #
-          # Deliberately the SAME predicate as the download step rather than
-          # `needs.playwright.result == 'skipped'`: a skip caused by
-          # `enable-playwright: false` is a caller misconfiguration that must
-          # keep failing loudly with its named error, not be quietly excused.
-          AXE_PRODUCER_RAN=true
-          if [ "${{ github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/')) }}" = "true" ]; then
-            AXE_PRODUCER_RAN=false
-          fi
-          if [ "${{ inputs.enable-axe }}" = "true" ] && [ "${AXE_PRODUCER_RAN}" = "false" ]; then
-            echo "::notice::enable-axe is on, but Playwright does not run on a pull request into development, so no axe report exists to judge. gate-33 is withheld here and enforced on the development->beta and beta->main promotions, where the producer runs."
-          fi
-          if [ "${{ inputs.enable-axe }}" = "true" ] && [ "${AXE_PRODUCER_RAN}" = "true" ]; then
-            if [ "${{ steps.gatecap.outputs.categories }}" = "1" ]; then
-              ARGS="${ARGS} --axe-enabled"
+          # Gated on a capability probe, because the runner floats on the
+          # caller's `hydra-gates-ref` and an OLD wrapper's argument parser
+          # ends in `*) APP_DIR="$1"` — an unrecognised flag is swallowed as
+          # a POSITIONAL and CLOBBERS the app dir. At a pin that predates the
+          # flag it is withheld with a warning; gate-33 then reports its
+          # pre-split NOT APPLICABLE ("the caller did not set enable-axe"),
+          # which is the wrong reason but the right category, and the axe job
+          # still judges the report.
+          if [ "${{ inputs.enable-axe }}" = "true" ]; then
+            if grep -q -- '--axe-external' "${GITHUB_WORKSPACE}/gates/hydra-gates/bin/hydra-gates"; then
+              ARGS="${ARGS} --axe-external"
+              echo "enable-axe is on: gate-33 is judged by the 'Hydra Gates (axe)' job of this run, from the same package. This job passes --axe-external so the runner accounts for it by name rather than skipping it."
             else
-              echo "::warning::enable-axe is on, but hydra-gates-ref='${{ inputs.hydra-gates-ref }}' predates the flag (v1.3.0) and its argument parser would swallow it as the app directory, losing every gate. The flag is withheld; gate-33 will report its usual skip instead of a structural gap. Bump hydra-gates-ref to v1.3.0 or later."
+              echo "::warning::enable-axe is on, but hydra-gates-ref='${{ inputs.hydra-gates-ref }}' predates --axe-external and its argument parser would swallow the flag as the app directory, losing every gate. The flag is withheld; gate-33 will report NOT APPLICABLE with its pre-split reason here, and the 'Hydra Gates (axe)' job still judges the report."
             fi
           fi
           # The default shell for a `run:` block is `bash -e {0}`. A bare
@@ -7462,18 +7669,6 @@ jobs:
           echo "::error::${RC} Hydra gate(s) failed. The exit code is the failure COUNT — see the named [gate-N] FAIL lines above."
           exit 1
 
-      # The verdict for `enable-axe`, raised here rather than at the check
-      # itself so the gates above still produce their full report first (see
-      # the reasoning on the axe-check step). `always()` so it is reached even
-      # when the gates step already failed — a run can be both "gates failed"
-      # and "accessibility never measured", and collapsing those loses one.
-      # It only ever turns a pass into a failure, never the reverse.
-      - name: Fail when axe was requested but never measured
-        if: ${{ always() && inputs.enable-axe && steps.axe-check.outputs.unmeasured != '' }}
-        run: |
-          echo "::error::enable-axe is set and this run produced NO accessibility measurement (reason: ${{ steps.axe-check.outputs.unmeasured }}). gate-33 reporting SKIPPED is the absence of the check, not the check passing — see the named error earlier in this job. Failing the gates job so the run cannot be read as accessible."
-          exit 1
-
       - name: Record result
         if: always()
         run: |
@@ -7484,6 +7679,315 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: result-hydra-gates
+          path: quality-results/
+
+  # ── gate-33, the one gate that needs a browser ──────────────────────────
+  #
+  # Split out of `hydra-gates` on 2026-09-12 so the other gates stop waiting
+  # ~30 minutes behind Playwright for a report no fleet repo produces (see
+  # the note at the top of that job). This job is the SAME package judging
+  # the SAME file with the SAME helper the runner's gate-33 calls
+  # (hydra-gates/scripts/lib/check_axe_report.py); only the wiring differs.
+  # Its verdict is the `Hydra gates (axe)` row of the Quality Report and it
+  # is in that job's `needs:`, so a red here blocks a merge exactly as a red
+  # gate-33 inside the old job did.
+  #
+  # What it keeps from the old in-job steps, verbatim: the provenance check
+  # that DELETES a report which does not hold up (a `{}` reads as clean
+  # otherwise), the rule that a requested-but-absent report is a FAILURE
+  # with the producer's state quoted (enable-axe is an opt-in to
+  # enforcement, not to a best effort), and the withholding on a pull
+  # request into development from a release/ or sync/ branch, where the
+  # producer does not run by design and the gate is enforced on the
+  # promotions instead.
+  hydra-gates-axe:
+    # `!cancelled()` is load-bearing, not decoration. `needs:` below implies
+    # `success()` on the Playwright job, which would make this job vanish
+    # whenever the producer fails or is skipped — exactly when a report is
+    # missing and the failure has to be NAMED rather than silently absent.
+    # `!cancelled()` suppresses that implicit `success()`, so a skipped or
+    # failed Playwright job still reaches the step that says "no report".
+    #
+    # MEASURED, not assumed — ConductionNL/.github run 30909727531, a harness
+    # that reproduced this exact `needs:`/`if:` pair three times in one run and
+    # drove the producer into each of its three states:
+    #
+    #   producer succeeded -> job RAN   (needs.playwright.result=success)
+    #   producer FAILED    -> job RAN   (needs.playwright.result=failure)
+    #   producer SKIPPED   -> job RAN   (needs.playwright.result=skipped)
+    #
+    # Do not "simplify" this to a bare `inputs.enable-axe`: that restores the
+    # implicit `success()` and deletes the job with no red, no skip and no
+    # trace whenever Playwright does not succeed.
+    if: ${{ inputs.enable-hydra-gates && inputs.enable-axe && !cancelled() }}
+    runs-on: ubuntu-latest
+    name: "Hydra Gates (axe)"
+    # `changes` is here for its `e2e` output ONLY — the producer probe below
+    # reads it. It is not a gate: `!cancelled()` above already suppresses the
+    # implicit `success()` this `needs:` would otherwise impose.
+    needs: [playwright, changes]
+    timeout-minutes: 10
+
+    steps:
+      # The app checkout is only here for `src/`: gate-33 is NOT APPLICABLE
+      # to a repo with no frontend, and the helper reads nothing else from
+      # the tree. Shallow on purpose; there is no diff to take.
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          path: app
+
+      - name: Checkout conduction/hydra-gates
+        uses: actions/checkout@v4
+        with:
+          repository: ConductionNL/.github
+          ref: ${{ inputs.hydra-gates-ref }}
+          path: gates
+
+      # The producer does not run on every event (see the Playwright job's
+      # `if:`), and where it does not run there is nothing to judge — saying
+      # so IS the verdict. A skip on the producer and enforcement on the
+      # consumer are two checks over one artefact that cannot both hold, and
+      # `enable-axe` is live in three repos today (integriq, filinq,
+      # zaakafhandelapp), so getting this wrong would turn those three red on
+      # every development PR at the aggregator instead of at the E2E check.
+      #
+      # THE PREDICATE IS NO LONGER RE-TYPED HERE. It used to be a hand-copied
+      # duplicate of the Playwright job's `if:`, with a comment promising the
+      # two were "byte-for-byte" identical and nothing checking that they were.
+      # Both now read the same `changes` output, so they cannot disagree.
+      #
+      # `!= 'false'`, matching the producer exactly: an empty output (a
+      # `changes` job that failed, was cancelled or was deleted) means the
+      # producer RAN, so the report is expected and its absence is a real
+      # finding.
+      - name: Does the producer run on this event?
+        id: producer
+        env:
+          E2E_TRIGGER: ${{ needs.changes.outputs.e2e }}
+          E2E_TRIGGER_REASON: ${{ needs.changes.outputs.e2e_reason }}
+          # INHERITED, fixed here because it is the same defect in the same
+          # step: the probe only ever mirrored ONE of the producer's three
+          # conditions. `enable-path-filtering` is true in all 21 core apps and
+          # `enable-axe` is true in three of them, so a docs-only diff in
+          # integriq, filinq or zaakafhandelapp already skipped Playwright,
+          # left the probe saying "the producer ran", and failed this job for a
+          # report that was never going to exist. A probe that does not mirror
+          # the producer is not a probe.
+          PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
+          PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
+        run: |
+          set -u
+          if [ "${E2E_TRIGGER}" = "false" ]; then
+            echo "ran=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::enable-axe is on, but Playwright — the only producer of tests/axe/report.json — does not run on this trigger, so no axe report exists to judge. Reason: ${E2E_TRIGGER_REASON}. gate-33 is withheld here and enforced where the producer runs."
+          elif [ "${PATH_FILTER_CODE}" = "false" ]; then
+            echo "ran=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::enable-axe is on, but Playwright — the only producer of tests/axe/report.json — was skipped by the changed-path filter, so no axe report exists to judge. Reason: ${PATH_FILTER_REASON}. gate-33 is withheld here and enforced on a diff the heavy tier has something to say about."
+          else
+            echo "ran=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Same shape as the pin probe on the main job: this workflow floats on
+      # @main and executes a path by name inside the PINNED package. A pin
+      # that predates the helper cannot judge the report, and must say which
+      # file it is missing rather than fail on a python traceback.
+      - name: Verify the pinned gates package ships the axe helper
+        if: ${{ steps.producer.outputs.ran == 'true' }}
+        run: |
+          set -u
+          HELPER="${GITHUB_WORKSPACE}/gates/hydra-gates/scripts/lib/check_axe_report.py"
+          if [ ! -f "${HELPER}" ]; then
+            echo "::error::hydra-gates-ref '${{ inputs.hydra-gates-ref }}' ships no hydra-gates/scripts/lib/check_axe_report.py, so this job cannot judge the axe report. Bump hydra-gates-ref to a ref that includes it (it arrived with the gates/axe split), or set enable-axe: false. This is NOT an accessibility finding about your repository."
+            exit 1
+          fi
+          echo "Pinned gates package at '${{ inputs.hydra-gates-ref }}' ships the axe helper."
+
+      # ── gate-33's subject, handed over from the Playwright job ─────────────
+      #
+      # continue-on-error so that a missing artifact does not abort the job
+      # here with download-artifact's own generic message. The absence is
+      # handled one step down, where it can be named — and, since `enable-axe`
+      # is an explicit opt-in to enforcement, where it FAILS. It is not
+      # tolerated: continue-on-error moves the verdict, it does not soften it.
+      - name: Download the axe-core report
+        id: axe-download
+        if: ${{ steps.producer.outputs.ran == 'true' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: axe-report
+          path: app/tests/axe
+
+      # A downloaded file is not the same as a report. An artifact that
+      # extracted but is empty, truncated, or came from a run that analysed
+      # nothing would be read by gate-33 as a CLEAN accessibility result —
+      # verified: gate-33 reports PASS on a file containing exactly `{}`. That
+      # is the one outcome worse than today's loud skip, because it converts
+      # "never measured" into "measured clean".
+      #
+      # So the file is checked against the provenance the runner writes, and
+      # DELETED if it does not hold up — gate-33 can then never read a rejected
+      # file as a clean run.
+      #
+      # Deletion alone is not enough, and this is the second half of the same
+      # defect. `enable-axe: true` is an explicit request for accessibility
+      # ENFORCEMENT, not for a best-effort attempt. Before this step failed
+      # closed, the two ways of having no measurement — the artifact never
+      # arrived (Playwright skipped, or crashed before its axe step), and the
+      # artifact arrived but was rejected here — both ended in gate-33
+      # reporting SKIPPED and the gates job reporting a plain green tick. A
+      # `::notice` buried in a three-thousand-line log is not a verdict: the
+      # absence of the check looked exactly like the check succeeding, which is
+      # the shape this whole file exists to eliminate.
+      #
+      # So with `enable-axe` set, no usable report is a FAILURE with a named
+      # reason and the producer's resolved state quoted in it. The way to not
+      # enforce axe is `enable-axe: false` — one line in the caller, visible in
+      # a diff and attributable to a person — not a silent green in a log.
+      #
+      # A/B on this file, same caller and same inputs (gates on, axe on,
+      # Playwright — the only producer — off), the arms differing only in which
+      # quality.yml they called:
+      #
+      #   before, quality.yml@main : run 30910234160, Hydra Gates SUCCESS
+      #                              "##[notice]No axe report was downloaded"
+      #                              "[gate-33] axe-core: SKIPPED"
+      #   after,  this branch      : run 30910908474, Hydra Gates FAILURE
+      #                              gates still ran and reported in full
+      #
+      # And the control that bounds the blast radius: the same inputs with
+      # `enable-axe: false` — the fleet default and openbuild's live config, the
+      # only repo with the gates enabled — run 30911069404, Hydra Gates SUCCESS
+      # with both axe steps SKIPPED. Nothing that is green today turns red.
+      #
+      # Not measured end to end, and worth knowing why: the case where
+      # Playwright RUNS AND FAILS. Attempted in run 30911499894 by turning
+      # `enable-playwright` on, but this repo is not a Nextcloud app, so the
+      # security jobs failed first and the Playwright job's own
+      # `needs.security.result != 'failure'` guard turned it back into a skip.
+      # The gates job failed correctly there anyway, because what this step
+      # branches on is whether a usable report exists, not how the producer
+      # resolved — the producer's state appears only in the error text. That
+      # the gates job SURVIVES a genuinely failed producer is the thing that
+      # needed measuring, and run 30909727531 measured it directly.
+      #
+      # The failure is RECORDED here and RAISED at the end of the job, not
+      # thrown from this step. Measured first as a plain `exit 1` (run
+      # 30910345294): it aborted the job before `Run the Hydra gates`, so a
+      # missing axe artifact took the other sixty gates down with it and the PR
+      # lost all mechanical feedback until someone fixed an unrelated Playwright
+      # job. A gate that suppresses sixty other gates to report itself is its
+      # own kind of outage. So this step always exits 0, the gates run and print
+      # their full report, and the job is failed afterwards.
+      - name: The axe report must exist and hold up
+        id: axe-check
+        if: ${{ steps.producer.outputs.ran == 'true' }}
+        env:
+          PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
+        run: |
+          set -uo pipefail
+          REPORT="${GITHUB_WORKSPACE}/app/tests/axe/report.json"
+          if [ ! -f "${REPORT}" ]; then
+            echo "unmeasured=absent" >> "$GITHUB_OUTPUT"
+            echo "::error::enable-axe is set, but NO axe report reached this job — gate-33 will measure nothing and this run carries no accessibility verdict at all. The Playwright job, which is the only producer of tests/axe/report.json, resolved '${PLAYWRIGHT_RESULT}'. Fix that job (enable-axe also requires enable-playwright), or set enable-axe: false to state deliberately that this repo does not enforce axe yet. The remaining gates still run below; this job will fail at the end."
+            exit 0
+          fi
+          echo "Downloaded $(wc -c < "${REPORT}") byte(s) into ${REPORT}."
+          python3 - "${REPORT}" <<'PYVALIDATE' && VALID=0 || VALID=$?
+          import json, sys
+          path = sys.argv[1]
+          def reject(why):
+              print("::warning::axe report rejected: " + why + " Deleting it so gate-33 skips loudly instead of reading it as a clean accessibility run.")
+              sys.exit(1)
+          try:
+              with open(path) as f:
+                  data = json.load(f)
+          except Exception as e:
+              reject("it does not parse as JSON (%s)." % e)
+          if not isinstance(data, dict):
+              reject("the top level is %s, not an object." % type(data).__name__)
+          if not isinstance(data.get('violations'), list):
+              reject("there is no `violations` array — that is the only key gate-33 reads.")
+          engine = data.get('testEngine') or {}
+          if engine.get('name') != 'axe-core':
+              reject("testEngine is %r, so this file did not come from axe-core." % (engine,))
+          if data.get('selfTest', {}).get('detected') is not True:
+              reject("the runner's positive control is not recorded as detected, so axe was never shown capable of reporting a violation on this run.")
+          routes = data.get('routesAnalysed')
+          if not isinstance(routes, list) or len(routes) == 0:
+              reject("it records ZERO routes analysed. An empty violations array from zero routes is an absent measurement, not a clean one.")
+          for r in routes:
+              if not (200 <= int(r.get('status', 0)) < 400):
+                  reject("route %s answered HTTP %s." % (r.get('url'), r.get('status')))
+              if int(r.get('passes', 0)) + int(r.get('violations', 0)) == 0:
+                  reject("route %s produced no axe results at all." % r.get('url'))
+          blocking = [v for v in data['violations'] if v.get('impact') in ('serious', 'critical')]
+          print("axe report OK: %d route(s), %d violation(s), %d serious/critical (axe-core %s, generated %s)."
+                % (len(routes), len(data['violations']), len(blocking),
+                   engine.get('version'), data.get('generatedAt')))
+          for r in routes:
+              print("  route %s -> HTTP %s | passes=%s violations=%s" % (r.get('url'), r.get('status'), r.get('passes'), r.get('violations')))
+          sys.exit(0)
+          PYVALIDATE
+          if [ "${VALID}" -ne 0 ]; then
+            rm -f "${REPORT}"
+            echo "unmeasured=rejected" >> "$GITHUB_OUTPUT"
+            echo "Removed ${REPORT} so gate-33 cannot read it as a clean accessibility run."
+            echo "::error::enable-axe is set and the axe report was REJECTED for the reason above, so this run has no accessibility verdict. A rejected report is the same amount of evidence as no report: none. Fix the producer, or set enable-axe: false. The remaining gates still run below; this job will fail at the end."
+          fi
+
+      # gate-33 proper. The helper is the runner's own: exit 0 clean, 1 at
+      # least one serious/critical violation, 2 not a readable axe result
+      # object. The verdict line is printed in the runner's own shape so a
+      # reader greps one pattern across both jobs, and the log the helper
+      # writes is printed in full on a failure.
+      - name: Judge the axe report (gate-33)
+        if: ${{ steps.producer.outputs.ran == 'true' }}
+        run: |
+          set -u
+          REPORT="${GITHUB_WORKSPACE}/app/tests/axe/report.json"
+          LOG="${RUNNER_TEMP}/hydra-gate-axe.log"
+          if [ ! -d "${GITHUB_WORKSPACE}/app/src" ]; then
+            echo "[gate-33] axe-core: NOT APPLICABLE — no src/ in this repository, so there is no frontend to run axe-core against."
+            exit 0
+          fi
+          if [ ! -f "${REPORT}" ]; then
+            # Named earlier by the check step, which recorded WHY; this is the
+            # verdict it deferred so the reason and the failure sit together.
+            echo "[gate-33] axe-core: SKIPPED (structural) — enable-axe is set, so a tests/axe/report.json was EXPECTED, and none is usable here (${{ steps.axe-check.outputs.unmeasured || 'absent' }}). axe-core never ran against a rendered DOM: contrast / landmark / ARIA-validity / live-region accessibility is UNVERIFIED by this run."
+            echo "::error::enable-axe is set and this run produced NO accessibility measurement (reason: ${{ steps.axe-check.outputs.unmeasured || 'absent' }}). The absence of the check is not the check passing. Failing this job so the run cannot be read as accessible."
+            exit 1
+          fi
+          python3 "${GITHUB_WORKSPACE}/gates/hydra-gates/scripts/lib/check_axe_report.py" "${REPORT}" "${LOG}" && RC=0 || RC=$?
+          case "${RC}" in
+            0)
+              echo "[gate-33] axe-core: PASS"
+              ;;
+            1)
+              N="$(wc -l < "${LOG}" | tr -d ' ')"
+              echo "[gate-33] axe-core: FAIL — ${N} serious/critical axe violation(s):"
+              sed 's/^/  /' "${LOG}"
+              echo "::error::gate-33 axe-core: ${N} serious/critical violation(s). See the lines above; each names the axe rule, its impact, the node count and the help URL."
+              exit 1
+              ;;
+            *)
+              echo "[gate-33] axe-core: SKIPPED (wiring) — tests/axe/report.json exists but is not a readable axe result object ($(head -1 "${LOG}" 2>/dev/null)). NO rendered-DOM violation was inspected; runtime accessibility is UNVERIFIED by this run."
+              echo "::error::gate-33 could not read the axe report (helper exit ${RC}). Fix the step that writes the report, not this gate."
+              exit 1
+              ;;
+          esac
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/hydra-gates-axe.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-hydra-gates-axe
           path: quality-results/
 
   report:
@@ -7552,7 +8056,7 @@ jobs:
     # which is exactly why this has to be gated separately: a green PHPUnit
     # matrix measured on versions the app never claimed is the failure this
     # whole change exists to remove, and it looks identical to a pass.
-    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, app-check-code, info-xml, reuse, changes]
+    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, hydra-gates-axe, app-check-code, info-xml, reuse, changes]
     if: always()
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
@@ -7587,11 +8091,17 @@ jobs:
           path: coverage/
         continue-on-error: true
 
+      # A PATTERN, so a sharded E2E job is read too. Sharded, each leg uploads
+      # `playwright-report-shard-<i>-of-<n>`, and the exact name matched none
+      # of them. The coverage file is the same on every shard (it reads spec
+      # and test files, not the run), so merging the downloads is safe. With
+      # one leg the pattern matches the one artifact it always matched.
       - name: Download Playwright coverage
         uses: actions/download-artifact@v4
         with:
-          name: playwright-report
+          pattern: playwright-report*
           path: results/playwright-report/
+          merge-multiple: true
         continue-on-error: true
 
       # A PACKAGE INSTALL MUST NOT BE ABLE TO DISABLE THE GATE.
@@ -7642,15 +8152,21 @@ jobs:
         env:
           # The SAME three facts the "Gate — a test job that was ENABLED but
           # never ran" step below reads, so the table and the gate classify one
-          # skip one way. Before this, the gate knew a PR into `development`
-          # defers E2E to the promotion run and passed, while this table only
+          # skip one way. Before this, the gate knew a deferred E2E run and
+          # passed, while this table only
           # knew enabled+skipped and stamped the same run "🚨 NO VERDICT" — a
           # deliberate cost control rendered as a missing test tier, on every
           # dev PR, forever (observed on keepiq#479). Env rather than inline
           # `${{ }}`: `reason` is free text and does not belong in the script.
           PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
           PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
-          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/')) }}
+          # The E2E trigger filter's own verdict AND ITS REASON, both from the
+          # `changes` job. The predicate used to be re-typed here, in the
+          # census below and in the axe producer probe — four hand-kept copies
+          # of one rule. It is now decided once and read, so the table, the
+          # gate and the axe job cannot classify one skip three ways.
+          E2E_TRIGGER: ${{ needs.changes.outputs.e2e }}
+          E2E_TRIGGER_REASON: ${{ needs.changes.outputs.e2e_reason }}
         run: |
           set -euo pipefail
 
@@ -7725,8 +8241,8 @@ jobs:
           # from the gate.
           PHPUNIT_SKIP_REASON=""
           PLAYWRIGHT_SKIP_REASON=""
-          if [ "$E2E_PROMOTION_SKIP" = "true" ]; then
-            PLAYWRIGHT_SKIP_REASON="deferred: a release or sync branch carries only version strings, so E2E runs on the merge and on the promotions"
+          if [ "$E2E_TRIGGER" = "false" ]; then
+            PLAYWRIGHT_SKIP_REASON="deferred: ${E2E_TRIGGER_REASON}"
           fi
           if [ "$PATH_FILTER_CODE" = "false" ]; then
             PHPUNIT_SKIP_REASON="not run for this diff — ${PATH_FILTER_REASON}"
@@ -7838,6 +8354,15 @@ jobs:
             # so a job that was skipped or deleted still renders as ⏭️ instead
             # of vanishing from the table.
             echo "| Hydra gates | | | | | $(icon '${{ needs.hydra-gates.result }}') |"
+            # gate-33 lives in its own job since the gates/axe split, and only
+            # when the caller opted in. Rendered under the same rule as the
+            # Journeydoc row: absent when not asked for, so a repo that has
+            # not opted in does not read a ⏭️ as a gap; shown by
+            # `needs.<job>.result` when it was, so a skipped or cancelled axe
+            # job renders as ⏭️ rather than vanishing.
+            if [ '${{ inputs.enable-axe }}' = 'true' ]; then
+              echo "| Hydra gates (axe) | | | | | $(icon '${{ needs.hydra-gates-axe.result }}') |"
+            fi
             echo ""
           } > "$REPORT"
 
@@ -8026,12 +8551,19 @@ jobs:
           # EXISTS" — turning a working cost control into a permanent red.
           PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
           PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
-          # A pull request into `development` deliberately does not run E2E:
-          # the promotion into beta/main does, so it is one run per merge rather
-          # than one per push per open pull request. Without this the census
-          # sees only `skipped` and calls a working cost control "NO VERDICT
-          # EXISTS", which moves the red instead of removing it.
-          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/')) }}
+          # Ordinary `development` traffic deliberately does not run E2E: the
+          # `development -> beta` and `beta -> main` promotions do, so the
+          # suite is asked once per promotion rather than once per push per
+          # open pull request. Without these two the census sees only
+          # `skipped` and calls a working cost control "NO VERDICT EXISTS",
+          # which moves the red to the aggregator instead of removing it.
+          # The E2E trigger filter's own verdict AND ITS REASON, both from the
+          # `changes` job. The predicate used to be re-typed here, in the
+          # census below and in the axe producer probe — four hand-kept copies
+          # of one rule. It is now decided once and read, so the table, the
+          # gate and the axe job cannot classify one skip three ways.
+          E2E_TRIGGER: ${{ needs.changes.outputs.e2e }}
+          E2E_TRIGGER_REASON: ${{ needs.changes.outputs.e2e_reason }}
           JOURNEYDOC_ENABLED: ${{ inputs.enable-journeydoc-capture }}
           JOURNEYDOC_RESULT: ${{ needs['journeydoc-capture'].result }}
         run: |
@@ -8085,8 +8617,8 @@ jobs:
           classify "PHPUnit"            "$PHPUNIT_ENABLED"    "$PHPUNIT_RESULT"    true
           classify "Newman"             "$NEWMAN_ENABLED"     "$NEWMAN_RESULT"
           E2E_REASON=""
-          if [ "$E2E_PROMOTION_SKIP" = "true" ]; then
-            E2E_REASON="This pull request comes from a release or sync branch, which carries only version strings. E2E runs on the merge and on the promotions."
+          if [ "$E2E_TRIGGER" = "false" ]; then
+            E2E_REASON="$E2E_TRIGGER_REASON"
           fi
           classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true "$E2E_REASON"
           classify "Journeydoc capture" "$JOURNEYDOC_ENABLED" "$JOURNEYDOC_RESULT"

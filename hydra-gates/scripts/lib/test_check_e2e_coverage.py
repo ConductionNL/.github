@@ -533,6 +533,31 @@ class GateModeTest(unittest.TestCase):
             cwd=str(self.root), capture_output=True, text=True
         ).stdout.strip()
 
+    def _existing_spec(self, rel: str, content: str) -> str:
+        """Commit ``content`` at ``rel`` as the BASE, then touch it at HEAD.
+
+        The exclusion semantics under test apply to scenarios that PREDATE
+        the change. A spec written in the PR itself is a different case (a
+        new scenario is not excludable, see the NewScenario tests below), so
+        the base must already hold the spec and the PR must merely edit the
+        file to bring it into the diff.
+        """
+        _write(self.root, "README.md", "# app\n")
+        _write(self.root, rel, content)
+        base = self._commit("base with spec")
+        _write(self.root, rel, content + "\nA prose line the change adds.\n")
+        return base
+
+    def _gate(self, base: str) -> tuple[int, str]:
+        os.environ["HYDRA_GATE_BASE_REF"] = base
+        try:
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = cec.run_gate(self.root)
+        finally:
+            del os.environ["HYDRA_GATE_BASE_REF"]
+        return rc, buf.getvalue()
+
     def test_no_specs_in_the_repo_at_all_is_NOT_APPLICABLE_not_a_pass(self):
         """A repo with no specs has nothing to trace — say so, don't claim a pass.
 
@@ -641,21 +666,16 @@ class GateModeTest(unittest.TestCase):
         self.assertNotIn("PASS", buf.getvalue())
 
     def test_the_clamp_does_not_turn_a_clean_spec_into_a_failure(self):
-        # THE CONTROL for the clamp.
-        _write(self.root, "README.md", "# app\n")
-        base = self._commit("base")
-        _write(self.root, "openspec/specs/s/spec.md",
-               "# S\n\n## Requirements\n\n### Requirement: R\n\n"
-               "#### Scenario: only one\n\n- **WHEN** x happens\n"
-               "- @e2e exclude backend only — covered by PHPUnit\n")
-        self._commit("add spec")
-
-        os.environ["HYDRA_GATE_BASE_REF"] = base
-        try:
-            with redirect_stdout(io.StringIO()):
-                rc = cec.run_gate(self.root)
-        finally:
-            del os.environ["HYDRA_GATE_BASE_REF"]
+        # THE CONTROL for the clamp. The excluded scenario predates the change
+        # (an exclusion on a scenario the change ADDS is a finding in its own
+        # right, tested below).
+        base = self._existing_spec(
+            "openspec/specs/s/spec.md",
+            "# S\n\n## Requirements\n\n### Requirement: R\n\n"
+            "#### Scenario: only one\n\n- **WHEN** x happens\n"
+            "- @e2e exclude backend only — covered by PHPUnit\n")
+        self._commit("touch spec")
+        rc, _out = self._gate(base)
         self.assertEqual(rc, 0)
 
     def test_fail_uncovered_scenario_in_diff(self):
@@ -674,12 +694,17 @@ class GateModeTest(unittest.TestCase):
         finally:
             del os.environ["HYDRA_GATE_BASE_REF"]
 
-        # The STATUS is 1 (fail). The COUNT is 2, and it is on stdout.
+        # The STATUS is 1 (fail). The COUNT is 2, and it is on stdout. Both
+        # scenarios were ADDED by this change, so they are reported as new
+        # scenarios without a test rather than as legacy debt missing a tag,
+        # and the summary line carries the new-scenario count as well.
         self.assertEqual(rc, cec.EXIT_FAIL)
         out = buf.getvalue()
-        self.assertIn("missing @e2e", out)
+        self.assertIn("new scenario without a test", out)
+        self.assertNotIn("missing @e2e", out)
         self.assertIn("FAIL", out)
         self.assertIn("2 scenario(s)", out)
+        self.assertIn("2 of them new scenario(s) without a test", out)
 
     def test_pass_when_all_scenarios_covered(self):
         _write(self.root, "README.md", "# app\n")
@@ -701,59 +726,154 @@ class GateModeTest(unittest.TestCase):
         self.assertIn("PASS", buf.getvalue())
 
     def test_fail_bare_exclude_is_noncompliant(self):
-        _write(self.root, "README.md", "# app\n")
-        base = self._commit("base")
-        _write(self.root, "openspec/specs/my-spec/spec.md", SPEC_WITH_BARE_EXCLUDE)
-        self._commit("add spec with bare exclude")
-
-        os.environ["HYDRA_GATE_BASE_REF"] = base
-        try:
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                rc = cec.run_gate(self.root)
-        finally:
-            del os.environ["HYDRA_GATE_BASE_REF"]
-
+        base = self._existing_spec("openspec/specs/my-spec/spec.md",
+                                   SPEC_WITH_BARE_EXCLUDE)
+        self._commit("touch spec with bare exclude")
+        rc, out = self._gate(base)
         self.assertEqual(rc, 1)
-        out = buf.getvalue()
         self.assertIn("exclude without reason", out)
 
     def test_pass_exclude_with_reason(self):
-        _write(self.root, "README.md", "# app\n")
-        base = self._commit("base")
-        _write(self.root, "openspec/specs/my-spec/spec.md", SPEC_WITH_EXCLUSION)
+        base = self._existing_spec("openspec/specs/my-spec/spec.md",
+                                   SPEC_WITH_EXCLUSION)
         # Only the non-excluded scenario needs coverage
         _write(self.root, "tests/e2e/my.spec.ts",
                "// @e2e my-spec::another-covered\ntest('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
-        self._commit("add spec + test for visible scenario")
+        self._commit("touch spec + test for visible scenario")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, 0)
+        self.assertIn("PASS", out)
 
-        os.environ["HYDRA_GATE_BASE_REF"] = base
-        try:
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                rc = cec.run_gate(self.root)
-        finally:
-            del os.environ["HYDRA_GATE_BASE_REF"]
+    def test_a_cited_exclusion_warns_and_does_not_block(self):
+        """The spec says no test can prove it; a running test says it does.
+
+        Exactly one of the two is wrong, and before this the gate discarded
+        the test's claim in silence: the excluded branch returned
+        unconditionally without ever asking whether anything covered it.
+
+        Advisory on purpose. Measured on dossiq 2026-09-12, 31 citations sit
+        on an excluded scenario across 8 files, so failing here would redden
+        the fleet on inherited debt the moment it landed.
+        """
+        base = self._existing_spec("openspec/specs/my-spec/spec.md",
+                                   SPEC_WITH_EXCLUSION)
+        # BOTH scenarios cited: the visible one legitimately, and the excluded
+        # one in contradiction of its own spec.
+        _write(self.root, "tests/e2e/my.spec.ts",
+               "// @e2e my-spec::another-covered\n"
+               "test('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n"
+               "// @e2e my-spec::internal-wiring\n"
+               "test('y', async ({ page }) => { await expect(page).toHaveTitle(/y/) })\n")
+        self._commit("cite an excluded scenario")
+        rc, out = self._gate(base)
+
+        self.assertEqual(rc, 0, "a cited exclusion must not fail the gate")
+        self.assertIn("PASS", out)
+        self.assertIn("WARN", out)
+        self.assertIn("my-spec::internal-wiring", out)
+        self.assertIn("`@e2e exclude`", out)
+
+    def test_an_uncited_exclusion_does_not_warn(self):
+        """The other direction, so the warning cannot fire on every exclusion.
+
+        Without this, a check that flagged all excluded scenarios would look
+        identical to one that flags the contradiction.
+        """
+        base = self._existing_spec("openspec/specs/my-spec/spec.md",
+                                   SPEC_WITH_EXCLUSION)
+        _write(self.root, "tests/e2e/my.spec.ts",
+               "// @e2e my-spec::another-covered\n"
+               "test('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
+        self._commit("cite only the visible scenario")
+        rc, out = self._gate(base)
 
         self.assertEqual(rc, 0)
-        self.assertIn("PASS", buf.getvalue())
+        self.assertIn("PASS", out)
+        self.assertNotIn("WARN", out)
 
     def test_whole_spec_exclude_passes_all_scenarios(self):
+        base = self._existing_spec("openspec/specs/backend-spec/spec.md",
+                                   WHOLE_SPEC_EXCLUDED)
+        self._commit("touch backend-only spec")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, 0)
+        self.assertIn("PASS", out)
+
+    # -----------------------------------------------------------------------
+    # A NEW SCENARIO IS NOT EXCLUDABLE
+    #
+    # An `@e2e exclude` waives a scenario that predates the test suite. A
+    # scenario the change itself writes is not legacy, and typing the
+    # exclusion under the heading in the same commit is the cheap answer the
+    # demotion note (.github#477) names as the one that empties the gate.
+    # -----------------------------------------------------------------------
+
+    def test_a_scenario_added_next_to_an_excluded_one_is_new_without_a_test(self):
+        base = self._existing_spec("openspec/specs/my-spec/spec.md",
+                                   SPEC_WITH_EXCLUSION)
+        # The change adds a THIRD scenario and excludes it in the same breath,
+        # and covers the existing visible one so nothing else is outstanding.
+        _write(self.root, "openspec/specs/my-spec/spec.md",
+               SPEC_WITH_EXCLUSION
+               + "\n#### Scenario: Added today\n\n"
+               + "@e2e exclude too hard to drive from a browser\n\n"
+               + "- WHEN added\n- THEN excluded\n")
+        _write(self.root, "tests/e2e/my.spec.ts",
+               "// @e2e my-spec::another-covered\ntest('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
+        self._commit("add a scenario and exclude it")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, cec.EXIT_FAIL)
+        self.assertIn("my-spec::added-today — new scenario without a test", out)
+        self.assertIn("excluded with `@e2e exclude` in the same change", out)
+        # The PRE-EXISTING excluded scenario keeps its waiver.
+        self.assertNotIn("internal-wiring", out)
+        self.assertIn("1 scenario(s) without a running e2e test, "
+                      "1 of them new scenario(s) without a test", out)
+
+    def test_a_new_spec_file_under_a_whole_spec_exclude_is_all_new(self):
         _write(self.root, "README.md", "# app\n")
         base = self._commit("base")
         _write(self.root, "openspec/specs/backend-spec/spec.md", WHOLE_SPEC_EXCLUDED)
         self._commit("add backend-only spec")
+        rc, out = self._gate(base)
+        # Every scenario in a file the change created is new, and the
+        # whole-spec exclusion does not cover a single one of them.
+        self.assertEqual(rc, cec.EXIT_FAIL)
+        self.assertIn("2 scenario(s) without a running e2e test, "
+                      "2 of them new scenario(s) without a test", out)
+        self.assertIn("returns-200-on-success — new scenario without a test", out)
 
-        os.environ["HYDRA_GATE_BASE_REF"] = base
-        try:
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                rc = cec.run_gate(self.root)
-        finally:
-            del os.environ["HYDRA_GATE_BASE_REF"]
+    def test_a_new_scenario_with_a_running_test_passes(self):
+        base = self._existing_spec("openspec/specs/my-spec/spec.md", BASIC_SPEC)
+        _write(self.root, "openspec/specs/my-spec/spec.md",
+               BASIC_SPEC + "\n#### Scenario: Added and proven\n\n- WHEN a\n- THEN b\n")
+        _write(self.root, "tests/e2e/my.spec.ts",
+               "// @e2e my-spec::foo-does-bar\n// @e2e my-spec::foo-handles-error\n"
+               "// @e2e my-spec::added-and-proven\n"
+               "test('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
+        self._commit("add a scenario with its test")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+        self.assertNotIn("new scenario", out)
 
-        self.assertEqual(rc, 0)
-        self.assertIn("PASS", buf.getvalue())
+    def test_without_a_base_nothing_is_new(self):
+        # A full sweep has no "before", so the exclusion semantics are the
+        # classic ones and a reasoned exclusion still passes.
+        _write(self.root, "openspec/specs/backend-spec/spec.md", WHOLE_SPEC_EXCLUDED)
+        self._commit("spec")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cec.run_gate(self.root)
+        self.assertEqual(rc, cec.EXIT_PASS, buf.getvalue())
+
+    def test_added_scenario_refs_names_only_the_new_heading(self):
+        base = self._existing_spec("openspec/specs/my-spec/spec.md", BASIC_SPEC)
+        _write(self.root, "openspec/specs/my-spec/spec.md",
+               BASIC_SPEC + "\n#### Scenario: Brand new\n\n- WHEN a\n- THEN b\n")
+        self._commit("add one scenario")
+        added = cec.added_scenario_refs(base, self.root,
+                                        {"openspec/specs/my-spec/spec.md"})
+        self.assertEqual(added, {"my-spec::brand-new"})
 
     def test_diff_scope_only_changed_spec_flagged(self):
         """A spec not touched in the diff must NOT be flagged even if uncovered."""
@@ -2469,6 +2589,312 @@ class ReportModeEvidenceTest(unittest.TestCase):
         self.assertEqual(t["covered_thinly"], 0)      # helper may act
         self.assertEqual(t["covered_thinly_max"], 1)  # if it does not
         self.assertLessEqual(t["covered_thinly"], t["covered_thinly_max"])
+
+
+# ---------------------------------------------------------------------------
+# GitHub heading anchors — the second spelling of a Format A slug
+# ---------------------------------------------------------------------------
+#
+# GitHub slugifies the WHOLE heading, `Scenario` label included, so the anchor
+# a developer gets by clicking the heading on the rendered spec is
+# `#scenario-<slug>`. The gate's own slug drops the label. The two used to be
+# unequal strings and the citation was dropped in silence — the scenario read
+# as `missing @e2e`, which looks exactly like nobody writing a test. Measured
+# in dossiq: 42 of 330 citations, none crediting anything.
+
+GH_ANCHOR_SPEC = """\
+# things Specification
+
+## Purpose
+
+### Requirement: Foo behaviour
+
+#### Scenario: Foo does bar
+
+- WHEN foo is called
+- THEN bar happens
+"""
+
+
+def _runs(name: str, tag: str) -> str:
+    """One tagged, asserting Playwright test."""
+    return (
+        f"import {{ expect, test }} from '@playwright/test'\n"
+        f"// @e2e {tag}\n"
+        f"test('{name}', async ({{ page }}) => {{\n"
+        f"  await page.goto('/apps/x')\n"
+        f"  await expect(page.getByText('Foo')).toBeVisible()\n"
+        f"}})\n"
+    )
+
+
+class GithubHeadingAnchorTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        _write(self.root, "openspec/specs/things/spec.md", GH_ANCHOR_SPEC)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _gate(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cec.run_gate(self.root)
+        return rc, buf.getvalue()
+
+    # -- the helper itself ---------------------------------------------------
+
+    def test_github_anchor_ref_adds_the_prefix(self):
+        self.assertEqual(cec.github_anchor_ref("things::foo-does-bar"),
+                         "things::scenario-foo-does-bar")
+
+    def test_github_anchor_ref_rejects_a_non_ref(self):
+        self.assertIsNone(cec.github_anchor_ref("not-a-ref"))
+        self.assertIsNone(cec.github_anchor_ref("::orphan"))
+        self.assertIsNone(cec.github_anchor_ref("spec::"))
+
+    # -- the three cases the change has to get right --------------------------
+
+    def test_the_github_form_credits_the_scenario(self):
+        """THE BUG. An anchor copied off the rendered spec must count."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-foo-does-bar"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_PASS,
+                         f"the GitHub-spelled anchor must credit, got:\n{out}")
+        self.assertNotIn("missing @e2e", out)
+
+    def test_the_github_form_credits_through_the_path_spelling_too(self):
+        """The same anchor as a copied URL, not as the `::` shorthand."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "openspec/specs/things/spec.md"
+                          "#scenario-foo-does-bar"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_the_bare_form_still_credits(self):
+        """THE CONTROL. Loosening must not cost the form that already worked."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::foo-does-bar"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_a_near_miss_slug_still_does_not_credit(self):
+        """`scenario-` is the only prefix forgiven. A typo is still a miss."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-foo-does-baz"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_FAIL,
+                         "a slug that names no scenario must not credit one")
+        self.assertIn("things::foo-does-bar — missing @e2e", out)
+
+    def test_a_bare_prefix_alone_does_not_credit(self):
+        """`things::scenario-` names nothing; it must not blanket the spec."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-x"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+
+    def test_the_reverse_direction_is_not_supported(self):
+        """A scenario titled "Scenario …" is addressed by its own two
+        spellings, `scenario-scenario-x` and `scenario-x`, and by neither
+        `x` nor anything else. Stripping a prefix off a citation would eat a
+        real word, so only adding one is done."""
+        _write(self.root, "openspec/specs/things/spec.md",
+               "# things Specification\n\n## Purpose\n\n"
+               "### Requirement: R\n\n#### Scenario: Scenario naming is odd\n\n"
+               "- WHEN x\n- THEN y\n")
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::naming-is-odd"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+        self.assertIn("things::scenario-naming-is-odd — missing @e2e", out)
+
+    # -- format B does not collide -------------------------------------------
+
+    def test_format_b_slugs_are_untouched(self):
+        """Format B slugs END in `-scenario-<n>`; this change reads the START.
+
+        The numbered form carries no heading, so GitHub mints no anchor for
+        it and the prefixed spelling never appears. Its own slug must keep
+        crediting exactly as before.
+        """
+        _write(self.root, "openspec/specs/things/spec.md",
+               "# things Specification\n\n## Purpose\n\n"
+               "### REQ-ALT-001: Alt format requirement\n\n"
+               "**Scenarios:**\n\n"
+               "1. **GIVEN** a thing **WHEN** poked **THEN** it moves\n")
+        ref = "things::req-alt-001-alt-format-requirement-scenario-1"
+        _write(self.root, "tests/e2e/things.spec.ts", _runs("a", ref))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_an_orphan_format_b_slug_keeps_its_own_anchor(self):
+        """THE ONE COLLISION THE FLEET CAN ACTUALLY REACH.
+
+        A `**Scenarios:**` block with no `### Requirement:` above it slugs its
+        items `scenario-<n>` (see `_flush_alt_item`). That is the same string
+        as the GitHub spelling of a Format A scenario slugged `<n>`. The
+        anchor belongs to the Format B item that declares it.
+        """
+        _write(self.root, "openspec/specs/things/spec.md",
+               "# things Specification\n\n## Purpose\n\n"
+               "#### Scenario: 1\n\n- WHEN a\n- THEN b\n\n"
+               "**Scenarios:**\n\n"
+               "1. **GIVEN** an orphan block **WHEN** poked **THEN** it moves\n")
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-1"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+        self.assertIn("things::1 — missing @e2e", out)
+        self.assertNotIn("things::scenario-1 — missing @e2e", out)
+
+    # -- the collision guard --------------------------------------------------
+
+    def test_an_anchor_does_not_credit_a_scenario_it_does_not_name(self):
+        """THE ONE WAY THIS COULD CREDIT THE WRONG THING.
+
+        A heading whose TEXT begins with "Scenario" slugs to `scenario-x`,
+        which is also the GitHub spelling of a sibling slugged `x`. One
+        citation must not credit both. No such heading exists in the fleet
+        today, which is why this is a guard rather than a fix.
+        """
+        _write(self.root, "openspec/specs/things/spec.md",
+               "# things Specification\n\n## Purpose\n\n"
+               "### Requirement: R\n\n"
+               "#### Scenario: Scenario picker opens\n\n- WHEN a\n- THEN b\n\n"
+               "#### Scenario: Picker opens\n\n- WHEN c\n- THEN d\n")
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-picker-opens"))
+        rc, out = self._gate()
+        # The prefixed anchor belongs to the scenario DECLARING that slug.
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+        self.assertIn("things::picker-opens — missing @e2e", out)
+        self.assertNotIn("things::scenario-picker-opens — missing @e2e", out)
+
+    # -- report mode ----------------------------------------------------------
+
+    def test_report_mode_counts_the_github_form_as_covered(self):
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-foo-does-bar"))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cec.run_report(self.root)
+        totals = json.loads(buf.getvalue())["totals"]
+        self.assertEqual(totals["covered"], 1)
+        self.assertEqual(totals["uncovered"], 0)
+
+    def test_report_mode_reads_evidence_under_the_ref_that_covered(self):
+        """A GitHub-spelled anchor must not be promoted to the strongest
+        evidence class just because the evidence map is keyed by the other
+        spelling. This test asserts a THIN proof stays thin."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               "import { expect, test } from '@playwright/test'\n"
+               "// @e2e things::scenario-foo-does-bar\n"
+               "test('a', async ({ page }) => {\n"
+               "  await page.goto('/apps/x')\n"
+               "  await expect(page.getByText('Foo')).toBeVisible()\n"
+               "})\n")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cec.run_report(self.root)
+        out = json.loads(buf.getvalue())
+        self.assertEqual(out["totals"]["covered"], 1)
+        self.assertEqual(out["totals"]["covered_thinly"], 1)
+        self.assertEqual([x["ref"] for x in out["covered_thinly"]],
+                         ["things::foo-does-bar"])
+
+    # -- a dead test is still dead, in either spelling ------------------------
+
+    def test_the_github_form_on_a_skipped_test_is_not_coverage(self):
+        """Loosening the SPELLING must not loosen what counts as a test."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               "import { expect, test } from '@playwright/test'\n"
+               "// @e2e things::scenario-foo-does-bar\n"
+               "test.skip('a', async ({ page }) => {\n"
+               "  await expect(page.getByText('Foo')).toBeVisible()\n"
+               "})\n")
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+        self.assertIn("the test does not run", out)
+
+
+# A scenario heading may carry an identifier between "Scenario" and the colon.
+# OpenSpec accepts the form; the gate used to require `Scenario:` verbatim and
+# so could not see these scenarios at all.
+ID_HEADING_SPEC = """# Mapping
+
+### Requirement: Base layers
+
+#### Scenario PDOK-01a: BRT Achtergrondkaart
+
+- GIVEN the map component is rendered
+- THEN the BRT layer is shown
+
+#### Scenario: Plain heading still works
+
+- GIVEN nothing unusual
+- THEN it is a scenario as before
+"""
+
+
+class ScenarioHeadingWithAnIdTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.spec = _write(self.root, "openspec/specs/maps/spec.md", ID_HEADING_SPEC)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _refs(self):
+        path = self.root / "openspec/specs/maps/spec.md"
+        return {s["ref"] for s in cec.parse_spec_scenarios(path)}
+
+    def _gate(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cec.run_gate(self.root)
+        return rc, buf.getvalue()
+
+    def test_a_heading_with_an_id_is_a_scenario(self):
+        """THE BUG. It must be parsed at all, not just be uncovered."""
+        self.assertIn("maps::pdok-01a-brt-achtergrondkaart", self._refs())
+
+    def test_a_plain_heading_keeps_its_slug(self):
+        """THE CONTROL. No scenario the gate already saw changes its ref."""
+        self.assertIn("maps::plain-heading-still-works", self._refs())
+
+    def test_the_id_is_kept_in_the_slug(self):
+        """Dropping the id would make GitHub's anchor miss by exactly the id."""
+        self.assertNotIn("maps::brt-achtergrondkaart", self._refs())
+
+    def test_an_uncited_id_heading_is_reported_missing(self):
+        """Visible means REQUIRED: an uncovered one must now be a finding."""
+        _write(self.root, "tests/e2e/maps.spec.ts",
+               _runs("a", "maps::plain-heading-still-works"))
+        rc, out = self._gate()
+        self.assertIn("maps::pdok-01a-brt-achtergrondkaart", out)
+
+    def test_the_github_anchor_for_an_id_heading_credits(self):
+        """GitHub keeps the leading word AND the id: scenario-pdok-01a-...
+
+        Asserted in two halves on purpose. A pass on its own is vacuous here:
+        were the heading not parsed at all, there would be nothing to credit
+        and the gate would pass anyway. So the scenario is first shown to be
+        REQUIRED, and only then shown to be satisfied by the GitHub anchor.
+        """
+        _write(self.root, "tests/e2e/maps.spec.ts",
+               _runs("a", "maps::plain-heading-still-works"))
+        _rc, out = self._gate()
+        self.assertIn("maps::pdok-01a-brt-achtergrondkaart", out,
+                      "the id heading must be required before its credit means anything")
+
+        _write(self.root, "tests/e2e/maps.spec.ts",
+               _runs("a", "maps::plain-heading-still-works")
+               + _runs("b", "maps::scenario-pdok-01a-brt-achtergrondkaart"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+        self.assertNotIn("pdok-01a", out)
 
 
 if __name__ == "__main__":

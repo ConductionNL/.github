@@ -35,7 +35,10 @@ WHAT IT REPORTS
 
 **V1 — collections exist and Newman is switched off.** Every request in the
 repo is dead. The caller sets ``enable-newman: false``, or never sets it and
-the input defaults to false.
+the input defaults to false. A collection carrying a reason-bearing
+``@newman exclude`` is not counted: the repo has said why that one does not
+run, which is what the exclusion is for. A BARE exclusion still counts, and is
+reported again as V5.
 
 **V2 — a collection outside the configured path.** It runs nowhere. Either move
 it under ``newman-collection-path``, point that input at it, or delete it. A
@@ -272,17 +275,30 @@ def analyse(app_dir: Path) -> dict:
     findings: list[dict] = []
     live = [r for r in rows if not r["excluded"] or r["bare_exclude"]]
 
-    if rows and not enabled:
+    # 🔴 `live`, NOT `rows`, AND THAT IS THE FIX FOR #757.
+    #
+    # V1 used to be raised from every committed collection, so a repo that had
+    # recorded a reason for each one was still reported as carrying unrun
+    # work. The Fix line printed underneath offers `@newman exclude <reason>`
+    # as a remedy, and it was a remedy that could not work: while Newman is
+    # off, no exclusion changed the verdict. Measured on dossiq, which
+    # deleted four dead collections and gave the other ten a reason, and still
+    # read `922 request(s) across 10 collection(s) ... Not one of them has
+    # ever run.`
+    #
+    # A bare exclusion stays in `live` by construction, so an exclusion with
+    # no reason still counts here, and V5 reports it separately below.
+    if live and not enabled:
         findings.append({
             "code": "V1",
             "detail": (
-                f"{sum(r['requests'] for r in rows)} request(s) across "
-                f"{len(rows)} collection(s) are committed, and this repo's "
+                f"{sum(r['requests'] for r in live)} request(s) across "
+                f"{len(live)} collection(s) are committed, and this repo's "
                 f"caller does not enable Newman"
                 + (f" ({wf})" if wf else " (no caller workflow found)")
                 + ". Not one of them has ever run."
             ),
-            "paths": [r["path"] for r in rows],
+            "paths": [r["path"] for r in live],
         })
     else:
         for r in live:
@@ -341,6 +357,10 @@ def analyse(app_dir: Path) -> dict:
             "requests": sum(r["requests"] for r in rows),
             "requests_that_run": sum(r["requests"] for r in rows if r["runs"]),
             "assertions": sum(r["assertions"] for r in rows),
+            # Collections carrying a reason-bearing `@newman exclude`. The pass
+            # line needs it: a repo can now pass with NOTHING running, and
+            # saying those requests are "reachable by CI" would be false.
+            "excused": sum(1 for r in rows if r["excluded"] and not r["bare_exclude"]),
         },
         "findings": findings,
     }
@@ -381,11 +401,27 @@ def main(argv: list[str]) -> int:
     t = result["totals"]
     if not findings:
         # NO VERDICT WORD HERE — see THE VERDICT WORD BELONGS TO THE RUNNER.
-        print(
-            f"[gate-{GATE_NUM}] {GATE_NAME}: 0 finding(s). {t['requests']} "
-            f"request(s) in {t['collections']} collection(s), all reachable by "
-            f"CI and all asserting something."
-        )
+        #
+        # 🔴 TWO WAYS TO PASS, AND THEY MUST NOT READ THE SAME. Since V1 began
+        # honouring exclusions, a repo passes either because CI runs its
+        # collections or because it has written down why each one does not.
+        # The second used to print "all reachable by CI", which is the
+        # opposite of true on a repo with `enable-newman: false`: dossiq read
+        # "922 request(s) ... all reachable by CI and all asserting something"
+        # on a run where not one of them executed.
+        if t["excused"]:
+            print(
+                f"[gate-{GATE_NUM}] {GATE_NAME}: 0 finding(s). "
+                f"{t['requests_that_run']} of {t['requests']} committed "
+                f"request(s) run; {t['excused']} of {t['collections']} "
+                f"collection(s) record why they do not."
+            )
+        else:
+            print(
+                f"[gate-{GATE_NUM}] {GATE_NAME}: 0 finding(s). {t['requests']} "
+                f"request(s) in {t['collections']} collection(s), all reachable "
+                f"by CI and all asserting something."
+            )
         return EXIT_PASS
 
     print(

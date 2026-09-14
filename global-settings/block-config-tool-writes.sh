@@ -97,6 +97,68 @@ fi
 
 $_looks_like_script || exit 0
 
+# ── Canonical-source exemption ───────────────────────────────────────────────
+# The scripts in this repo's global-settings/ directory ARE the update
+# mechanism. Their bodies necessarily contain the very write operations guard 2
+# scans for — the update notice check-settings-version.sh prints, the fixtures
+# the test scripts assert on. Without this exemption the guard vetoes every edit
+# to its own source, so Claude can never maintain the canonical files (observed
+# 2026-09-11: an edit to the update notice in check-settings-version.sh was
+# hard-denied — the same notice Claude is instructed to keep accurate).
+#
+# Scope is deliberately narrow: a repo checkout path ending in
+# global-settings/<canonical name>.sh or global-settings/tests/<name>.sh. The
+# installed copies are excluded explicitly — guard 1 above already hard-denies
+# those and runs first; this case is belt-and-braces should the two ever be
+# reordered.
+#
+# What still covers the "write a script, then run it" bypass this hook exists
+# for: a staged file is inert unless it is also executed, and the kernel
+# immutable bit refuses the write regardless of how it is invoked.
+# block-write-commands.sh catches the common invocation shapes (bash <path>,
+# source <path>, bare-path execution) but not every wrapper — it reads the
+# first token of a segment, so `nohup bash <path>` slips past. That limit
+# predates this exemption: a payload could already be staged at any path the
+# script-extension check does not cover. Layer 4 (chattr +i) is what actually
+# closes it.
+#
+# Match on the SAME normalized path guard 1 computed ($_expanded resolves the
+# unexpanded ~/ and $HOME/ spellings), so the non-exempt arm below holds for
+# every form guard 1 recognizes — not only the already-expanded one.
+#
+# Then canonicalize further before matching. The exempt patterns end in `*`
+# after `tests/`, and a `*` in a case glob matches `/` as well — so without
+# this step a path like
+#     /tmp/global-settings/tests/../../..$HOME/.claude/hooks/evil.sh
+# satisfies */global-settings/tests/*.sh, misses the ~/.claude/ arm above
+# (the raw string does not START with $HOME/.claude/) and misses guard 1 for
+# the same reason, exempting a write that lands squarely on an installed hook.
+# `realpath -m` resolves both `..` components and symlinked parents without
+# requiring the target to exist; where it is unavailable we refuse to exempt
+# any path that still carries a `..` component rather than guessing.
+_canon="${_expanded:-$file_path}"
+if command -v realpath >/dev/null 2>&1; then
+    _canon=$(realpath -m -- "$_canon" 2>/dev/null || printf '%s' "$_canon")
+fi
+
+# shellcheck disable=SC2088,SC2016 # case patterns match literal tokens — tilde and $HOME are intentionally NOT expanded
+case "$_canon" in
+    *'/../'* | */.. | '../'* | ..)
+        : # unresolved parent-dir traversal — never exempt; fall through to the scan
+        ;;
+    "${HOME}/.claude/"* | '~/.claude/'* | '$HOME/.claude/'* | '${HOME}/.claude/'*)
+        : # installed copies are never exempt — fall through to the scan
+        ;;
+    */global-settings/block-write-commands.sh \
+    | */global-settings/block-config-tool-writes.sh \
+    | */global-settings/check-settings-version.sh \
+    | */global-settings/sound-notify.sh \
+    | */global-settings/user-hooks-dispatch.sh \
+    | */global-settings/tests/*.sh)
+        exit 0
+        ;;
+esac
+
 # Look for a protected-path write inside the content. We replicate the
 # operator set from block-write-commands.sh so behaviour matches whether the
 # command lands at the Write step (here) or the Bash step (the other hook).

@@ -804,6 +804,19 @@ fi
 # ---------------------------------------------------------------------------
 # gate -> the reason it is permitted to be non-blocking.
 #
+#   7    no-admin-idor     PARTIAL, and only for the `request-sourced-object-guard`
+#                          rule (ConductionNL/dossiq#799). Gate-7's own
+#                          `no-auth-guard-in-body` findings still FAIL in the
+#                          same run: the runner splits the two populations into
+#                          separate logs and only the new rule is demoted, so
+#                          this is the ship condition for a widening rather
+#                          than a demotion of the gate. The rule was measured
+#                          before merge across 20 core apps and 761
+#                          lib/Controller files and found ONE line, in
+#                          launchpad, which is a false positive of a known
+#                          shape; dossiq's `submitResult()` is the real one and
+#                          is what the rule was written for. Per-repo opt-in:
+#                          HYDRA_GATE_IDOR_REQUEST_SOURCED_BLOCKING=1.
 #   19   e2e-coverage      .github#477, temporary, owned.
 #   46   spec-anchor-existence
 #                          .github#726, and PARTIAL: only the `@e2e` half is
@@ -839,9 +852,9 @@ fi
 #                          remainder needs exclusions, not repoints. Per-repo
 #                          opt-in: HYDRA_GATE_STALE_FLEET_APP_ID_BLOCKING=1.
 #
-# All five are worked down per app and flipped back individually; the findings
-# print on every run either way, so none is hidden.
-_ADVISORY_ALLOWED_GATES="19 46 112 113 114 115"
+# All of them are worked down per app and flipped back individually; the
+# findings print on every run either way, so none is hidden.
+_ADVISORY_ALLOWED_GATES="7 19 46 112 113 114 115"
 
 _runner_src="${GF_PKG_ROOT}/scripts/run-hydra-gates.sh"
 _warn_gates="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_runner_src}" \
@@ -856,15 +869,23 @@ fi
 # POSITIVE CONTROL — the allowlist check must be able to say NO. Plant a second
 # `_warn` call site in a COPY of the runner and require the same extraction to
 # come back with a set the allowlist rejects.
+#
+# ⚠️ THE PLANTED GATE MUST NOT BE ON THE ALLOWLIST, and it used to be gate-7.
+# When gate-7 joined the allowlist (dossiq#799) this control started planting a
+# demotion the allowlist ACCEPTS, so the extraction came back equal to the
+# allowlist and the arm proved nothing — it failed loudly, which is the only
+# reason it was noticed. Gate-8 is chosen because it is a real declared gate
+# that is blocking and has no business ever being advisory; if it is ever
+# demoted for real, this control fails and points at itself.
 _wdrift="${_tmp}/warn-drift"; mkdir -p "${_wdrift}"
-{ cat "${_runner_src}"; printf '    _warn 7 "no-admin-idor" "pretend"\n'; } > "${_wdrift}/runner.sh"
+{ cat "${_runner_src}"; printf '    _warn 8 "unsafe-auth-resolver" "pretend"\n'; } > "${_wdrift}/runner.sh"
 _warn_drifted="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_wdrift}/runner.sh" \
     | grep -oE '[0-9]+$' | sort -un | tr '\n' ' ')"
 _warn_drifted="${_warn_drifted% }"
 if [ "${_warn_drifted}" != "${_ADVISORY_ALLOWED_GATES}" ] && [ -n "${_warn_drifted}" ]; then
     _ok "control: a second _warn call site is detected (${_warn_drifted}) — the allowlist can refuse"
 else
-    _bad "control BROKEN: planting a _warn on gate-7 produced '${_warn_drifted:-none}', which the allowlist would accept — ARM P4 proves nothing"
+    _bad "control BROKEN: planting a _warn on gate-8 produced '${_warn_drifted:-none}', which the allowlist would accept — ARM P4 proves nothing. If gate-8 was legitimately demoted, plant a different NON-allowlisted gate here rather than deleting the arm."
 fi
 
 echo

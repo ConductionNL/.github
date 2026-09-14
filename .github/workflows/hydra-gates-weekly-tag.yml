@@ -1,0 +1,253 @@
+# hydra-gates weekly tag — a dated, immutable name for the gate package that
+# was on `main` at the start of each week.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHAT THE TAG IS FOR, AND WHAT IT IS NOT FOR
+# ══════════════════════════════════════════════════════════════════════════
+#
+# `hydra-gates/vYYYY.WW` (ISO year and week, e.g. hydra-gates/v2026.38) is cut
+# from `main` every Monday, or on dispatch. It exists so that two people, or a
+# person and a script, can name the SAME gate package without quoting a sha:
+#
+#   * a human writing "measured at hydra-gates/v2026.38" in an issue, a PR
+#     body or a memory note, and a reader who can `git diff
+#     hydra-gates/v2026.37..hydra-gates/v2026.38 -- hydra-gates/` a month later
+#     to see exactly which gates moved between two measurements;
+#   * the diff-check tooling (the strict-subset merge rule, the fleet
+#     before/after tables) that compares a run against a stored baseline and
+#     must refuse when the two were produced by different programs — the
+#     runner prints its package sha for this (.github#268), and a weekly tag
+#     gives that sha a name a table column can carry.
+#
+# IT IS NOT A PIN, AND CALLERS MUST NOT BE MOVED ONTO IT. Every fleet caller
+# takes the package at `@main` through quality.yml's `hydra-gates-ref` default,
+# and that file's own input docs record why: a pin is a silent expiry date,
+# and it has twice left the gates dead or falsely red fleet-wide —
+#
+#   #159  22 repos sat on v1.0.1, which predated a batch of gate fixes;
+#   #173  a default flipped here at @main reached runners pinned at v1.0.1,
+#         which could not honour it, and two repos went red on nothing.
+#
+# A caller pinned at hydra-gates/v2026.38 would be exactly that state again,
+# with a friendlier-looking name. So nothing here edits a caller, nothing here
+# is referenced by quality.yml, and the tag's only consumers are eyes and diff
+# tools. If a caller ever needs to hold still, the escape hatch is the one
+# already documented on `hydra-gates-ref`, and it is temporary.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHY THE TAG CARRIES THE CHANGELOG, AND NO FILE ON MAIN DOES
+# ══════════════════════════════════════════════════════════════════════════
+#
+# `main` is protected (two reviews), so a workflow cannot commit a
+# CHANGELOG.md to it, and a weekly bot PR to do so would be a weekly review
+# nobody asked for. The generated section — every pull request merged to
+# `main` since the previous weekly tag whose diff touches `hydra-gates/` —
+# therefore lives in two places that need no commit: the ANNOTATED TAG's
+# message (`git show hydra-gates/v2026.38`) and a GitHub release of the same
+# name, which is where a browser reader will look. The release is created with
+# `--latest=false` so it never displaces the package's semantic `vX.Y.Z`
+# releases as the repository's "Latest".
+#
+# Composer never sees these tags. `conduction/hydra-gates` is published from
+# this repository's `vX.Y.Z` tags; a tag that does not parse as a version is
+# skipped by Composer's VCS driver, and `hydra-gates/v2026.38` does not parse.
+# Verified against composer's VersionParser rather than assumed: the slash
+# alone makes it invalid.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHAT "MERGED PR TITLES" MEANS HERE
+# ══════════════════════════════════════════════════════════════════════════
+#
+# `git log --first-parent <prev>..HEAD -- hydra-gates/` on `main`. A squash
+# merge is one first-parent commit whose subject is the PR title with `(#N)`
+# appended; a true merge commit's subject is `Merge pull request #N from …`
+# and its body's first line is the PR title, which is what is taken. Commits
+# pushed straight to main (none, by ruleset) would appear by their own
+# subject. The list is what changed IN THE PACKAGE: a PR that touched only
+# quality.yml is not a gate change and is not listed, which is the point of
+# the pathspec.
+#
+# Idempotent: a tag that already exists is reported and left alone, so a
+# dispatch re-run in the same week is safe and never rewrites a name that
+# somebody may already have quoted.
+name: hydra-gates weekly tag
+
+on:
+  schedule:
+    # Mondays 05:00 UTC. CRON IS UTC AND DOES NOT KNOW ABOUT SUMMER TIME;
+    # nothing here needs to land at a precise local hour.
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "ISO week to tag, as YYYY.WW (default: the current week)"
+        required: false
+        default: ""
+
+# `contents: write` is what pushing a tag and creating a release need. A tag
+# ruleset that forbids this token would fail the `Push the tag` step loudly,
+# which is the correct outcome: a weekly tag that silently did not appear is
+# a name people would quote that resolves to nothing.
+permissions:
+  contents: write
+
+concurrency:
+  group: hydra-gates-weekly-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: "Tag hydra-gates/vYYYY.WW from main"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # The changelog is a range between two tags, and a shallow clone has
+          # neither the previous tag nor the commits between.
+          fetch-depth: 0
+
+      - name: Resolve the tag name and the previous weekly tag
+        id: name
+        env:
+          WEEK_INPUT: ${{ inputs.week }}
+        run: |
+          set -euo pipefail
+          WEEK="${WEEK_INPUT:-}"
+          if [ -z "${WEEK}" ]; then
+            # %G/%V: ISO year and ISO week, so the first days of January
+            # belong to the week they are in, not to a week 00.
+            WEEK="$(date -u +%G.%V)"
+          fi
+          case "${WEEK}" in
+            [0-9][0-9][0-9][0-9].[0-9][0-9]) ;;
+            *) echo "::error::week '${WEEK}' is not YYYY.WW"; exit 1 ;;
+          esac
+          TAG="hydra-gates/v${WEEK}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${TAG} already exists at $(git rev-parse --short "refs/tags/${TAG}^{commit}"). Left alone: a name that may already have been quoted is never rewritten."
+            exit 0
+          fi
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+
+          # The newest weekly tag OTHER than the one being cut. version:refname
+          # so 2026.9 sorts before 2026.10 even though %V pads anyway.
+          PREV="$(git tag -l 'hydra-gates/v*' --sort=-version:refname | grep -vx "${TAG}" | head -1 || true)"
+          echo "prev=${PREV}" >> "$GITHUB_OUTPUT"
+          if [ -n "${PREV}" ]; then
+            echo "Previous weekly tag: ${PREV} at $(git rev-parse --short "${PREV}^{commit}")."
+          else
+            echo "No previous weekly tag: the changelog covers the last 7 days on main."
+          fi
+
+      - name: Generate the changelog section
+        if: steps.name.outputs.exists == 'false'
+        id: notes
+        env:
+          TAG: ${{ steps.name.outputs.tag }}
+          PREV: ${{ steps.name.outputs.prev }}
+        run: |
+          set -euo pipefail
+          NOTES="${RUNNER_TEMP}/notes.md"
+          if [ -n "${PREV}" ]; then
+            RANGE="${PREV}..HEAD"
+            SINCE="since ${PREV}"
+            LOG_ARGS=("${RANGE}")
+          else
+            RANGE="HEAD"
+            SINCE="in the 7 days before this tag (no previous weekly tag)"
+            LOG_ARGS=(--since="7 days ago" HEAD)
+          fi
+
+          # One line per first-parent commit that touched the package:
+          # "<sha>\t<subject>\t<first body line>". The body line is only used
+          # when the subject is a merge-commit subject.
+          LINES="$(git log --first-parent --format='%h%x09%s' "${LOG_ARGS[@]}" -- hydra-gates/ || true)"
+          COUNT=0
+          {
+            echo "## ${TAG} ($(date -u +%Y-%m-%d))"
+            echo ""
+            echo "Gate package at main $(git rev-parse --short HEAD). Merged pull requests touching hydra-gates/ ${SINCE}:"
+            echo ""
+            while IFS="$(printf '\t')" read -r sha subject; do
+              [ -n "${sha:-}" ] || continue
+              title="${subject}"
+              case "${subject}" in
+                "Merge pull request #"*)
+                  # A true merge commit: the PR title is the body's first
+                  # non-empty line, and the number is in the subject.
+                  num="$(printf '%s' "${subject}" | grep -oE '#[0-9]+' | head -1)"
+                  body_title="$(git log -1 --format='%b' "${sha}" | sed '/^[[:space:]]*$/d' | head -1)"
+                  title="${body_title:-${subject}} (${num})"
+                  ;;
+              esac
+              echo "- ${title}"
+              COUNT=$((COUNT + 1))
+            done <<< "${LINES}"
+            if [ "${COUNT}" -eq 0 ]; then
+              echo "- (no pull request touched hydra-gates/ in this range; the tag still names the package as it stood)"
+            fi
+            echo ""
+            echo "This tag is a reference for humans and for the diff-check tooling. It is NOT a caller pin: every caller stays on @main (see the header of .github/workflows/hydra-gates-weekly-tag.yml, and #159 / #173 for what a pin costs)."
+          } > "${NOTES}"
+          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+          echo "notes=${NOTES}" >> "$GITHUB_OUTPUT"
+          echo "--- ${NOTES} ---"
+          cat "${NOTES}"
+
+      - name: Push the tag
+        if: steps.name.outputs.exists == 'false'
+        env:
+          TAG: ${{ steps.name.outputs.tag }}
+          NOTES: ${{ steps.notes.outputs.notes }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -F "${NOTES}" HEAD
+          git push origin "refs/tags/${TAG}"
+          echo "Pushed ${TAG} at $(git rev-parse --short HEAD)."
+
+      - name: Create the release (not marked latest)
+        if: steps.name.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.name.outputs.tag }}
+          NOTES: ${{ steps.notes.outputs.notes }}
+        run: |
+          set -euo pipefail
+          # `--latest=false`: the package's vX.Y.Z releases keep the "Latest"
+          # badge; this one is a dated bookmark, not a version.
+          gh release create "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${TAG}" \
+            --notes-file "${NOTES}" \
+            --latest=false \
+            --verify-tag
+
+      - name: Summary
+        if: always()
+        env:
+          TAG: ${{ steps.name.outputs.tag }}
+          EXISTS: ${{ steps.name.outputs.exists }}
+          COUNT: ${{ steps.notes.outputs.count }}
+          NOTES: ${{ steps.notes.outputs.notes }}
+        run: |
+          {
+            echo "### hydra-gates weekly tag"
+            echo ""
+            if [ "${EXISTS}" = "true" ]; then
+              echo "\`${TAG}\` already existed and was left alone."
+            elif [ -n "${NOTES:-}" ] && [ -f "${NOTES}" ]; then
+              echo "Cut \`${TAG}\` with ${COUNT:-0} merged pull request(s) touching hydra-gates/."
+              echo ""
+              cat "${NOTES}"
+            else
+              echo "\`${TAG}\` was NOT cut; see the failed step above."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -465,7 +465,7 @@ _What._ Determine and provide persons necessary.
 
 _What._ Determine, provide and maintain infrastructure (buildings, equipment, ICT, transport).
 
-**Our implementation.** ICT infrastructure: GitHub (code + CI + issues + PRs), Cyso hosting (production, ISAE 3402), Docker Compose (dev/test), 7 Playwright MCP browser sessions (browser-1 … browser-7), Ollama + Qwen 3.5 for local LLM inference. Documented in CLAUDE.md and [.github/docs/claude/](../claude/).
+**Our implementation.** ICT infrastructure: GitHub (code + CI + issues + PRs), Cyso hosting (production, ISAE 3402), Docker Compose (dev/test), one shared Playwright MCP server serving up to 7 named browser sessions (browser-1 … browser-7; only browser-1 is configured by default), Ollama + Qwen 3.5 for local LLM inference. Documented in CLAUDE.md and [.github/docs/claude/](../claude/).
 
 **Coverage.** _Full._
 
