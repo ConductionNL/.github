@@ -12894,6 +12894,104 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 116 · connections-declaration
+#
+# An app lists its outside connections in lib/Settings/connections.json
+# (hydra#667, design D2), and integriq turns each entry into one row on the
+# connections page. Integriq refuses a file it cannot trust, and a refused file
+# is silent: the app just has no rows, and nothing on the page says why. So
+# the four things integriq checks at runtime are checked here at review time:
+#
+#   1. the file validates against scripts/schemas/connections.schema.json, a
+#      vendored copy of integriq's schema whose $comment names the integriq
+#      commit it was copied from;
+#   2. `app` equals <id> in appinfo/info.xml;
+#   3. every connection key is unique;
+#   4. every settingsUrl with a `#section-<x>` anchor names an anchor defined
+#      under src/ or templates/. A link to a section nobody renders opens the
+#      settings page at the top.
+#
+# A DELTA GATE, keyed on HAVE_DELTA_BASE and not on SCOPE_TO_DIFF, for the
+# reason gates 101 and 108 give: full scope is the CI default, so a gate keyed
+# on SCOPE_TO_DIFF runs full-tree in production. The declaration is judged when
+# the change touched one side of a rule: the file itself, appinfo/info.xml, or
+# anything under src/ or templates/, since an anchor can disappear from a
+# component without the declaration changing.
+#
+# WARNING, NOT BLOCKING. The package resolves at @main for all 21 core apps,
+# so a new gate lands fleet-wide the minute it merges, and the fleet rule is
+# that a new gate ships as a warning. Measured 2026-09-14 on `development` of
+# the 21 core apps: dossiq is the only one shipping the file, and it passes
+# (0 findings). HYDRA_GATE_CONNECTIONS_DECLARATION_BLOCKING=1 makes it block
+# per repo.
+#
+# FAIL-CLOSED ON TOOLING, the gate-22 convention: a missing checker, a missing
+# `node`, an unreadable vendored schema, or an unresolvable Ajv is a FAIL that
+# names what did not happen. Schema validation that did not run is not a pass.
+# The CI job already installs Ajv next to the gates for gate-22.
+#
+# It still calls _pass, _skip and _fail, not _warn alone, so the declared
+# inventory and check_gate_numbers_unique.sh both see it.
+# ---------------------------------------------------------------------------
+if [ -f lib/Settings/connections.json ]; then
+    _cdc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-connections-declaration.log
+    : > "${_cdc_log}"
+    _cdc_helper="${SCRIPT_DIR}/lib/check_connections_declaration.js"
+    if [ ! -f "${_cdc_helper}" ]; then
+        _fail 116 "connections-declaration" "the checker is missing at ${_cdc_helper}. This app ships lib/Settings/connections.json and nothing read it, so the gate fails closed rather than print the word a clean file would get."
+    elif ! command -v node >/dev/null 2>&1; then
+        _fail 116 "connections-declaration" "node is not on PATH, so lib/Settings/connections.json was not validated. Schema validation that did not happen is not a pass. Install Node in the runner."
+    elif [ "${HAVE_DELTA_BASE}" != "1" ]; then
+        _skip 116 "connections-declaration" na "no delta base was resolved, so there is no changed-file set. This gate judges lib/Settings/connections.json when a change touches it, appinfo/info.xml, src/ or templates/. With no base it has nothing to judge, and saying so is not a pass. Give it a base with --base <ref> or HYDRA_GATE_BASE_REF."
+    else
+        set +e
+        printf '%s\n' "${CHANGED_FILES}" \
+            | node "${_cdc_helper}" . --only-changed > "${_cdc_log}" 2>&1
+        _cdc_rc=$?
+        set +e
+        # The census line prints on every verdict, so a PASS can be shown to
+        # have read the file.
+        grep -E '^\[connections-declaration\] checked ' "${_cdc_log}" 2>/dev/null | tail -1 | sed 's/^/[gate-116] /'
+        case "${_cdc_rc}" in
+            4)
+                _skip 116 "connections-declaration" na "this change touches neither lib/Settings/connections.json, appinfo/info.xml, src/ nor templates/, so nothing it did can change the declaration's verdict. See ${_cdc_log}."
+                ;;
+            2)
+                _fail 116 "connections-declaration" "the vendored schema scripts/schemas/connections.schema.json is unreadable or does not record its integriq source commit, so no declaration was judged. See ${_cdc_log}."
+                ;;
+            3)
+                _fail 116 "connections-declaration" "SCHEMA VALIDATION DID NOT HAPPEN. Ajv is not resolvable from the app, the working directory or the gate package, so lib/Settings/connections.json was not validated. Run npm ci, or install ajv next to the gates. See ${_cdc_log}."
+                ;;
+            0|1)
+                if ! _helper_finished "${_cdc_log}" '^\[connections-declaration\] checked [0-9]+ declaration'; then
+                    # A CRASH IS NOT A FINDING. An uncaught exception in node
+                    # also exits 1, so the terminal line is the only proof.
+                    _cdc_why=$(head -3 "${_cdc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                    _skip 116 "connections-declaration" wiring "check_connections_declaration.js exited ${_cdc_rc} without its terminal 'checked N declaration file(s)' line, so it did not finish and lib/Settings/connections.json is UNVERIFIED by this run. Checker output: ${_cdc_why:-<empty>}. See ${_cdc_log}."
+                elif [ "${_cdc_rc}" -eq 0 ]; then
+                    _pass 116 "connections-declaration"
+                else
+                    grep -E '^FAIL ' "${_cdc_log}" 2>/dev/null | sed 's/^/  /'
+                    _cdc_n=$(grep -cE '^FAIL ' "${_cdc_log}" 2>/dev/null || true)
+                    case "${_cdc_n}" in ''|*[!0-9]*) _cdc_n=1 ;; esac
+                    if [ "${HYDRA_GATE_CONNECTIONS_DECLARATION_BLOCKING:-0}" = "1" ]; then
+                        _fail 116 "connections-declaration" "${_cdc_n} finding(s) in lib/Settings/connections.json. Integriq refuses or mislinks a declaration like this, and the app's connections page shows nothing about why. See ${_cdc_log}"
+                    else
+                        _warn 116 "connections-declaration" "${_cdc_n} finding(s) in lib/Settings/connections.json. Integriq refuses or mislinks a declaration like this, and the app's connections page shows nothing about why. Report-only: set HYDRA_GATE_CONNECTIONS_DECLARATION_BLOCKING=1 for this repo to make it block. See ${_cdc_log}"
+                    fi
+                fi
+                ;;
+            *)
+                _cdc_why=$(head -3 "${_cdc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                _skip 116 "connections-declaration" wiring "check_connections_declaration.js exited ${_cdc_rc} without a verdict, so lib/Settings/connections.json is UNVERIFIED by this run. Checker output: ${_cdc_why:-<empty>}. See ${_cdc_log}."
+                ;;
+        esac
+    fi
+else
+    _skip 116 "connections-declaration" na "this app ships no lib/Settings/connections.json, so it declares no connections to check."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was

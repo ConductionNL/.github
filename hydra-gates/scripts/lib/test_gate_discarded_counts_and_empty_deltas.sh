@@ -851,10 +851,17 @@ fi
 #                          for a different reason than it started: the
 #                          remainder needs exclusions, not repoints. Per-repo
 #                          opt-in: HYDRA_GATE_STALE_FLEET_APP_ID_BLOCKING=1.
+#   116  connections-declaration hydra#668. A NEW gate over a NEW file
+#                          (lib/Settings/connections.json, hydra#667 design
+#                          D2), advisory under the fleet rule that a new gate
+#                          ships as a warning. Measured 2026-09-14: dossiq is
+#                          the only core app shipping the file, with 0 findings.
+#                          Per-repo opt-in:
+#                          HYDRA_GATE_CONNECTIONS_DECLARATION_BLOCKING=1.
 #
 # All of them are worked down per app and flipped back individually; the
 # findings print on every run either way, so none is hidden.
-_ADVISORY_ALLOWED_GATES="7 19 46 112 113 114 115"
+_ADVISORY_ALLOWED_GATES="7 19 46 112 113 114 115 116"
 
 _runner_src="${GF_PKG_ROOT}/scripts/run-hydra-gates.sh"
 _warn_gates="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_runner_src}" \
