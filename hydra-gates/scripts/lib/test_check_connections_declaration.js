@@ -148,6 +148,21 @@ const findings = (out) => out.split('\n').filter((l) => l.startsWith('FAIL '))
 	assert(r.status === 0 && findings(r.stdout).length === 0, `amended: jsonPath, simulatedValues and reportedOnly validate (got ${r.status}: ${r.stdout.trim()})`)
 }
 
+// --- ARM 1c: hydra#676 lets a requiredConfig entry look inside JSON ---------------
+{
+	const withObject = JSON.parse(JSON.stringify(CLEAN))
+	withObject.connections.push(
+		{ key: 'eol-feed', title: 'EOL feed', requiredConfig: ['integration.brp.mode', { configKey: 'eolSync', jsonPath: 'enabled' }] },
+	)
+	const r = run(makeApp('required-object', { declaration: withObject }))
+	assert(r.status === 0 && findings(r.stdout).length === 0, `required object: {configKey, jsonPath} and a dotted key validate (got ${r.status}: ${r.stdout.trim()})`)
+
+	const halfObject = JSON.parse(JSON.stringify(CLEAN))
+	halfObject.connections.push({ key: 'eol-feed', title: 'EOL feed', requiredConfig: [{ configKey: 'eolSync' }] })
+	const bad = run(makeApp('required-object-bad', { declaration: halfObject }))
+	assert(bad.status === 1 && findings(bad.stdout).some((l) => l.includes('/connections/5/requiredConfig/0')), `required object: an entry without jsonPath is refused (got ${bad.status}: ${bad.stdout.trim()})`)
+}
+
 // --- ARM 2: rule 1, the schema --------------------------------------------------
 {
 	const bad = JSON.parse(JSON.stringify(CLEAN))
