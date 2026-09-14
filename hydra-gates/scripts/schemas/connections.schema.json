@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://conduction.nl/schemas/integriq/connections.schema.json",
-  "$comment": "Vendored for gate-116 (connections-declaration) from ConductionNL/integriq lib/Settings/connections.schema.json at commit 605a87792a062ebbd38e05e8f598597fcf8a94c4 (integriq#1996 amended by #2010, development). Integriq owns this file. To update it, copy the file again and change the commit here and in SOURCE_COMMIT in scripts/lib/check_connections_declaration.js.",
+  "$comment": "Vendored for gate-116 (connections-declaration) from ConductionNL/integriq lib/Settings/connections.schema.json at commit a93665880f7f552d8280b84a1f5ce402507c4466 (integriq#1996 amended by #2010 and #2022, development). Integriq owns this file. To update it, copy the file again and change the commit here and in SOURCE_COMMIT in scripts/lib/check_connections_declaration.js.",
   "title": "Connection declarations",
   "description": "The shape of lib/Settings/connections.json. An app lists its outside connections here, and integriq turns each entry into one connection row. Contract: hydra openspec/changes/connection-registry/design.md, section D2. Integriq's runtime check is lib/Service/ConnectionDeclarationValidator.php, which mirrors this file rule for rule.",
   "type": "object",
@@ -62,10 +62,36 @@
         },
         "requiredConfig": {
           "type": "array",
-          "description": "App-config keys of the declaring app. All non-empty means the settings are saved.",
+          "description": "Settings of the declaring app that must all be filled. Each entry is an app-config key, always read as the whole key even when it contains dots, or {configKey, jsonPath} to read one value inside a JSON setting. An empty string, false, 0, null or a missing path reads as not filled.",
           "items": {
-            "type": "string",
-            "minLength": 1
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "An app-config key of the declaring app."
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "configKey",
+                  "jsonPath"
+                ],
+                "description": "One value inside a JSON setting.",
+                "properties": {
+                  "configKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "App-config key that holds the JSON object."
+                  },
+                  "jsonPath": {
+                    "type": "string",
+                    "pattern": "^[^.]+(\\.[^.]+)*$",
+                    "description": "Dot path to the value, such as enabled or sync.enabled."
+                  }
+                }
+              }
+            ]
           }
         },
         "adapter": {
