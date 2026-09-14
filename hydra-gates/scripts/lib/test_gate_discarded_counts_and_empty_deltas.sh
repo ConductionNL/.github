@@ -854,7 +854,8 @@ fi
 #   116  connections-declaration hydra#668. A NEW gate over a NEW file
 #                          (lib/Settings/connections.json, hydra#667 design
 #                          D2), advisory under the fleet rule that a new gate
-#                          ships as a warning. Two apps ship the file today.
+#                          ships as a warning. Measured 2026-09-14: dossiq is
+#                          the only core app shipping the file, with 0 findings.
 #                          Per-repo opt-in:
 #                          HYDRA_GATE_CONNECTIONS_DECLARATION_BLOCKING=1.
 #

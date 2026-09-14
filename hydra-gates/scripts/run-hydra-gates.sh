@@ -12920,9 +12920,10 @@ fi
 #
 # WARNING, NOT BLOCKING. The package resolves at @main for all 21 core apps,
 # so a new gate lands fleet-wide the minute it merges, and the fleet rule is
-# that a new gate ships as a warning. Two apps ship the file today (integriq
-# and dossiq). HYDRA_GATE_CONNECTIONS_DECLARATION_BLOCKING=1 makes it block per
-# repo.
+# that a new gate ships as a warning. Measured 2026-09-14 on `development` of
+# the 21 core apps: dossiq is the only one shipping the file, and it passes
+# (0 findings). HYDRA_GATE_CONNECTIONS_DECLARATION_BLOCKING=1 makes it block
+# per repo.
 #
 # FAIL-CLOSED ON TOOLING, the gate-22 convention: a missing checker, a missing
 # `node`, an unreadable vendored schema, or an unresolvable Ajv is a FAIL that
