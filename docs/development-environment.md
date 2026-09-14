@@ -15,7 +15,7 @@ Shared Docker Compose setup for all ConductionNL Nextcloud app development. The 
   This is not only for coverage reports. `phpunit.xml` sets `failOnRisky` and
   `beStrictAboutCoverageMetadata`, and **both are inert without a driver**. A
   test that executes a class its `@covers` block does not name is risky, and
-  risky is exit 1 — in CI, where a driver is loaded. Without one locally the
+  risky is exit 1 in CI, where a driver is loaded. Without one locally the
   check cannot fire, `composer check:strict` passes, and the suite prints
   `OK, but there were issues!`, which reads like a pass to anyone looking at
   the summary line instead of the exit code.
