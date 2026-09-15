@@ -8,14 +8,23 @@
 //   good/   → assembles, structurally validates (when Ajv is resolvable),
 //             and cross-resolves: checker exit 0, summary "passed", exactly
 //             ONE warn-severity finding (the open-modal registry WARN) and
-//             ZERO error findings — warnings never set the exit code.
+//             ZERO error findings — warnings never set the exit code. Also
+//             carries good/lib/Service/RoleService.php (fix-dead-role-gates):
+//             a role resolver + one visibleIf.user.primaryRole gate + one
+//             literal isInGroup() call, all resolving cleanly — zero
+//             role-resolvable / group-declared findings either.
 //   broken/ → checker exit 1, summary "failed", EXACTLY one error finding
 //             per seeded defect class (menu-route, action-target open-page,
 //             slug-resolution zaakafhandelapp-shape, deeplink-route,
 //             removals-invariant) — none missed, none extra — plus the
-//             open-modal WARN; and the ASSEMBLED manifest fails
-//             check_manifest.js on the fragment-introduced `layout[]`
-//             violation (structural stage, Ajv path only).
+//             open-modal WARN and one advisory WARN each for role-resolvable
+//             and group-declared; and the
+//             ASSEMBLED manifest fails check_manifest.js on the
+//             fragment-introduced `layout[]` violation (structural stage,
+//             Ajv path only). broken/lib/Service/RoleService.php seeds one
+//             role-resolvable defect (a visibleIf literal, "auditor", the
+//             resolver never returns) and one group-declared defect (a
+//             literal isInGroup() call naming a group nothing declares).
 //
 // THE FIXTURES ARE PART OF THIS TEST. Until 2026-08-04 this file referenced
 // ../test-fixtures/effective-manifest/{good,broken}/ — a directory that had
@@ -57,10 +66,12 @@ const VALIDATOR = path.join(LIB, 'check_manifest.js')
 		'good/src/manifest.d/20-settings.json',
 		'good/src/menu-layout.json',
 		'good/lib/Settings/items-register.json',
+		'good/lib/Service/RoleService.php',
 		'broken/src/manifest.json',
 		'broken/src/manifest.d/10-besluiten.json',
 		'broken/src/menu-layout.json',
 		'broken/lib/Settings/zaken-register.json',
+		'broken/lib/Service/RoleService.php',
 		'registry-wired/src/manifest.json',
 		'registry-wired/src/registry.js',
 		'registry-orphan/src/manifest.json',
@@ -144,7 +155,40 @@ function parseReport(stdout) {
 	assert(errors.length === 0, 'good: zero error findings')
 	assert(warns.length === 1 && warns[0].check === 'action-target', 'good: exactly one WARN (open-modal registry not statically checkable)')
 	assert(/^at .*: WARN /m.test(check.stderr), 'good: WARN reported as "at <path>: WARN …" on stderr')
+	assert(rep.findings.filter((f) => f.check === 'role-resolvable').length === 0,
+		"good: zero role-resolvable findings — reports-entry's [\"admin\",\"viewer\"] gate resolves against RoleService.php's producible set")
+	assert(rep.findings.filter((f) => f.check === 'group-declared').length === 0,
+		"good: zero group-declared findings — RoleService.php's isInGroup($uid, 'viewers') resolves against items-register.json's authorization block")
 	fs.rmSync(path.dirname(tmp), { recursive: true, force: true })
+}
+
+// --- a register JSON that declares no register, reading another app's register ---
+// keepiq#706: keepiq ships a register JSON with no registers and its Integrations
+// page reads integriq's app_connection. That schema is not statically knowable
+// from keepiq, so it is a WARN, never a FAIL keepiq could not fix.
+{
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-test-'))
+	const app = path.join(root, 'no-registers')
+	fs.cpSync(path.join(FIX, 'good'), app, { recursive: true })
+	for (const f of fs.readdirSync(path.join(app, 'lib', 'Settings'))) {
+		if (/register.*\.json$/.test(f)) fs.rmSync(path.join(app, 'lib', 'Settings', f))
+	}
+	fs.writeFileSync(path.join(app, 'lib', 'Settings', 'empty_register.json'),
+		JSON.stringify({ openapi: '3.0.0', info: { title: 'empty', version: '1.0.0' }, components: { schemas: {} } }))
+	const manifestPath = path.join(app, 'src', 'manifest.json')
+	const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+	manifest.pages.push({ id: 'Connections', route: '/connections', type: 'index', title: 'Integrations', config: { register: 'integriq', schema: 'app_connection' } })
+	fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
+
+	const tmp = path.join(root, 'effective.json')
+	run([BUILDER, '--app-dir', app, '--out', tmp])
+	const check = run([CHECKER, '--app-dir', app, '--manifest', tmp])
+	const rep = parseReport(check.stdout)
+	const slugErrors = rep.findings.filter((f) => f.check === 'slug-resolution' && f.severity === 'error')
+	const slugWarns = rep.findings.filter((f) => f.check === 'slug-resolution' && f.severity === 'warn')
+	assert(slugErrors.length === 0 && slugWarns.some((f) => f.message.includes("'integriq'")),
+		`no registers declared: a cross-app register reads as a WARN, not a FAIL (errors: ${slugErrors.map((f) => f.message).join(' | ') || 'none'})`)
+	fs.rmSync(root, { recursive: true, force: true })
 }
 
 // --- broken fixture ------------------------------------------------------------
@@ -180,8 +224,22 @@ function parseReport(stdout) {
 	assert(byCheck('removals-invariant').length === 1
 		&& byCheck('removals-invariant')[0].message.includes("'cases-index'"),
 	'broken: exactly one removals-invariant error (orphaned route cases-index, ADR-044)')
-	assert(errors.length === 5, `broken: exactly 5 error findings — none missed, none extra (got ${errors.length})`)
-	assert(warns.length === 1 && warns[0].check === 'action-target', 'broken: the open-modal WARN present, warn severity')
+	// role-resolvable and group-declared are ADVISORY while their findings are
+	// measured across the fleet: each seeded defect must be REPORTED, as a WARN,
+	// and must NOT add an error or change the exit code.
+	const warnsFor = (name) => warns.filter((f) => f.check === name)
+	assert(warnsFor('role-resolvable').length === 1
+		&& warnsFor('role-resolvable')[0].message.includes("'zaken-index-entry'")
+		&& warnsFor('role-resolvable')[0].message.includes("'auditor'"),
+	'broken: exactly one role-resolvable WARN (zaken-index-entry names "auditor", which RoleService.php never returns)')
+	assert(warnsFor('group-declared').length === 1
+		&& warnsFor('group-declared')[0].message.includes("'undeclared-auditors'"),
+	'broken: exactly one group-declared WARN (isInGroup names a group nothing declares)')
+	assert(byCheck('role-resolvable').length === 0 && byCheck('group-declared').length === 0,
+		'broken: role-resolvable and group-declared add NO error-severity finding (advisory)')
+	assert(errors.length === 5, `broken: exactly 5 error findings, none missed, none extra (got ${errors.length})`)
+	assert(warnsFor('action-target').length === 1, 'broken: the open-modal WARN present, warn severity')
+	assert(warns.length === 3, `broken: exactly 3 WARN findings (open-modal, role-resolvable, group-declared) (got ${warns.length})`)
 	fs.rmSync(path.dirname(tmp), { recursive: true, force: true })
 }
 

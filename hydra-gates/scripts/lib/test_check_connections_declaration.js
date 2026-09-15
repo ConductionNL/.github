@@ -136,6 +136,49 @@ const findings = (out) => out.split('\n').filter((l) => l.startsWith('FAIL '))
 	assert(/^\[connections-declaration\] checked 1 declaration file\(s\), 0 finding\(s\)$/m.test(r.stdout), 'clean: the terminal checked line is printed')
 }
 
+// --- ARM 1b: the fields hydra#673 added are clean, not "additional properties" ---
+{
+	const amended = JSON.parse(JSON.stringify(CLEAN))
+	amended.connections.push(
+		{ key: 'email', title: 'Email', adapter: { configKey: 'email_transport_type', simulatedValues: ['', 'null'] } },
+		{ key: 'llm', title: 'Language model', adapter: { configKey: 'llm', jsonPath: 'chat.provider', simulatedValues: ['none'] } },
+		{ key: 'cti', title: 'Telephony', reportedOnly: true },
+	)
+	const r = run(makeApp('amended', { declaration: amended }))
+	assert(r.status === 0 && findings(r.stdout).length === 0, `amended: jsonPath, simulatedValues and reportedOnly validate (got ${r.status}: ${r.stdout.trim()})`)
+}
+
+// --- ARM 1c: hydra#676 lets a requiredConfig entry look inside JSON ---------------
+{
+	const withObject = JSON.parse(JSON.stringify(CLEAN))
+	withObject.connections.push(
+		{ key: 'eol-feed', title: 'EOL feed', requiredConfig: ['integration.brp.mode', { configKey: 'eolSync', jsonPath: 'enabled' }] },
+	)
+	const r = run(makeApp('required-object', { declaration: withObject }))
+	assert(r.status === 0 && findings(r.stdout).length === 0, `required object: {configKey, jsonPath} and a dotted key validate (got ${r.status}: ${r.stdout.trim()})`)
+
+	const halfObject = JSON.parse(JSON.stringify(CLEAN))
+	halfObject.connections.push({ key: 'eol-feed', title: 'EOL feed', requiredConfig: [{ configKey: 'eolSync' }] })
+	const bad = run(makeApp('required-object-bad', { declaration: halfObject }))
+	assert(bad.status === 1 && findings(bad.stdout).some((l) => l.includes('/connections/5/requiredConfig/0')), `required object: an entry without jsonPath is refused (got ${bad.status}: ${bad.stdout.trim()})`)
+}
+
+// --- ARM 1d: hydra#677 adds a switch and a disabled message ----------------------
+{
+	const withSwitch = JSON.parse(JSON.stringify(CLEAN))
+	withSwitch.connections.push(
+		{ key: 'hibp', title: 'Breach check', switch: { configKey: 'breach_check_enabled' }, disabledMessage: 'An admin switched the breach check off.' },
+		{ key: 'geo-db', title: 'Visitor geography', switch: { configKey: 'traffic', jsonPath: 'geo.provider', offValues: ['none'] } },
+	)
+	const r = run(makeApp('switch', { declaration: withSwitch }))
+	assert(r.status === 0 && findings(r.stdout).length === 0, `switch: switch and disabledMessage validate (got ${r.status}: ${r.stdout.trim()})`)
+
+	const noKey = JSON.parse(JSON.stringify(CLEAN))
+	noKey.connections.push({ key: 'hibp', title: 'Breach check', switch: { offValues: ['off'] } })
+	const bad = run(makeApp('switch-bad', { declaration: noKey }))
+	assert(bad.status === 1 && findings(bad.stdout).some((l) => l.includes('/connections/5/switch')), `switch: a switch without configKey is refused (got ${bad.status}: ${bad.stdout.trim()})`)
+}
+
 // --- ARM 2: rule 1, the schema --------------------------------------------------
 {
 	const bad = JSON.parse(JSON.stringify(CLEAN))
