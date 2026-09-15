@@ -114,6 +114,38 @@ The previous `local-mods.patch` mechanism is gone — the merge replaces it. If 
 
 ---
 
+## Evals measure quality, not cost
+
+An eval suite answers "is the skill still good?". It does not answer "what does the
+skill cost to run?" — and a change that makes a skill cheaper can quietly make it
+worse, which is exactly the failure an eval exists to catch.
+
+Treat the two as a pair. `review-pr` carries the reference implementation:
+
+```bash
+# cost, from real runs — reads Claude Code's own transcripts
+python3 .claude/skills/<skill>/scripts/skill-metrics.py record --skill <skill>
+python3 .claude/skills/<skill>/scripts/skill-metrics.py report --skill <skill>
+
+# cost of an EDIT, without running the skill at all
+python3 .claude/skills/<skill>/scripts/skill-metrics.py footprint --skill-dir .claude/skills/<skill>
+```
+
+The meter reads `attributionSkill`, which Claude Code writes on every assistant
+message, so it measures rather than estimates. It does **not** measure sub-agent
+internals — sub-agents write no local transcript — and it records agent count, model
+and tool-result volume as proxies instead of inventing a figure.
+
+**The rule: never accept a cost reduction without re-running the evals.** Record the
+cost delta and the eval pass rate in the same commit message, so a later reader can
+see both halves of the trade.
+
+⚠️ **`timing.json` in `workspace/` is not a cost baseline.** In the `review-pr` suite
+several of these files are byte-identical across *different* evals — hand-entered, not
+measured. Use the metrics store for cost; use the eval workspace for quality.
+
+See `hydra/.claude/skills/review-pr/references/metrics.md` for the full method.
+
 ## `baseline_score` — Regression Detection
 
 Even running evals manually (no CI), `baseline_score` is useful: it's the with-skill pass rate from the most recent successful eval run, recorded in `evals/evals.json` next to `last_validated`. When you re-run evals later, compare the new pass rate against `baseline_score`:

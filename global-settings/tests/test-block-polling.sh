@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016,SC2088 # literal $VAR / ~ tokens are intentional test fixtures fed to the hook as data
 # test-block-polling.sh — synthetic test harness for block-polling.sh.
 #
 # Feeds PreToolUse envelopes to the hook and asserts exit 2 (deny) or 0 (allow).

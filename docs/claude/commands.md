@@ -202,15 +202,48 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 
 **What it does:**
 
-1. **Detects re-reviews** — checks if anything has changed since your last review; skips if not
-2. **Classifies sensitivity** — auto-detects auth/RBAC/CI code and recommends Strict mode
-3. **Asks strictness** — Quick, Standard, Thorough, or Strict
-4. **Analyzes the diff** — runs in parallel sub-agents for batch mode; looks for bugs, null-safety issues, SQL parity, test coverage gaps, and more
-5. **Posts inline comments** — one finding per comment, severity marked with 🔴/🟡/🟢; never bundles multiple findings in one comment
-6. **Offers local testing (optional)** — when the PR touches frontend or backend code, asks whether to verify the changes locally; locates or clones the target repo, checks Docker is running (starts it or asks the user to), maps detected layers to applicable `/test-*` skills, builds a test plan, gets your approval, then executes — any new issues join the existing findings before the verdict
-7. **Checks CI** — blocks APPROVE if required CI checks are failing
-8. **Submits formal review** — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings)
-9. **Resolves addressed threads** — replies "✅ Resolved in {sha}" to previously raised comments now fixed, and marks threads closed
+1. **Checks batch scope first** — when given several PRs, detects whether one PR's head already contains another's commits (a retargeted stacked branch) and asks how to scope before staging anything. Reads `baseRefName` from the API, never the PR body, which goes stale the moment a branch is retargeted
+2. **Classifies each PR into a lane** — `settled` / `delta` / `full`, before any diff, gate, guide, clone or sub-agent runs. See *Lanes* below
+3. **Classifies sensitivity** — auto-detects auth/RBAC/CI code and recommends Strict mode
+4. **Asks strictness** — Quick, Standard, Thorough, or Strict. Always asked; never auto-selected
+5. **Consumes CI instead of repeating it** — when the repo's own gate job is green on *exactly* the PR's head SHA, that is taken as the evidence. A red gate check still gets a local run
+6. **Analyzes the diff** — parallel sub-agents in batch mode; Quick/delta PRs from one repo may share a single agent (max 4). Sub-agents work to a stated tool-call and report-length budget per strictness mode
+7. **Posts inline comments** — one finding per comment, severity marked with 🔴/🟡/🟢; never bundles multiple findings in one comment
+8. **Offers local testing (optional)** — when the PR touches frontend or backend code, asks whether to verify the changes locally; locates or clones the target repo, checks Docker is running (starts it or asks the user to), maps detected layers to applicable `/test-*` skills, builds a test plan, gets your approval, then executes — any new issues join the existing findings before the verdict
+9. **Checks CI** — blocks APPROVE if required CI checks are failing
+10. **Submits formal review** — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings)
+11. **Handles prior threads by author** — resolves threads *you* opened that are now addressed; on a co-reviewer's thread it posts an acknowledgment reply and leaves the thread for its author to close. Resolving someone else's comment misrepresents their agreement
+12. **Records what the run cost** — one line appended to `~/.claude/metrics/skill-runs.jsonl`, outside any repo. See *Measuring cost* below
+
+**Lanes** — decided per PR before any expensive step:
+
+| Lane | When | What runs |
+| ---- | ---- | --------- |
+| `settled` | Merged/closed **and** no commits since your last review | Nothing. One row in the summary table, nothing posted. A merged PR already carrying your APPROVE never gets a second one |
+| `delta` | Re-review with new commits, or a non-open PR that moved | Analysis scoped to `compare(lastReviewedSha, headSha)` — not the full PR diff |
+| `full` | Open PR you have not reviewed before | The whole pipeline |
+
+The lane is why a third review round costs a fraction of the first: the rest of the PR was already reviewed, and re-reading it is what made every round cost the same.
+
+**Measuring cost:**
+
+```bash
+# what a run cost (after the review; --prs makes batches comparable)
+python3 .claude/skills/review-pr/scripts/skill-metrics.py record --skill review-pr --prs 3 --mode Standard
+
+# compare runs, grouped by the skill's git SHA
+python3 .claude/skills/review-pr/scripts/skill-metrics.py report --skill review-pr
+
+# measure a skill EDIT without running a review at all
+python3 .claude/skills/review-pr/scripts/skill-metrics.py footprint
+
+# reconstruct past runs from transcripts already on disk
+python3 .claude/skills/review-pr/scripts/skill-metrics.py baseline --skill review-pr --all-projects
+```
+
+Claude Code tags every assistant message with `attributionSkill`, so the runtime meter reads real usage rather than estimating it. Sub-agent-internal tokens are **not** measured — sub-agents write no local transcript — so the meter records agent count, model and tool-result volume as proxies instead of inventing a number. Method and caveats: [hydra/.claude/skills/review-pr/references/metrics.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/review-pr/references/metrics.md).
+
+The measurement data lives outside the repo on purpose (per machine, per operator, churns every run). The tooling is in the repo; the measurements are not.
 
 **Model:** Requires Sonnet or Opus — stops immediately on Haiku. Batch mode lets you choose the model for parallel analysis agents (Sonnet default, Opus for security-sensitive batches).
 

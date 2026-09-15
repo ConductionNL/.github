@@ -78,13 +78,23 @@ _out="${_tmp}/run.txt"
 (
     cd "${_app}" || exit 1
     # HYDRA_GATE_PUSH_BEFORE deliberately unset — this is the unresolvable case.
+    # GITHUB_EVENT_NAME=push is what makes it a PUSH whose tip is unresolvable,
+    # rather than a caller who simply passed a --base equal to HEAD. The runner
+    # distinguishes the two deliberately (see run-hydra-gates.sh, "the fallback
+    # is now reserved for the situation it was written for"), and only the push
+    # gets the full-tree fallback. Without this variable the test was asserting
+    # #183's guarantee against a context that never triggers it.
     unset HYDRA_GATE_PUSH_BEFORE
-    HYDRA_GATE_LOG_DIR="${_logs}" bash "${_runner}" \
+    GITHUB_EVENT_NAME=push HYDRA_GATE_LOG_DIR="${_logs}" bash "${_runner}" \
         --scope-to-diff --base development . > "${_out}" 2>&1
 )
 _rc=$?
 
-_lines=$(grep -cE '^\[gate-[0-9]+\]' "${_out}" 2>/dev/null || echo 0)
+# `grep -c` already prints 0 when it matches nothing AND exits 1, so a
+# `|| echo 0` appends a SECOND zero and `[ "0\n0" -gt 0 ]` dies with
+# "integer expression expected" — the assertion below then never ran.
+_lines=$(grep -cE '^\[gate-[0-9]+\]' "${_out}" 2>/dev/null || true)
+_lines=${_lines:-0}
 
 if [ "${_rc}" -eq 99 ]; then
     _bad "the runner exited 99 on a mainline push — it gated nothing (#183)"
@@ -136,6 +146,40 @@ if grep -q 'FULL-TREE AUDIT' "${_out2}"; then
     _bad "a resolvable base was overridden by the full-tree fallback — scoping is now unusable"
 else
     _ok "a resolvable base is still scoped narrowly (the fallback did not swallow it)"
+fi
+
+# THE OTHER HALF OF THE SAME DECISION. The full-tree fallback is reserved for a
+# push whose previous tip is unresolvable. With NO push context at all, a --base
+# that equals HEAD is a caller mistake with two honest readings, and the runner
+# refuses rather than silently auditing everything. That refusal is deliberate
+# and was previously untested — so removing it would have turned this file green
+# by widening the fallback, which is the failure this whole suite exists to catch.
+_out3="${_tmp}/run3.txt"
+_logs3="${_tmp}/logs3"
+mkdir -p "${_logs3}"
+(
+    cd "${_app}" || exit 1
+    unset HYDRA_GATE_PUSH_BEFORE
+    unset GITHUB_EVENT_NAME
+    HYDRA_GATE_LOG_DIR="${_logs3}" bash "${_runner}" \
+        --scope-to-diff --base development . > "${_out3}" 2>&1
+)
+_rc3=$?
+# 99 alone is not enough: the runner exits 99 for setup failures too (no git, no
+# app dir, unreadable tree), so asserting only the code would keep this green if
+# the refusal were deleted and something else broke instead. Require the refusal
+# to NAME itself.
+if [ "${_rc3}" -eq 99 ] && grep -q "resolves to HEAD" "${_out3}"; then
+    _ok "no push context + base == HEAD is refused (99) and says why, not silently widened"
+elif [ "${_rc3}" -eq 99 ]; then
+    _bad "exited 99 without the refusal message — that is a setup failure wearing the refusal's exit code"
+else
+    _bad "base == HEAD with no push context exited ${_rc3} — the refusal is gone, and a caller mistake now reads as a full audit"
+fi
+if grep -q 'FULL-TREE AUDIT' "${_out3}"; then
+    _bad "the refusal path still fell back to a full-tree audit — the two cases are no longer distinguished"
+else
+    _ok "the refusal names the mistake instead of substituting an audit nobody asked for"
 fi
 
 echo
