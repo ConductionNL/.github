@@ -163,6 +163,22 @@ const findings = (out) => out.split('\n').filter((l) => l.startsWith('FAIL '))
 	assert(bad.status === 1 && findings(bad.stdout).some((l) => l.includes('/connections/5/requiredConfig/0')), `required object: an entry without jsonPath is refused (got ${bad.status}: ${bad.stdout.trim()})`)
 }
 
+// --- ARM 1d: hydra#677 adds a switch and a disabled message ----------------------
+{
+	const withSwitch = JSON.parse(JSON.stringify(CLEAN))
+	withSwitch.connections.push(
+		{ key: 'hibp', title: 'Breach check', switch: { configKey: 'breach_check_enabled' }, disabledMessage: 'An admin switched the breach check off.' },
+		{ key: 'geo-db', title: 'Visitor geography', switch: { configKey: 'traffic', jsonPath: 'geo.provider', offValues: ['none'] } },
+	)
+	const r = run(makeApp('switch', { declaration: withSwitch }))
+	assert(r.status === 0 && findings(r.stdout).length === 0, `switch: switch and disabledMessage validate (got ${r.status}: ${r.stdout.trim()})`)
+
+	const noKey = JSON.parse(JSON.stringify(CLEAN))
+	noKey.connections.push({ key: 'hibp', title: 'Breach check', switch: { offValues: ['off'] } })
+	const bad = run(makeApp('switch-bad', { declaration: noKey }))
+	assert(bad.status === 1 && findings(bad.stdout).some((l) => l.includes('/connections/5/switch')), `switch: a switch without configKey is refused (got ${bad.status}: ${bad.stdout.trim()})`)
+}
+
 // --- ARM 2: rule 1, the schema --------------------------------------------------
 {
 	const bad = JSON.parse(JSON.stringify(CLEAN))
