@@ -165,8 +165,14 @@ mkdir -p "${_logs3}"
         --scope-to-diff --base development . > "${_out3}" 2>&1
 )
 _rc3=$?
-if [ "${_rc3}" -eq 99 ]; then
-    _ok "no push context + base == HEAD is refused (99), not silently widened"
+# 99 alone is not enough: the runner exits 99 for setup failures too (no git, no
+# app dir, unreadable tree), so asserting only the code would keep this green if
+# the refusal were deleted and something else broke instead. Require the refusal
+# to NAME itself.
+if [ "${_rc3}" -eq 99 ] && grep -q "resolves to HEAD" "${_out3}"; then
+    _ok "no push context + base == HEAD is refused (99) and says why, not silently widened"
+elif [ "${_rc3}" -eq 99 ]; then
+    _bad "exited 99 without the refusal message — that is a setup failure wearing the refusal's exit code"
 else
     _bad "base == HEAD with no push context exited ${_rc3} — the refusal is gone, and a caller mistake now reads as a full audit"
 fi
