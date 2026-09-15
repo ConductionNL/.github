@@ -241,7 +241,7 @@ python3 .claude/skills/review-pr/scripts/skill-metrics.py footprint
 python3 .claude/skills/review-pr/scripts/skill-metrics.py baseline --skill review-pr --all-projects
 ```
 
-Claude Code tags every assistant message with `attributionSkill`, so the runtime meter reads real usage rather than estimating it. Sub-agent-internal tokens are **not** measured — sub-agents write no local transcript — so the meter records agent count, model and tool-result volume as proxies instead of inventing a number. Method and caveats: `hydra/.claude/skills/review-pr/references/metrics.md`.
+Claude Code tags every assistant message with `attributionSkill`, so the runtime meter reads real usage rather than estimating it. Sub-agent-internal tokens are **not** measured — sub-agents write no local transcript — so the meter records agent count, model and tool-result volume as proxies instead of inventing a number. Method and caveats: [hydra/.claude/skills/review-pr/references/metrics.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/review-pr/references/metrics.md).
 
 The measurement data lives outside the repo on purpose (per machine, per operator, churns every run). The tooling is in the repo; the measurements are not.
 
