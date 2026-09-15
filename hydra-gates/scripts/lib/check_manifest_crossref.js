@@ -1142,9 +1142,12 @@ function main() {
 		const ctx = p.context ? ` (widget '${p.context}')` : ''
 		if (!hasRegisterJson) {
 			warn('slug-resolution', p.ptr, `(register '${p.register}', schema '${p.schema}') cannot be resolved — no lib/Settings/*register*.json in repo (runtime-bound registers)${ctx}`)
-		} else if (declared.registers.size > 0 && !declared.registers.has(p.register.toLowerCase())) {
+		} else if (!declared.registers.has(p.register.toLowerCase())) {
 			// Reference targets a register this app does not declare (a
 			// cross-app register) — its schema set is not statically knowable.
+			// This holds when the app declares no register at all, too: keepiq
+			// ships a register JSON with no registers and reads integriq's
+			// app_connection, and a FAIL there could not be fixed in keepiq.
 			warn('slug-resolution', p.ptr, `register '${p.register}' is not declared in this app's register JSON — schema '${p.schema}' not statically resolvable${ctx}`)
 		} else {
 			fail('slug-resolution', p.ptr, `schema '${p.schema}' (register '${p.register}') is not declared in lib/Settings/*register*.json${ctx}`)

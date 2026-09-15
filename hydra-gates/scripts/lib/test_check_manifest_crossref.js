@@ -162,6 +162,35 @@ function parseReport(stdout) {
 	fs.rmSync(path.dirname(tmp), { recursive: true, force: true })
 }
 
+// --- a register JSON that declares no register, reading another app's register ---
+// keepiq#706: keepiq ships a register JSON with no registers and its Integrations
+// page reads integriq's app_connection. That schema is not statically knowable
+// from keepiq, so it is a WARN, never a FAIL keepiq could not fix.
+{
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-test-'))
+	const app = path.join(root, 'no-registers')
+	fs.cpSync(path.join(FIX, 'good'), app, { recursive: true })
+	for (const f of fs.readdirSync(path.join(app, 'lib', 'Settings'))) {
+		if (/register.*\.json$/.test(f)) fs.rmSync(path.join(app, 'lib', 'Settings', f))
+	}
+	fs.writeFileSync(path.join(app, 'lib', 'Settings', 'empty_register.json'),
+		JSON.stringify({ openapi: '3.0.0', info: { title: 'empty', version: '1.0.0' }, components: { schemas: {} } }))
+	const manifestPath = path.join(app, 'src', 'manifest.json')
+	const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+	manifest.pages.push({ id: 'Connections', route: '/connections', type: 'index', title: 'Integrations', config: { register: 'integriq', schema: 'app_connection' } })
+	fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
+
+	const tmp = path.join(root, 'effective.json')
+	run([BUILDER, '--app-dir', app, '--out', tmp])
+	const check = run([CHECKER, '--app-dir', app, '--manifest', tmp])
+	const rep = parseReport(check.stdout)
+	const slugErrors = rep.findings.filter((f) => f.check === 'slug-resolution' && f.severity === 'error')
+	const slugWarns = rep.findings.filter((f) => f.check === 'slug-resolution' && f.severity === 'warn')
+	assert(slugErrors.length === 0 && slugWarns.some((f) => f.message.includes("'integriq'")),
+		`no registers declared: a cross-app register reads as a WARN, not a FAIL (errors: ${slugErrors.map((f) => f.message).join(' | ') || 'none'})`)
+	fs.rmSync(root, { recursive: true, force: true })
+}
+
 // --- broken fixture ------------------------------------------------------------
 {
 	const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-test-')), 'broken-effective.json')
