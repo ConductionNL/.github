@@ -217,6 +217,10 @@
 				}
 			}
 		},
+		"personalisation": {
+			"$ref": "#/$defs/personalisation",
+			"description": "App defaults for the per-user options CnPersonalPreferences renders, and the switch that turns the personal layer off instance wide."
+		},
 		"nav": {
 			"type": "object",
 			"additionalProperties": false,
@@ -710,6 +714,65 @@
 							}
 						}
 					}
+				}
+			}
+		},
+		"splitView": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "The list and one open record, side by side. Declared on an index page; buildManifestRoutes() then emits a second route <route>/split/:id under the name <pageId>__split, carrying meta.cnSplitOf so CnPageRenderer still resolves it to this page and the list never unmounts.",
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"default": false,
+					"description": "Whether opening a row opens it beside the list. False renders exactly as today: a full page list and a full page detail."
+				},
+				"breakpoint": {
+					"type": "integer",
+					"minimum": 320,
+					"maximum": 2560,
+					"default": 1024,
+					"description": "Viewport width in pixels below which the split address renders the full detail page instead of the pane, so a link sent from a laptop opens on a phone."
+				},
+				"paneWidth": {
+					"type": "string",
+					"description": "CSS width of the detail pane, e.g. '38%' or '520px'. Defaults to '42%'."
+				}
+			}
+		},
+		"personalisation": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "The app's own defaults for the per-user options CnPersonalPreferences renders. The values a person chooses are stored in their Nextcloud preferences, never here; this block is only the bottom layer of the app default, administered value, personal value order.",
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Whether the personal layer applies at all. An administrator setting this false collapses it: the options render as unavailable with the reason, rather than being silently ignored."
+				},
+				"disabledReason": {
+					"type": "string",
+					"description": "What to tell a person when the personal layer is off. Shown beside the unavailable options."
+				},
+				"landingPage": {
+					"type": "string",
+					"description": "Page id the app opens on when a person has chosen nothing."
+				},
+				"dateDisplay": {
+					"type": "string",
+					"enum": ["absolute", "relative"],
+					"default": "absolute",
+					"description": "How dates read by default. A relative date always carries its absolute date in the accessible name and the tooltip, because a term read as '3 dagen geleden' hides the date the term runs to."
+				},
+				"rememberLastView": {
+					"type": "boolean",
+					"default": false,
+					"description": "Whether each list reopens in the view mode that person last used on it."
+				},
+				"pinnedMenu": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "Menu ids pinned to the top of the navigation by default. A person may reorder and repin their own."
 				}
 			}
 		},
@@ -1633,7 +1696,7 @@
 			"type": "object",
 			"required": ["id", "label"],
 			"additionalProperties": false,
-			"description": "A typed page action with a discriminator field. The type field determines behaviour: handler (registry function), open-modal (modal by id), open-page (named route), navigate (URL), object-op (declarative OpenRegister mutation via useObjectStore), export (opens the shared CnMassExportDialog export launcher), open-form (schema-driven create dialog — CnActionButtons), refresh (bumps the cn:page:refresh signal), api-call (POST/PUT an app endpoint + toast + refresh — CnActionButtons/dispatchAction), toggle (two-way state button — CnActionButtons only, NOT dispatchable). When type is omitted, it defaults to 'handler' (back-compatibility with v1.3.0 action declarations). The Ajv instance is compiled with useDefaults: true so the default is applied during validation.",
+			"description": "A typed page action with a discriminator field. The type field determines behaviour: handler (registry function), open-modal (modal by id), open-page (named route), navigate (URL), object-op (declarative OpenRegister mutation via useObjectStore), export (opens the shared CnMassExportDialog export launcher), open-form (schema-driven create dialog — CnActionButtons), refresh (bumps the cn:page:refresh signal), api-call (POST/PUT an app endpoint + toast + refresh — CnActionButtons/dispatchAction), agent (run a governed hermiq agent), run-node (invoke one OpenRegister flow node against the page object, config collected via a dialog sourced from the node's own declared form — CnActionButtons/dispatchAction, or-flow-run-node; distinct from the UNRELATED setup-wizard step type of a similar name, 'run-action'), toggle (two-way state button — CnActionButtons only, NOT dispatchable). When type is omitted, it defaults to 'handler' (back-compatibility with v1.3.0 action declarations). The Ajv instance is compiled with useDefaults: true so the default is applied during validation.",
 			"properties": {
 				"id": {
 					"type": "string",
@@ -1645,7 +1708,7 @@
 				},
 				"type": {
 					"type": "string",
-					"enum": ["handler", "open-modal", "open-page", "navigate", "object-op", "export", "open-form", "refresh", "api-call", "agent", "toggle"],
+					"enum": ["handler", "open-modal", "open-page", "navigate", "object-op", "export", "open-form", "refresh", "api-call", "agent", "run-node", "toggle"],
 					"default": "handler",
 					"description": "Action behaviour discriminator. Defaults to 'handler' when omitted (back-compat with v1.3.0). handler: calls a registry function; open-modal: opens a modal by target id; open-page: navigates to a named route; navigate: navigates to a URL; object-op: dispatches a declarative mutation (patch | delete | create) of an OpenRegister object via the shared object store; export: opens the shared CnMassExportDialog export launcher configured via entities[]/formats[] — the confirm payload ({format, entity?}) routes to the action's `handler` in the manifest actions map (the app's export service does the download). open-form (#91 Wave 3): CnActionButtons opens a schema-driven create dialog (CnAdvancedFormDialog) for the action's register/schema, saves + toasts + refreshes + optionally navigates to onSuccessRoute. refresh (#91 Wave 3): bumps the page-level cn:page:refresh event-bus signal so every endpoint-bound widget refetches. api-call (#91 Wave 3): POST/PUT the token-interpolated url with payload/params (JSON body, payload resolves @-tokens recursively at any depth) + success/error toast + auto page-refresh (unless refresh:false); confirm gating is surface-consumed intent (object-op precedent); download:true requests a binary blob and triggers a browser file download instead (auto-refresh defaults to OFF in that mode). agent (hermiq#41): run a governed hermiq agent against the page object — POSTs { register, schema, objectId, resultField?, skill?, prompt? } to /apps/hermiq/api/agents/{agent}/run-on-object (object-RBAC-scoped; dispatches the governed AgentRunRequestedEvent). register/schema/objectId default to the page's @register/@schema/@objectId object context. A first-class companion to api-call (which remains the fallback for a bespoke body); hermiq is NOT hard-required — an app-level 404 surfaces a graceful 'agent runtime unavailable' toast. toggle (#91 Wave 3): a stateful two-way state button rendered by CnActionButtons (GET stateSource on mount, optimistic write on click) — NOT dispatchable through dispatchAction. object-op declares mutation INTENT only — authority is enforced server-side by OpenRegister RBAC (ADR-022/ADR-023); authorization-shaped fields have no client-side effect and are not accepted here."
 				},
@@ -1790,16 +1853,28 @@
 				},
 				"successMessage": {
 					"type": "string",
-					"description": "api-call / open-form / agent / toggle: pre-translated success toast text (a library default applies when absent; agent default 'Run queued')."
+					"description": "api-call / open-form / agent / run-node / toggle: pre-translated success toast text (a library default applies when absent; agent default 'Run queued')."
 				},
 				"errorMessage": {
 					"type": "string",
-					"description": "api-call / agent / toggle: pre-translated error toast text (falls back to the server's error/message, then a library default; an agent 404 with no structured body toasts 'agent runtime unavailable' instead)."
+					"description": "api-call / agent / run-node / toggle: pre-translated error toast text (falls back to the server's error/message, then a library default; an agent 404 with no structured body toasts 'agent runtime unavailable' instead)."
 				},
 				"refresh": {
 					"type": "boolean",
 					"default": true,
-					"description": "api-call / agent / toggle: bump the page-level cn:page:refresh signal after a successful call (default true; set false to skip). EXCEPTION: for an api-call with download:true the default flips to false — a file download normally shouldn't also force-refetch every widget — set refresh:true explicitly to opt back in."
+					"description": "api-call / agent / run-node / toggle: bump the page-level cn:page:refresh signal after a successful call (default true; set false to skip). EXCEPTION: for an api-call with download:true the default flips to false — a file download normally shouldn't also force-refetch every widget — set refresh:true explicitly to opt back in."
+				},
+				"flowId": {
+					"type": "string",
+					"description": "run-node only (REQUIRED): the published flow's uuid whose node this action invokes. A node's config and eligibility are properties of the flow it lives in (RN-3, OpenRegister's or-flow-run-node), so the manifest names which flow's instance to call rather than a bare node type — two flows could each carry the same node TYPE wired differently."
+				},
+				"nodeId": {
+					"type": "string",
+					"description": "run-node only (REQUIRED): the id of the node, within flowId's published graph, to invoke directly. POSTed to /api/flows/{flowId}/nodes/{nodeId}/run — refused (404) unless that node type has opted in to direct invocation (IFlowDirectlyInvokable)."
+				},
+				"subject": {
+					"type": "string",
+					"description": "run-node only: the subject object the node acts on and is authorized against (OpenRegister object-RBAC — the caller needs update permission on it; the flow's own flow.run right is deliberately NOT what gates this). Typically @objectId; may interpolate the shared @-token grammar. An unresolved required token BLOCKS the call, matching agent's objectId."
 				},
 				"agent": {
 					"type": "string",
@@ -1823,11 +1898,11 @@
 				},
 				"register": {
 					"type": "string",
-					"description": "open-form / agent: OpenRegister register slug. open-form: the create dialog's schema register. agent: the run-on-object register — both fall back to the page object context's @register."
+					"description": "open-form / agent / run-node: OpenRegister register slug. open-form: the create dialog's schema register. agent / run-node: the register the subject object belongs to — falls back to the page object context's @register."
 				},
 				"schema": {
 					"type": "string",
-					"description": "open-form / agent: OpenRegister schema slug. open-form: the create dialog fetches this schema and saves the new object against it. agent: the run-on-object schema — falls back to the page object context's @schema."
+					"description": "open-form / agent / run-node: OpenRegister schema slug. open-form: the create dialog fetches this schema and saves the new object against it. agent / run-node: the schema the subject object belongs to — falls back to the page object context's @schema."
 				},
 				"onSuccessRoute": {
 					"description": "open-form only: optional post-save navigation target (#91). A bare route NAME (string) navigates with the saved object's id merged into the route params under `id` (harmless when the route has no `:id` segment — backward compatible). The object form { name, paramField?, objectParam? } names the id param (`paramField`, default `id`) and, when `objectParam` is set, also passes the whole saved object under that param key (for a props:true detail route to render without a refetch). The id is read from saved.id, then saved.uuid, then saved['@self'].id.",
@@ -1867,7 +1942,16 @@
 				},
 				"variant": {
 					"type": "string",
-					"description": "CnActionButtons button variant (e.g. 'primary', 'secondary', 'error'). 'error' also styles the confirm dialog as destructive."
+					"description": "CnActionButtons button variant (e.g. 'primary', 'secondary', 'error'). 'error' also styles the confirm dialog as destructive. A 'primary' action is never collapsed into CnActionButtons' overflow menu and consumes none of its `inline` slots: NcActions paints all of its inline actions with one shared variant, so a lone primary among them is not expressible."
+				},
+				"children": {
+					"type": "array",
+					"description": "Sub-actions, rendered by CnActionButtons as this action's OWN chevron dropdown beside its button — deliberately not folded into the page's single overflow menu, because NcActions cannot nest and a list that grows per record (app versions, say) would swamp it. Children take the same shape as any action, `visibleWhen` included, and an action carrying them consumes none of the `inline` slots. The parent itself still renders its own button beside the chevron (`type` defaults to 'handler' when omitted), so a parent meant only to group its children needs a `handler` that does something meaningful — an untyped, handler-less parent renders a button that dispatches to nothing.",
+					"items": { "$ref": "#/$defs/action" }
+				},
+				"childrenLabel": {
+					"type": "string",
+					"description": "i18n key naming the `children` dropdown. Falls back to the parent action's own label, so the chevron is never announced unlabelled."
 				},
 				"visibleWhen": {
 					"$ref": "#/$defs/visibleWhen",
@@ -1914,6 +1998,14 @@
 						"required": ["type"]
 					},
 					"then": { "required": ["writeUrl"] }
+				},
+				{
+					"description": "run-node actions MUST declare which flow and which node within it (RN-3, or-flow-run-node) — a node's config and eligibility are properties of the flow it lives in, so neither can be inferred.",
+					"if": {
+						"properties": { "type": { "const": "run-node" } },
+						"required": ["type"]
+					},
+					"then": { "required": ["flowId", "nodeId"] }
 				}
 			]
 		},
@@ -2219,7 +2311,26 @@
 				},
 				"primaryAction": {
 					"$ref": "#/$defs/primaryAction",
-					"description": "Active-page-scoped primary action rendered as an NcAppNavigationNew button above the menu list when the current route resolves to this page. Page-scoped declarations win over nav.primaryAction."
+					"description": "Active-page-scoped primary action rendered as an NcAppNavigationNew button above the menu list when the current route resolves to this page. Page-scoped declarations win over nav.primaryAction. Also the target of the detail page's skip link: a keyboard user tabs in, follows the link and lands on this action."
+				},
+				"splitView": {
+					"$ref": "#/$defs/splitView",
+					"description": "Index pages only. Opens a row beside the list rather than instead of it, at the sibling route <route>/split/:id that buildManifestRoutes() emits. Refused on any other page type."
+				},
+				"manualOrder": {
+					"type": "boolean",
+					"default": false,
+					"description": "Index pages only. Lets a person drag the rows into an order of their own, held per user and per list in their Nextcloud preferences and never written onto the records. Refused on any other page type."
+				},
+				"tabInAddress": {
+					"type": "boolean",
+					"default": false,
+					"description": "Detail pages only. Puts the active tab in the address as ?_tab=<id> so a link points at a tab of a record rather than at the record. The underscore prefix keeps it out of resolveQueryFilters(), which reads every other query key as a filter. Refused on any other page type."
+				},
+				"referencePreview": {
+					"type": "boolean",
+					"default": false,
+					"description": "Lets a reference on this page show a summary of the record it points at, on focus and on hover, without leaving the page. Rendered by CnReferencePreview."
 				},
 				"widgets": {
 					"type": "array",
@@ -2478,7 +2589,7 @@
 						},
 						"headerActions": {
 							"type": "array",
-							"description": "Page-level header actions rendered inside CnActionsBar's overflow dropdown (between the built-in Refresh action and the `#action-items` slot). Same shape as the row-level `actions[]` ($ref action), but handlers receive NO row context — they are page-level. Reserved ids (`refresh`, `import`, `export`, `copy`, `delete`) are dropped at render time to avoid shadowing built-ins. See manifest-icons-and-page-actions for the dispatch semantics.",
+							"description": "Page-level header actions rendered inside CnActionsBar's overflow dropdown (between the built-in Refresh action and the `#action-items` slot). On a `type:'detail'` page the same entries render in the header's Actions menu, above the Request-a-feature / Report-a-bug / Documentation trio. Same shape as the row-level `actions[]` ($ref action), but handlers receive NO row context — they are page-level. Reserved ids (`refresh`, `import`, `export`, `copy`, `delete`) are dropped at render time to avoid shadowing built-ins. See manifest-icons-and-page-actions for the dispatch semantics.",
 							"items": { "$ref": "#/$defs/action" }
 						},
 						"bulkActions": {
@@ -2505,6 +2616,18 @@
 						"showEditAction": {
 							"type": "boolean",
 							"description": "type='detail': show the header Edit button that opens the record's schema form. Set automatically by CnPageRenderer for every schema-bound detail page; declare false to make a detail page read-only. Maps to CnDetailPage `showEditAction`."
+						},
+						"formSize": {
+							"type": "string",
+							"enum": ["small", "normal", "large"],
+							"default": "normal",
+							"description": "NcDialog size for the page's built-in Add/Edit form dialog (type='index' and type='detail'). A manifest `open-form` header action has always been able to ask for `large`; the built-in dialog could not, so the same app could have a roomy create form on one surface and a cramped one on another. Maps to CnIndexPage / CnDetailPage `formSize`."
+						},
+						"formColumns": {
+							"type": "integer",
+							"enum": [1, 2],
+							"default": 1,
+							"description": "How many columns the page's built-in Add/Edit form flows its fields into. Pair 2 with formSize 'large', or the two columns are merely two narrow ones. CnFormDialog collapses back to one column below 700px, and a textarea or JSON editor spans both columns regardless. Maps to CnIndexPage / CnDetailPage `formColumns`."
 						},
 						"actionToggles": {
 							"type": "object",
@@ -2591,6 +2714,35 @@
 				}
 			},
 			"allOf": [
+				{
+					"description": "splitView and manualOrder are index-page mechanics. splitView emits a second route beside an index route and mounts the detail pane inside CnIndexPage; manualOrder holds a per-user row order for a list. Declared on a detail, dashboard or custom page they would validate and then do nothing, which is the failure this branch refuses out loud (case-page-and-list-as-a-place).",
+					"if": {
+						"not": {
+							"properties": { "type": { "const": "index" } },
+							"required": ["type"]
+						}
+					},
+					"then": {
+						"not": {
+							"anyOf": [
+								{ "required": ["splitView"] },
+								{ "required": ["manualOrder"] }
+							]
+						}
+					}
+				},
+				{
+					"description": "tabInAddress puts the active tab of a record in the address. Only a detail page has a record and a tab strip, so the key is refused elsewhere rather than validating into a no-op (case-page-and-list-as-a-place).",
+					"if": {
+						"not": {
+							"properties": { "type": { "const": "detail" } },
+							"required": ["type"]
+						}
+					},
+					"then": {
+						"not": { "required": ["tabInAddress"] }
+					}
+				},
 				{
 					"description": "type='wiki' (CnWikiPage) renders one manifest-declared markdown article. It MUST declare both config.register and config.schema as non-empty strings so the manifest stays the source of truth for which OpenRegister register/schema the article body is read from (manifest-wiki-page-type).",
 					"if": {
