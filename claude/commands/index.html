@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.10.1">
 <title data-rh="true">Command Reference | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" property="og:image" content="https://docs.conduction.nl/img/og-conduction.png"><meta data-rh="true" name="twitter:image" content="https://docs.conduction.nl/img/og-conduction.png"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/claude/commands/"><meta data-rh="true" property="og:locale" content="en_GB"><meta data-rh="true" property="og:locale:alternate" content="nl_NL"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="twitter:site" content="@ConductionNL"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:type" content="website"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Command Reference | Conduction Docs"><meta data-rh="true" name="description" content="Complete reference for all commands available in the spec-driven development workflow. Commands are organized by domain — click through to the detailed reference for each area."><meta data-rh="true" property="og:description" content="Complete reference for all commands available in the spec-driven development workflow. Commands are organized by domain — click through to the detailed reference for each area."><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/claude/commands/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/commands/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/claude/commands/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/commands/" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Hydra","item":"https://docs.conduction.nl/hydra/"},{"@type":"ListItem","position":2,"name":"Using Hydra","item":"https://docs.conduction.nl/claude/"},{"@type":"ListItem","position":3,"name":"Command Reference","item":"https://docs.conduction.nl/claude/commands"}]}</script><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","@id":"https://docs.conduction.nl/claude/commands#article","mainEntityOfPage":"https://docs.conduction.nl/claude/commands","headline":"Command Reference","inLanguage":"en","publisher":{"@id":"https://www.conduction.nl/#org"},"description":"Complete reference for all commands available in the spec-driven development workflow. Commands are organized by domain — click through to the detailed reference for each area.","author":{"@type":"Organization","name":"Conduction","@id":"https://www.conduction.nl/#org"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://www.conduction.nl/#org","name":"Conduction B.V.","alternateName":"Conduction","url":"https://www.conduction.nl/","logo":"https://www.conduction.nl/img/brand/avatar-conduction-gold-on-white.svg","foundingDate":"2019","description":"Dutch open-source software company building EUPL-1.2 apps for the Nextcloud workspace.","address":{"@type":"PostalAddress","streetAddress":"Lauriergracht 14h","postalCode":"1016 RR","addressLocality":"Amsterdam","addressCountry":"NL"},"email":"info@conduction.nl","telephone":"+31-85-303-6840","taxID":"NL860784241B01","vatID":"NL860784241B01","identifier":{"@type":"PropertyValue","propertyID":"KvK","value":"76741850"},"sameAs":["https://github.com/ConductionNL","https://www.linkedin.com/company/conduction/"]}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://docs.conduction.nl/#website","url":"https://docs.conduction.nl/","name":"Conduction Docs","publisher":{"@id":"https://www.conduction.nl/#org"},"inLanguage":["en","nl"]}</script><link rel="stylesheet" href="/assets/css/styles.f2866016.css">
-<script src="/assets/js/runtime~main.91e973c5.js" defer="defer"></script>
+<script src="/assets/js/runtime~main.93033eae.js" defer="defer"></script>
 <script src="/assets/js/main.0cc1b472.js" defer="defer"></script>
 </head>
 <body>
@@ -371,16 +371,51 @@
 <table><thead><tr><th>Mode</th><th>Use when</th></tr></thead><tbody><tr><td><strong>Quick</strong></td><td>Hotfix or trivial change — check for obvious blockers only</td></tr><tr><td><strong>Standard</strong></td><td>Everyday feature PR — balanced depth</td></tr><tr><td><strong>Thorough</strong></td><td>Large or complex PR — full analysis</td></tr><tr><td><strong>Strict</strong></td><td>Security-sensitive code (auth, RBAC, CI) — maximum depth; auto-suggested when sensitive code is detected</td></tr></tbody></table>
 <p><strong>What it does:</strong></p>
 <ol>
-<li class=""><strong>Detects re-reviews</strong> — checks if anything has changed since your last review; skips if not</li>
+<li class=""><strong>Checks batch scope first</strong> — when given several PRs, detects whether one PR&#x27;s head already contains another&#x27;s commits (a retargeted stacked branch) and asks how to scope before staging anything. Reads <code>baseRefName</code> from the API, never the PR body, which goes stale the moment a branch is retargeted</li>
+<li class=""><strong>Classifies each PR into a lane</strong> — <code>settled</code> / <code>delta</code> / <code>full</code>, before any diff, gate, guide, clone or sub-agent runs. See <em>Lanes</em> below</li>
 <li class=""><strong>Classifies sensitivity</strong> — auto-detects auth/RBAC/CI code and recommends Strict mode</li>
-<li class=""><strong>Asks strictness</strong> — Quick, Standard, Thorough, or Strict</li>
-<li class=""><strong>Analyzes the diff</strong> — runs in parallel sub-agents for batch mode; looks for bugs, null-safety issues, SQL parity, test coverage gaps, and more</li>
+<li class=""><strong>Asks strictness</strong> — Quick, Standard, Thorough, or Strict. Always asked; never auto-selected</li>
+<li class=""><strong>Consumes CI instead of repeating it</strong> — when the repo&#x27;s own gate job is green on <em>exactly</em> the PR&#x27;s head SHA, that is taken as the evidence. A red gate check still gets a local run</li>
+<li class=""><strong>Analyzes the diff</strong> — parallel sub-agents in batch mode; Quick/delta PRs from one repo may share a single agent (max 4). Sub-agents work to a stated tool-call and report-length budget per strictness mode</li>
 <li class=""><strong>Posts inline comments</strong> — one finding per comment, severity marked with 🔴/🟡/🟢; never bundles multiple findings in one comment</li>
 <li class=""><strong>Offers local testing (optional)</strong> — when the PR touches frontend or backend code, asks whether to verify the changes locally; locates or clones the target repo, checks Docker is running (starts it or asks the user to), maps detected layers to applicable <code>/test-*</code> skills, builds a test plan, gets your approval, then executes — any new issues join the existing findings before the verdict</li>
 <li class=""><strong>Checks CI</strong> — blocks APPROVE if required CI checks are failing</li>
 <li class=""><strong>Submits formal review</strong> — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings)</li>
-<li class=""><strong>Resolves addressed threads</strong> — replies &quot;✅ Resolved in {sha}&quot; to previously raised comments now fixed, and marks threads closed</li>
+<li class=""><strong>Handles prior threads by author</strong> — resolves threads <em>you</em> opened that are now addressed; on a co-reviewer&#x27;s thread it posts an acknowledgment reply and leaves the thread for its author to close. Resolving someone else&#x27;s comment misrepresents their agreement</li>
+<li class=""><strong>Records what the run cost</strong> — one line appended to <code>~/.claude/metrics/skill-runs.jsonl</code>, outside any repo. See <em>Measuring cost</em> below</li>
 </ol>
+<p><strong>Lanes</strong> — decided per PR before any expensive step:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Lane</th><th>When</th><th>What runs</th></tr></thead><tbody><tr><td><code>settled</code></td><td>Merged/closed <strong>and</strong> no commits since your last review</td><td>Nothing. One row in the summary table, nothing posted. A merged PR already carrying your APPROVE never gets a second one</td></tr><tr><td><code>delta</code></td><td>Re-review with new commits, or a non-open PR that moved</td><td>Analysis scoped to <code>compare(lastReviewedSha, headSha)</code> — not the full PR diff</td></tr><tr><td><code>full</code></td><td>Open PR you have not reviewed before</td><td>The whole pipeline</td></tr></tbody></table>
+<p>The lane is why a third review round costs a fraction of the first: the rest of the PR was already reviewed, and re-reading it is what made every round cost the same.</p>
+<p><strong>Measuring cost:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain"># what a run cost (after the review; --prs makes batches comparable)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">python3 .claude/skills/review-pr/scripts/skill-metrics.py record --skill review-pr --prs 3 --mode Standard</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># compare runs, grouped by the skill&#x27;s git SHA</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">python3 .claude/skills/review-pr/scripts/skill-metrics.py report --skill review-pr</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># measure a skill EDIT without running a review at all</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">python3 .claude/skills/review-pr/scripts/skill-metrics.py footprint</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># reconstruct past runs from transcripts already on disk</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">python3 .claude/skills/review-pr/scripts/skill-metrics.py baseline --skill review-pr --all-projects</span><br></div></code></pre></div></div>
+<p>Claude Code tags every assistant message with <code>attributionSkill</code>, so the runtime meter reads real usage rather than estimating it. Sub-agent-internal tokens are <strong>not</strong> measured — sub-agents write no local transcript — so the meter records agent count, model and tool-result volume as proxies instead of inventing a number. Method and caveats: <a href="https://github.com/ConductionNL/hydra/blob/main/.claude/skills/review-pr/references/metrics.md" target="_blank" rel="noopener noreferrer" class="">hydra/.claude/skills/review-pr/references/metrics.md</a>.</p>
+<p>The measurement data lives outside the repo on purpose (per machine, per operator, churns every run). The tooling is in the repo; the measurements are not.</p>
 <p><strong>Model:</strong> Requires Sonnet or Opus — stops immediately on Haiku. Batch mode lets you choose the model for parallel analysis agents (Sonnet default, Opus for security-sensitive batches).</p>
 <p><strong>Requires:</strong> at least one platform CLI authenticated — <code>gh auth login</code> (GitHub, primary), <code>glab auth login</code> (GitLab, alternative), or <code>tea login add</code> (Gitea/Forgejo, non-Conduction repos only)</p>
 <hr>
@@ -414,7 +449,7 @@
 <p><strong>Heuristic thresholds</strong> (tunable via <code>learnings.md</code>):</p>
 <ul>
 <li class="">5 days + 10 comments → suggest follow-up</li>
-<li class="">14 days → upgrade to <code>needs-followup</code></li>
+<li class="">14 days  → upgrade to <code>needs-followup</code></li>
 <li class="">24-hour comment window → offer Edit instead of New</li>
 </ul>
 <p><strong>Tracking issues:</strong> uses dynamic discovery via the per-platform search (REST <code>/repos/issues/search</code> on Codeberg, <code>gh search</code> on GitHub, <code>glab api /issues</code> on GitLab) plus an optional saved mapping at <code>$HOME/.claude/report-out/tracking-issues.json</code>. The mapping file is per-user and not committed to any repo.</p>
