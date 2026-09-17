@@ -391,6 +391,45 @@ Brief explanation of what the skill does.
 - What to check before destructive actions
 ```
 
+### Step Numbering
+
+A skill's steps are read top to bottom and executed in that order. The numbering must say
+the same thing the order does.
+
+**The rule:**
+
+1. Steps are numbered with **whole numbers**, starting at `1`, ascending by one, with no
+   gaps — `Step 1`, `Step 2`, `Step 3`, … There is no `Step 0`.
+2. **Document order is execution order.** A step that runs later carries a higher number.
+   Never write "runs after Step 4, despite the number" — renumber instead.
+3. A **single letter** may follow the number (`Step 7a`) only where a step is genuinely a
+   sub-step of the one before it and the grouping helps the reader. Letters run `a`, `b`,
+   `c` with no gaps — a `Step 7b` without a `Step 7a` is a bug.
+4. **Nothing comes after the letter, and nothing else is ever appended.** No `Step 5c.5`,
+   no `Step 6.5`, no `Step 4a.2`. If a step does not fit the two forms `Step N` or
+   `Step Na`, it is its own whole-numbered step.
+5. The same rules apply to the internal steps of a `references/*.md` sub-procedure and to
+   ordered lists inside a step (no `3a.` wedged between `3.` and `4.`).
+
+**When you need to insert a step, renumber.** The fractional and lettered forms exist
+because inserting was cheaper than renumbering — that is exactly the trade this rule
+refuses. Renumbering is a mechanical find-and-replace; do it in one pass over `SKILL.md`,
+`references/`, `scripts/`, `evals/` and the learnings files so no pointer goes stale. Map
+every old number to its new one first, then apply the whole map in a single substitution —
+applying them one at a time re-maps numbers you already moved.
+
+**Why it matters:** the step numbers are the skill's addressing scheme. Every
+`see Step N` cross-reference, every learnings-index pointer (`→ SKILL.md Step 8`), every
+eval note and every reference-doc title resolves through them. When the sequence stops
+being sortable, a reader can no longer tell what has already run at any given point, and
+an agent following the skill loses the one cheap signal it has for "am I ahead of or
+behind this dependency?".
+
+**Observed:** `review-pr` had accumulated `Step 0`, `Step 0.5` after `Step 1`, `Step 1a`
+and `Step 2a` after `Step 2`, a `Step 5c.5`, a `Step 6.5b`, and a `Step 8b` with no
+`Step 8a` — 27 steps whose numbers no longer sorted into their execution order, plus a
+blockquote apologising for it. Renumbered to `Step 1`–`Step 27` on 2026-09-17.
+
 ### Frontmatter Rules
 
 - `name` must match the folder name exactly (e.g. folder `test-counsel` -> `name: test-counsel`)
