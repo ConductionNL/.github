@@ -9,6 +9,7 @@ Quick validation checklist before adding or reviewing a Claude Code skill. Organ
 - [ ] Folder name matches `name` in frontmatter and the slash command
 - [ ] `description` is action-oriented, third-person, under 250 characters, with specific trigger terms
 - [ ] Steps are numbered and self-contained
+- [ ] Step numbers are whole numbers from `1` upward, in execution order — no `Step 0`, no gaps, no fractions (`5c.5`), at most one trailing letter, and letters run `a`, `b`, `c` with no gaps ([writing-skills.md](writing-skills.md#step-numbering))
 - [ ] Guardrails define what the skill must NOT do
 - [ ] Destructive actions have explicit confirmation prompts
 - [ ] `SKILL.md` is under 500 lines — large blocks extracted to subfolders
