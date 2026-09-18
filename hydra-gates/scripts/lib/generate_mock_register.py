@@ -27,6 +27,12 @@ sample data, and that is the point: a demo dataset that reads like real records
 invites somebody to treat it as real. Apps that want curated, domain-true data
 for a headline schema override it — see `--keep`.
 
+It also does not sample a schema the app keeps about ITSELF. A schema whose
+rows the app writes as the record of an operation — the apps it has built,
+the exports it has run — says so with `"x-openregister-demo-data": false` (or
+a string reason) on its definition, and nothing is generated or demanded for
+it. See `_excluded_schemas`.
+
 USAGE
   generate-mock-register.py <app-dir> [--objects N] [--out FILE] [--check]
 
@@ -777,6 +783,59 @@ def _catalogue_schemas(app_dir: str) -> set[str]:
     return catalogues
 
 
+# ---------------------------------------------------------------------------
+# A CONTROL-PLANE SCHEMA HAS NOTHING TO SAMPLE, AND SAMPLING IT SHIPS RUBBLE
+# ---------------------------------------------------------------------------
+#
+# A catalogue is exempt because its rows already exist. This is the opposite
+# case: rows that must NOT exist, because the app writes them itself as the
+# record of an operation, and a generated one records an operation that never
+# happened or points at an object that was never created.
+#
+# buildiq is the measured case. Its register holds the schemas buildiq keeps
+# about itself — the apps it has built, their versions, the slug→app route
+# index, the template store, the export jobs. Three generated objects per
+# schema put three apps in the Apps list and on the dashboard that CANNOT BE
+# OPENED: the matching `applicationVersion` rows carry
+# `application: "00000000-0000-4000-8000-000000000000"` (the placeholder a
+# `format: uuid` property gets) and a manifest with zero pages, so the detail
+# page renders empty and `/apps/buildiq/builder/<slug>/` never resolves. Three
+# more landed in the template store beside the four real built-ins and would
+# clone into an equally empty app, and three `export-job` rows appeared as
+# finished exports nobody ran. Found on 2026-09-18 while recording a demo, on
+# app `c5a2e155-432b-4ea8-a965-56661b991463`, slug `ccdc`.
+#
+# 🔴 EVERY ONE OF THOSE OBJECTS SATISFIES ITS SCHEMA. That is why `--check` was
+# green on the dataset that broke the demo: conformance is about the object's
+# shape, and nothing in a schema says whether its rows are content somebody
+# authors or bookkeeping the app writes. So the app states it, the same way a
+# catalogue does:
+#
+#     "Application": { "x-openregister-demo-data": false, ... }
+#
+# A string is accepted in place of `false` and is printed as the reason, so the
+# SKIP line says why rather than only that. `true` and absence both mean
+# "generate", which is what every schema in the fleet already does.
+def _excluded_schemas(app_dir: str) -> dict[str, str]:
+    """Schema names the app declares as carrying no demo data, and why.
+
+    Read from every non-mock descriptor, so a schema defined apart from the
+    file that declares its register is still seen.
+    """
+    excluded: dict[str, str] = {}
+    for _path, data in _component_files(app_dir):
+        block = _as_dict(data.get("components", {}).get("schemas"))
+        for name, sch in block.items():
+            if not isinstance(sch, dict):
+                continue
+            declared = sch.get("x-openregister-demo-data", True)
+            if declared is False:
+                excluded.setdefault(name, "the app declares x-openregister-demo-data: false")
+            elif isinstance(declared, str) and declared.strip():
+                excluded[name] = declared.strip()
+    return excluded
+
+
 def _descriptors(app_dir: str) -> list[tuple[str, dict]]:
     """The subset that DECLARES a register — the authority on register->schema.
 
@@ -912,6 +971,7 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
     _set_icon_scope(app_dir)
     decl_registers, owns, definitions = _register_schema_map(app_dir, app_id)
     catalogues = _catalogue_schemas(app_dir)
+    excluded = _excluded_schemas(app_dir)
 
     registers: dict[str, Any] = {}
     schemas: dict[str, Any] = {}
@@ -935,6 +995,13 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
             # A catalogue's rows are the app's own curated list; see
             # `_catalogue_schemas`. Generating more duplicates them at import.
             if sch_name in catalogues:
+                continue
+            # 🔴 BEFORE `keep`, DELIBERATELY. A schema that becomes excluded
+            # usually has objects in the descriptor already — they are the
+            # defect being removed. Carrying them because `--keep` was passed
+            # would leave regeneration unable to undo the thing it exists to
+            # undo, and `--keep` is how apps with curated data regenerate.
+            if sch_name in excluded:
                 continue
             sch = definitions[sch_name]
             schemas.setdefault(sch_name, _strip_code_refs(sch))
@@ -1328,6 +1395,7 @@ def check(app_dir: str, app_id: str, per_schema: int, only: set[str] | None = No
 
     checked = failures = 0
     catalogues = _catalogue_schemas(app_dir)
+    excluded = _excluded_schemas(app_dir)
     for reg_slug, sch_name in in_scope_pairs:
         sch = definitions.get(sch_name)
         checked += 1
@@ -1342,6 +1410,28 @@ def check(app_dir: str, app_id: str, per_schema: int, only: set[str] | None = No
                 f"and demo data would duplicate them at import (ADR-111 rule 1 does not apply)."
             )
             continue
+
+        # A SCHEMA THE APP EXCLUDES IS EXEMPT FROM THE COUNT — AND FORBIDDEN
+        # FROM CARRYING ONE. Only skipping it would leave the objects that are
+        # already there in place for ever, and those objects ARE the defect:
+        # a control-plane row nobody created. See `_excluded_schemas`.
+        if sch_name in excluded:
+            stale = have.get(key, 0)
+            if stale > 0:
+                failures += 1
+                print(
+                    f"FAIL {app_id}: register '{reg_slug}' schema '{sch_name}' declares "
+                    f"x-openregister-demo-data, so it must carry none — {stale} demo object(s) "
+                    f"are still in a mock descriptor. Regenerate with "
+                    f"`python3 vendor/conduction/hydra-gates/scripts/lib/generate_mock_register.py .`"
+                )
+                continue
+            print(
+                f"SKIP {app_id}: register '{reg_slug}' schema '{sch_name}' carries no demo "
+                f"data — {excluded[sch_name]} (ADR-111 rule 1 does not apply)."
+            )
+            continue
+
         count = have.get(key, 0)
         if count < per_schema:
             failures += 1
