@@ -35,6 +35,8 @@ arm that only ever sees input both versions handle proves nothing.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import sys
@@ -620,6 +622,199 @@ class MockDescriptorsAreNotInput(unittest.TestCase):
 
             self.assertIn("Employee", definitions)
             self.assertNotIn("GhostSchema", definitions)
+
+
+class ControlPlaneSchemasCarryNoDemoData(unittest.TestCase):
+    """A schema the app keeps about ITSELF must not be sampled.
+
+    buildiq's register holds the apps it has built, their versions and the
+    exports it has run. Three generated objects per schema put three apps in
+    the Apps list that cannot be opened — their `applicationVersion` rows point
+    at `00000000-0000-4000-8000-000000000000` and carry a manifest with no
+    pages, so the detail page renders empty.
+
+    🔴 EVERY ONE OF THOSE OBJECTS SATISFIED ITS SCHEMA, which is why `--check`
+    was green on the dataset that broke the demo. Conformance cannot tell
+    content from bookkeeping, so the app declares it.
+    """
+
+    def _app_with_control_plane(self, root: Path, marker) -> None:
+        _write(
+            root,
+            "lib/Settings/widget_register.json",
+            {
+                "x-openregister": {"type": "application", "app": "widget"},
+                "components": {
+                    "registers": {"widget": {"schemas": ["Application", "HelloMessage"]}},
+                    "schemas": {
+                        "Application": _schema(
+                            {"name": {"type": "string"}},
+                            slug="built-app",
+                            **{"x-openregister-demo-data": marker},
+                        ),
+                        "HelloMessage": _schema(
+                            {"message": {"type": "string"}}, slug="hello-message"
+                        ),
+                    },
+                },
+            },
+        )
+
+    def _schemas_generated(self, root: Path) -> set[str]:
+        built = gmr.build(str(root), "widget", 3, None)
+        return {obj["@self"]["schema"] for obj in built["components"]["objects"]}
+
+    def test_a_schema_declaring_false_gets_no_objects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_with_control_plane(root, False)
+
+            generated = self._schemas_generated(root)
+
+            # 🔴 THE ASSERTION THAT FAILS WITHOUT THE FEATURE: `built-app` was
+            # generated three times over, and those three rows are the defect.
+            self.assertNotIn("built-app", generated)
+            # And the control: the app's real content schema still generates,
+            # so an empty result cannot pass this arm by accident.
+            self.assertIn("hello-message", generated)
+
+    def test_a_string_is_accepted_in_place_of_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_with_control_plane(root, "buildiq writes these itself")
+
+            self.assertNotIn("built-app", self._schemas_generated(root))
+
+    def test_true_and_absence_both_still_generate(self):
+        """The control arm: the exclusion must not leak to ordinary schemas."""
+        for marker in (True, None):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                _app(root)
+                if marker is None:
+                    _write(
+                        root,
+                        "lib/Settings/widget_register.json",
+                        {
+                            "components": {
+                                "registers": {"widget": {"schemas": ["Application"]}},
+                                "schemas": {
+                                    "Application": _schema(
+                                        {"name": {"type": "string"}}, slug="built-app"
+                                    )
+                                },
+                            }
+                        },
+                    )
+                else:
+                    self._app_with_control_plane(root, marker)
+
+                self.assertIn("built-app", self._schemas_generated(root), f"marker={marker!r}")
+
+    def test_keep_does_not_carry_forward_the_objects_being_removed(self):
+        """`--keep` must not defeat the regeneration that removes them.
+
+        An app adopting the marker regenerates an existing descriptor, and the
+        objects it wants gone are exactly the ones `--keep` preserves.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_with_control_plane(root, False)
+
+            existing = {
+                "components": {
+                    "objects": [
+                        {
+                            "@self": {
+                                "register": "widget",
+                                "schema": "built-app",
+                                "slug": "built-app-voorbeeld-1",
+                            },
+                            "name": "Voorbeeld Name 1",
+                        }
+                    ]
+                }
+            }
+
+            built = gmr.build(str(root), "widget", 3, existing)
+            schemas = {obj["@self"]["schema"] for obj in built["components"]["objects"]}
+
+            self.assertNotIn("built-app", schemas)
+
+    def _check_output(self, root: Path) -> tuple[int, str]:
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            code = gmr.check(str(root), "widget", 3)
+        return code, buffer.getvalue()
+
+    def test_check_skips_an_excluded_schema_instead_of_demanding_three(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_with_control_plane(root, "buildiq writes these itself")
+            _write(
+                root,
+                "lib/Settings/widget_mock_register.json",
+                {
+                    "x-openregister": {"type": "mock", "app": "widget"},
+                    "components": {
+                        "objects": [
+                            {
+                                "@self": {
+                                    "register": "widget",
+                                    "schema": "hello-message",
+                                    "slug": f"hello-{index}",
+                                },
+                                "message": f"Voorbeeld Message {index}",
+                            }
+                            for index in range(3)
+                        ]
+                    },
+                },
+            )
+
+            code, output = self._check_output(root)
+
+            # 🔴 WITHOUT THE FEATURE this is a FAIL: "`Application` has 0 demo
+            # object(s), needs 3" — the gate demanding the very rows the app
+            # just removed, which is how a fix gets reverted.
+            self.assertEqual(code, 0, output)
+            self.assertIn("SKIP", output)
+            self.assertIn("buildiq writes these itself", output)
+
+    def test_check_fails_when_the_excluded_schema_still_carries_objects(self):
+        """Skipping alone would leave the broken rows in place for ever."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_with_control_plane(root, False)
+            _write(
+                root,
+                "lib/Settings/widget_mock_register.json",
+                {
+                    "x-openregister": {"type": "mock", "app": "widget"},
+                    "components": {
+                        "objects": [
+                            {
+                                "@self": {
+                                    "register": "widget",
+                                    "schema": "built-app",
+                                    "slug": "built-app-voorbeeld-1",
+                                },
+                                "name": "Voorbeeld Name 1",
+                            }
+                        ]
+                    },
+                },
+            )
+
+            code, output = self._check_output(root)
+
+            self.assertEqual(code, 1, output)
+            self.assertIn("must carry none", output)
 
 
 if __name__ == "__main__":
