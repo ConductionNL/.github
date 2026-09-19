@@ -1,0 +1,203 @@
+# Vendored manifest schema sync: keep hydra-gates/scripts/schemas/
+# app-manifest-v2.schema.json level with the copy @conduction/nextcloud-vue
+# publishes, and open a pull request the moment it is not.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHY THIS EXISTS: A VENDORED COPY WITH NO UPDATE PATH DRIFTS BY DEFAULT
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Gates 22 and 53 validate an app's manifest against the schema vendored HERE,
+# on purpose: the fleet's pinned @conduction/nextcloud-vue generations span a
+# wide range, and pinned-first meant "valid against whatever the app happened
+# to install". check_manifest.js says so in its own header.
+#
+# What was never decided is how the vendored copy CATCHES UP. Nothing watched
+# the registry, so the answer was "when somebody notices", and measured
+# 2026-09-19 nobody had for four minor versions:
+#
+#     vendored                2.33.0
+#     @conduction/nextcloud-vue 3.4.0 ships  2.37.0
+#
+# The cost is not abstract. dossiq adopted `savedViewPlaces`, a key the library
+# published and validates, `npm run check:manifest` passed with zero errors,
+# and gates 22 and 53 rejected the same file. Two instruments, opposite
+# verdicts, and `quality / Hydra Gates` is a required check on `development`,
+# so the app could not merge on a manifest that was correct. Filed as #785.
+#
+# An app cannot fix this. The schema is not in its repo. So the fix has to
+# live where the copy lives, which is here.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHY IT OPENS A PULL REQUEST AND DOES NOT PUSH TO main
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Because CI resolves these gates at `@main`. A push here reaches all 21 swept
+# apps the same minute, and a schema bump is only SAFE when it is additive.
+# Four minors were additive; the fifth need not be. A tightened `required`, a
+# narrowed enum or a new closed property would redden manifests that pass
+# today, and the first anyone would learn of it is a fleet of red PRs.
+#
+# So this workflow reports what moved and hands the judgement to a reviewer,
+# who can run the additive check the issue describes: diff the two schemas for
+# any constraint that got STRICTER, and validate every swept app's effective
+# manifest against both before merging.
+#
+# It never fails a run over drift. Drift is a fact about the registry, not a
+# defect in the pull request that happened to trigger the check, and a red
+# leg nobody caused is a red leg nobody reads.
+# ══════════════════════════════════════════════════════════════════════════
+
+name: Vendored manifest schema sync
+
+on:
+  schedule:
+    # Mondays 04:00 UTC, an hour BEFORE fleet-shared-dep-bump. An app that is
+    # about to be moved onto a newer nextcloud-vue should find the gate's
+    # schema already able to read what that release added.
+    #
+    # CRON IS UTC AND DOES NOT KNOW ABOUT SUMMER TIME. Nothing here needs a
+    # precise local hour.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would move, but open no pull request."
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: hydra-gates-schema-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: "Compare vendored schema against the published one"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Resolve both versions and diff
+        id: diff
+        env:
+          VENDORED: hydra-gates/scripts/schemas/app-manifest-v2.schema.json
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "${VENDORED}" ]; then
+            echo "::error::${VENDORED} is missing. There is nothing to keep in step, which is a bigger problem than drift."
+            exit 1
+          fi
+
+          LIB=$(npm view @conduction/nextcloud-vue version)
+          if [ -z "${LIB}" ]; then
+            echo "::error::Could not resolve @conduction/nextcloud-vue from the registry. Refusing to compare against a blank: every comparison below would read 'already current'."
+            exit 1
+          fi
+
+          npm pack "@conduction/nextcloud-vue@${LIB}" >/dev/null
+          tar xzf "conduction-nextcloud-vue-${LIB}.tgz"
+          PUBLISHED=package/src/schemas/app-manifest-v2.schema.json
+          if [ ! -f "${PUBLISHED}" ]; then
+            echo "::error::@conduction/nextcloud-vue ${LIB} does not ship src/schemas/app-manifest-v2.schema.json. The vendored copy has no source to follow any more, so this workflow is the thing that needs changing."
+            exit 1
+          fi
+
+          HAVE=$(node -p "require('./${VENDORED}').version || 'unset'")
+          WANT=$(node -p "require('./${PUBLISHED}').version || 'unset'")
+          echo "vendored=${HAVE}  published=${WANT}  (from @conduction/nextcloud-vue ${LIB})"
+
+          {
+            echo "have=${HAVE}"
+            echo "want=${WANT}"
+            echo "lib=${LIB}"
+          } >> "$GITHUB_OUTPUT"
+
+          if cmp -s "${VENDORED}" "${PUBLISHED}"; then
+            echo "drift=no" >> "$GITHUB_OUTPUT"
+            echo "The vendored schema is byte-identical to the published one at ${WANT}." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "drift=yes" >> "$GITHUB_OUTPUT"
+          cp "${VENDORED}" "${PUBLISHED}.was-vendored"
+          cp "${PUBLISHED}" "${VENDORED}"
+
+          # Name every constraint that got STRICTER. An additive diff cannot
+          # redden a manifest that passes today; a tightened one can, and the
+          # reviewer needs to know which of the two this is before merging to
+          # a branch the whole fleet resolves at @main. The differ exits 1 when
+          # it finds one, which must NOT end this run: reporting the tightening
+          # is the whole point, and the pull request is where it gets read.
+          node hydra-gates/scripts/lib/diff_schema_strictness.js \
+            "${PUBLISHED}.was-vendored" "${VENDORED}" > tightened.txt || true
+          cat tightened.txt
+
+      - name: Open the pull request
+        if: steps.diff.outputs.drift == 'yes' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAVE: ${{ steps.diff.outputs.have }}
+          WANT: ${{ steps.diff.outputs.want }}
+          LIB: ${{ steps.diff.outputs.lib }}
+        run: |
+          set -euo pipefail
+          BRANCH="chore/vendored-manifest-schema-${WANT}"
+
+          # `set -e` plus a grep that finds nothing would end the run here and
+          # report a green "nothing to do", so the count is read into a
+          # variable and compared, not piped into a test.
+          OPEN=$(gh pr list --head "${BRANCH}" --state open --json number --jq 'length')
+          if [ "${OPEN}" != "0" ]; then
+            echo "A pull request for ${BRANCH} is already open. Leaving it alone."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${BRANCH}"
+          git add hydra-gates/scripts/schemas/app-manifest-v2.schema.json
+          git commit -m "chore(hydra-gates): vendor manifest schema ${WANT}" \
+            -- hydra-gates/scripts/schemas/app-manifest-v2.schema.json
+          git push -u origin "${BRANCH}"
+
+          {
+            echo "The vendored manifest schema was at ${HAVE}. @conduction/nextcloud-vue ${LIB} ships ${WANT}."
+            echo
+            echo "Gates 22 and 53 validate every app's manifest against the vendored copy, so until this merges an app that adopts a key ${WANT} added is rejected by the gate while its own \`npm run check:manifest\` passes."
+            echo
+            echo "## Before merging"
+            echo
+            echo "CI resolves these gates at \`@main\`, so this reaches all 21 swept apps the minute it lands. Constraints that got stricter in this diff:"
+            echo
+            echo '```'
+            cat tightened.txt
+            echo '```'
+            echo
+            echo "\`none\` means the diff is additive and cannot redden a manifest that passes today. Anything else means it can, and the fleet's effective manifests need validating against both schemas first."
+            echo
+            echo "Opened by .github/workflows/hydra-gates-schema-sync.yml. See #785 for why the vendored copy needs a keeper."
+          } > pr-body.md
+
+          gh pr create --base main --head "${BRANCH}" \
+            --title "chore(hydra-gates): vendor manifest schema ${WANT}" \
+            --body-file pr-body.md
+
+      - name: Report
+        if: always()
+        env:
+          DRIFT: ${{ steps.diff.outputs.drift }}
+          HAVE: ${{ steps.diff.outputs.have }}
+          WANT: ${{ steps.diff.outputs.want }}
+        run: |
+          if [ "${DRIFT:-}" = "yes" ]; then
+            echo "::notice::Vendored manifest schema ${HAVE} is behind the published ${WANT}."
+          fi

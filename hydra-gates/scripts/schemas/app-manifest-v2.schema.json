@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.33.0",
+	"version": "2.37.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -437,6 +437,114 @@
 		}
 	},
 	"$defs": {
+		"rowIndicator": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": [
+				"field",
+				"text"
+			],
+			"description": "One declared state indicator on an index page's rows. Renders as an icon with a text alternative and a tooltip, never as colour alone.",
+			"properties": {
+				"id": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Stable id for this indicator, used as its test id and its render key. Defaults to `field`."
+				},
+				"field": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Dotted path on the row the condition reads."
+				},
+				"equals": {
+					"description": "The indicator applies when the field equals this value exactly."
+				},
+				"in": {
+					"type": "array",
+					"description": "The indicator applies when the field's value is one of these."
+				},
+				"icon": {
+					"type": "string",
+					"description": "CnIcon name (PascalCase). Defaults to InformationOutline."
+				},
+				"text": {
+					"type": "string",
+					"minLength": 1,
+					"description": "The text alternative, read out beside the icon. Required: an indicator without one does not render."
+				},
+				"tooltip": {
+					"type": "string",
+					"description": "Hover text. Defaults to `text`."
+				}
+			}
+		},
+		"folderSidebarScope": {
+			"type": "object",
+			"additionalProperties": true,
+			"description": "One folder in `config.folderSidebar.folders[]`, which doubles as a SCOPE: the three optional list-layout keys below let one index page show each folder the way that folder needs. Every other key (id, name, icon, ...) stays free-form, so an existing folder list validates unchanged. The page's `config.columns` still decides which columns this page HAS; a scope only decides which of them are shown, in what order, sorted by what and searched over what. A scope naming a column the page does not declare is refused by validateManifestV2, not silently rendered.",
+			"properties": {
+				"columns": {
+					"type": "array",
+					"description": "The columns this scope shows, in order. Same shapes as `config.columns`: a bare key string or a column object. Every key must be one the page's `config.columns` declares. Omit to show the page's own columns.",
+					"items": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "object",
+								"additionalProperties": true
+							}
+						]
+					}
+				},
+				"defaultSort": {
+					"description": "The sort the fetch carries while this scope is active. One `{ key, order }` entry or a list of them; `order` is 'asc' (default) or 'desc'. `field` is accepted in place of `key`, matching the CnIndexPage `defaultSort` prop.",
+					"oneOf": [
+						{
+							"$ref": "#/$defs/folderSidebarScopeSort"
+						},
+						{
+							"type": "array",
+							"items": {
+								"$ref": "#/$defs/folderSidebarScopeSort"
+							}
+						}
+					]
+				},
+				"searchFields": {
+					"type": "array",
+					"items": {
+						"type": "string",
+						"minLength": 1
+					},
+					"description": "The fields the search box searches over while this scope is active. Omit to search whatever the page searches by default."
+				}
+			}
+		},
+		"folderSidebarScopeSort": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "One sort entry for a `folderSidebar` scope. Name the column with `key` (manifest spelling) or `field` (the CnIndexPage prop spelling); an entry carrying neither is dropped rather than sent as an empty sort key.",
+			"properties": {
+				"key": {
+					"type": "string",
+					"minLength": 1
+				},
+				"field": {
+					"type": "string",
+					"minLength": 1
+				},
+				"order": {
+					"type": "string",
+					"enum": [
+						"asc",
+						"desc"
+					],
+					"default": "asc"
+				}
+			}
+		},
 		"supportButton": {
 			"type": "object",
 			"additionalProperties": false,
@@ -740,6 +848,189 @@
 				}
 			}
 		},
+		"savedViewPlaces": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "A saved view of this page is a place. buildManifestRoutes() emits <route>/<routeBase>/:viewId under the name <pageId>__view, the view's own presentation config decides how it opens, and a pinned view hangs under this page's navigation entry rather than beside it. Index pages only, and only meaningful alongside allowSavedViews: without the dropdown there is no view to be a place. Absent, the page keeps the dropdown and the ?view= query it has today.",
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"default": false,
+					"description": "Whether this page's saved views are places. False reads as a page that considered it and declined, and renders exactly as a page that never named the key."
+				},
+				"routeBase": {
+					"type": "string",
+					"pattern": "^[a-z0-9][a-z0-9-]*$",
+					"default": "views",
+					"description": "The path segment between the page's own route and the view id, so 'views' gives /cases/views/42. Lowercase and dash only, because it is a segment of an address a person reads and sends."
+				},
+				"navGroup": {
+					"type": "string",
+					"description": "The id of the navigation entry a pinned view hangs under. Omitted, it hangs under the entry that points at this page. A pinned view never becomes a top-level entry, so an app's navigation budget cannot be spent by a user pinning (ADR-097)."
+				},
+				"pinnedCap": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 20,
+					"default": 5,
+					"description": "How many pinned views the navigation renders under that entry. Past the cap the rest stay reachable from the page itself, so a person who pins twenty views gets a navigation that still reads (ADR-097)."
+				}
+			}
+		},
+		"savedViewTree": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "Saved views render as a tree rather than a flat list, carry labels, and may ship with the app. Two hundred personal views in one dropdown is the problem this solves. Index pages only, and only meaningful alongside allowSavedViews: without the dropdown there is no view to put in a tree. Absent, the page renders the flat dropdown it renders today. The view entity itself, its parent, its labels and its slug are OpenRegister's (saved-search-views); this key declares how this page presents them.",
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"default": false,
+					"description": "Whether this page renders its saved views as a tree. False reads as a page that considered it and declined, and renders exactly as a page that never named the key."
+				},
+				"maxDepth": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 5,
+					"default": 3,
+					"description": "How deep a parent chain may go. A bound rather than a taste: inheritance resolves by walking the chain, so an unbounded depth turns one render into an unbounded walk, and a person who can nest for ever will. Past the bound a save is refused naming the view, which is louder than a tree nobody can read."
+				},
+				"templates": {
+					"type": "array",
+					"description": "What a new view may start from. A template presets the columns, the sort and the export field set, and the person may change each. Declare none and Save current view means what it has always meant: the list as it stands.",
+					"items": {
+						"type": "object",
+						"additionalProperties": false,
+						"required": ["slug", "name"],
+						"properties": {
+							"slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+							"name": { "type": "string" },
+							"columns": { "type": "array", "items": { "type": "string" } },
+							"defaultSort": { "type": "string" },
+							"exportFields": { "type": "array", "items": { "type": "string" } }
+						}
+					}
+				},
+				"landingView": {
+					"type": "object",
+					"additionalProperties": false,
+					"description": "Which view a role opens this page on, as { role: slug }. A personal choice always wins and Reset returns here, so this is where somebody starts rather than where they are kept. A role's landing view changing mid-session applies on the next arrival: moving a reader's list out from under them is worse than a stale default.",
+					"patternProperties": {
+						"^[A-Za-z0-9_.-]+$": { "type": "string" }
+					}
+				},
+				"columnsPerRole": {
+					"type": "object",
+					"additionalProperties": false,
+					"description": "Which columns a role sees, as { role: [column] }. NARROWS index-columns-per-scope rather than replacing it: a role naming a column the scope does not offer gets nothing extra, because a per-role list that could add one would be a second, quieter way to put a field on screen the scope deliberately left off.",
+					"patternProperties": {
+						"^[A-Za-z0-9_.-]+$": { "type": "array", "items": { "type": "string" } }
+					}
+				},
+				"groupBy": {
+					"type": "string",
+					"description": "A field the list groups on, with a count per group. The counts are of the rows the list HOLDS, so on a paged list they are of the page and the surface says so; a second fetch per group is the cost this grouping exists to avoid."
+				},
+				"seeded": {
+					"type": "array",
+					"description": "Views that ship with the app. They render as their own group above the user's own, and a user may copy one but not delete it: a view the product promises is not a view one person can remove from everybody's install.",
+					"items": {
+						"type": "object",
+						"additionalProperties": false,
+						"required": ["slug", "name"],
+						"properties": {
+							"slug": {
+								"type": "string",
+								"pattern": "^[a-z0-9][a-z0-9-]*$",
+								"description": "The stable name a dashboard widget, an export action or an API caller cites this view by. Lowercase and dash only, because it appears in an address and in a manifest somebody else writes. Required: a seeded view with no slug is a view nothing can call, which is most of the reason to seed it."
+							},
+							"name": {
+								"type": "string",
+								"description": "What the view is called in the control. Translatable."
+							},
+							"label": {
+								"type": "string",
+								"description": "One label this view carries, for the label filter. A view may carry none and stays reachable when no label filter is active."
+							},
+							"parent": {
+								"type": "string",
+								"description": "The slug of the view this one hangs under. Omitted, it sits at the root of the seeded group."
+							},
+							"actions": {
+								"type": "array",
+								"description": "The action ids this view offers, so a triage view offers three and not thirty. INTERSECTED with what the reader may run and never added to: a view declaring an action the reader has no right to does not grant it. Declare none and the view offers the page's actions, as today.",
+								"items": { "type": "string" },
+								"uniqueItems": true
+							},
+							"inherits": {
+								"type": "array",
+								"description": "Which parts this view takes from its parent. Each part resolves independently, so a child may narrow the criteria and keep the parent's columns. Declared on a view with no parent it is a contradiction and the validator refuses it: there is nothing to inherit from.",
+								"items": {
+									"type": "string",
+									"enum": ["criteria", "columns", "sorting", "defaultSort", "exportFields"]
+								},
+								"uniqueItems": true
+							}
+						},
+						"allOf": [
+							{
+								"description": "inherits without a parent is a declaration that reads as configured and resolves to nothing. Refused here rather than silently ignored at render, which is the shape this whole change exists to stop.",
+								"if": {
+									"required": ["inherits"]
+								},
+								"then": {
+									"required": ["parent"]
+								}
+							}
+						]
+					}
+				}
+			}
+		},
+		"boardView": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["statusField"],
+			"description": "The board view of this list: one column per stage of a status field. Index pages only, and only offered when `viewModes` also lists `board`. The COLUMNS COME FROM THE SCHEMA, not from the values present in the loaded rows: a board built from the data would lose the stage nothing is in, which is the one you drag a card into, and would reorder itself as work moved. A move goes through the host's transition and never writes the status field, so a board can never move a case past a rule the case page enforces.",
+			"properties": {
+				"statusField": {
+					"type": "string",
+					"description": "The property the columns come from. Required: a board with no status field has nothing to be a board of. Its enum or lifecycle states are read from the register schema at RUNTIME, so a field with neither cannot be caught here; the view says so on screen instead of drawing empty columns."
+				},
+				"cardFields": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "The fields a card shows. Keep it short: a card is scanned, not read."
+				},
+				"swimlaneField": {
+					"type": "string",
+					"description": "A second field to group the board into rows by, while the columns stay the stages. Cards with no value for it land in one named row, last, rather than being dropped: grouping by handler and hiding the unassigned work turns a board into a picture of what is already somebody's problem."
+				}
+			}
+		},
+		"dateAxisView": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["startField", "endField"],
+			"description": "The date-axis view of this list: rows on a time scale, overlaps visible. Index pages only, and only offered when `viewModes` also lists `dateAxis`. IT HIDES NOTHING AND RESCHEDULES NOTHING: overlapping bars get their own track so the lane grows taller rather than losing a bar, rows with no usable dates go to a visible unplanned lane, and the only gesture is opening a row. A view that moved a bar on drag would be changing statutory dates from a picture.",
+			"properties": {
+				"startField": {
+					"type": "string",
+					"description": "Where a row's start is. Required: a bar needs both ends, and a row missing one is unplanned rather than drawn."
+				},
+				"endField": {
+					"type": "string",
+					"description": "Where a row's end is. Required, for the same reason."
+				},
+				"laneField": {
+					"type": "string",
+					"description": "What to put in a lane together, usually the person the work is on. Omitted, everything shares one lane."
+				},
+				"labelField": {
+					"type": "string",
+					"description": "The field a bar is named by, on screen and in its accessible name. A bar positioned by percentage says nothing at all to a reader who cannot see it."
+				}
+			}
+		},
 		"personalisation": {
 			"type": "object",
 			"additionalProperties": false,
@@ -1039,6 +1330,16 @@
 			"additionalProperties": false,
 			"description": "A uniform widget placement entry used on every page type in v2. Replaces the v1 widgetDef + layoutItem pair with a single shape. Its props/dataSource/filter string leaves are guarded against the closed sentinel vocabulary via the sentinelGuardedValue allOf. The cross-field constraint gridX + gridWidth <= 12 CANNOT be expressed in JSON Schema (arithmetic over sibling fields) — it is documented here and enforced at runtime by validateManifestV2() as a post-schema check. Failure message: \"Widget '{widgetKey}' in slot '{slot}': gridX ({gridX}) + gridWidth ({gridWidth}) exceeds 12\".",
 			"properties": {
+				"roles": {
+					"type": "array",
+					"items": { "type": "string", "minLength": 1 },
+					"description": "Group ids that may see this widget. A DECLARATION THE HOST APP ENFORCES, not something this library evaluates: the check belongs on the read, where the figures are, because a widget hidden in the browser still had its data in the page payload (ADR-004). Pair it with `visibleWhen` pointing at an endpoint of the app's own, which IS evaluated here and collapses the cell when the fetch or the shape fails, so the declaration and the layout cannot disagree. Omitting it means every reader of the page sees the widget. Added because the key was expressible in the legacy `config.widgets[]` array, whose items are open, and refused here, so the same declaration validated on one page and was rejected on another.",
+					"examples": [["controllers", "beheerders", "admin"]]
+				},
+				"visibleWhen": {
+					"$ref": "#/$defs/visibleWhen",
+					"description": "Render this widget only while the predicate holds. The same shape every other surface takes it in. It was already honoured at runtime for widgets (CnDashboardPage reads `def.visibleWhen`) and could not be declared in this shape, so a widget in the uniform entry had no way to express a visibility condition at all while one in the legacy array did."
+				},
 				"requiredApp": {
 					"type": "string",
 					"minLength": 1,
@@ -2317,6 +2618,22 @@
 					"$ref": "#/$defs/splitView",
 					"description": "Index pages only. Opens a row beside the list rather than instead of it, at the sibling route <route>/split/:id that buildManifestRoutes() emits. Refused on any other page type."
 				},
+				"savedViewPlaces": {
+					"$ref": "#/$defs/savedViewPlaces",
+					"description": "Index pages only. Makes each saved view of this page a place: its own route, the presentations its view config declares, and an entry under this page's navigation entry once a user pins it. Refused on any other page type."
+				},
+				"board": {
+					"$ref": "#/$defs/boardView",
+					"description": "Index pages only. The board view's configuration, handed to CnIndexPage as the `board` prop. The segment appears only when `viewModes` also lists `board`. Refused on any other page type."
+				},
+				"dateAxis": {
+					"$ref": "#/$defs/dateAxisView",
+					"description": "Index pages only. The date-axis view's configuration, handed to CnIndexPage as the `dateAxis` prop. The segment appears only when `viewModes` also lists `dateAxis`. Refused on any other page type."
+				},
+				"savedViewTree": {
+					"$ref": "#/$defs/savedViewTree",
+					"description": "Index pages only. Renders this page's saved views as a tree with labels, and declares the views that ship with the app. Refused on any other page type, for the same reason savedViewPlaces is: a page with no saved-view dropdown has nothing to put in a tree."
+				},
 				"manualOrder": {
 					"type": "boolean",
 					"default": false,
@@ -2563,6 +2880,20 @@
 								]
 							}
 						},
+						"folderSidebar": {
+							"type": "object",
+							"additionalProperties": true,
+							"description": "type='index': the opt-in folder navigation pane (CnFolderSidebar) rendered left of the list. Selecting a folder filters the list by `filterField` (or `field`); \"All\" clears it. Only the per-scope list-layout keys are typed here; the pane's own keys (source, register, schema, idField, nameField, folders, allLabel, title, allowCreate, ...) stay free-form. Maps to CnIndexPage `folderSidebar`.",
+							"properties": {
+								"folders": {
+									"type": "array",
+									"description": "Explicit folder list for source:'custom', and the place a folder declares its own list layout. Every other folder key stays free-form.",
+									"items": {
+										"$ref": "#/$defs/folderSidebarScope"
+									}
+								}
+							}
+						},
 						"layout": {
 							"type": "array",
 							"description": "Dashboard layout entries (for type='dashboard', legacy). Carry-forward from v1.",
@@ -2608,6 +2939,61 @@
 								}
 							},
 							"description": "Declarative actions on a page. Governed ONLY by \"an object carrying a non-empty label\", deliberately: this key is polymorphic by page type (index rows dispatch $defs/action; detail pages also carry type='lifecycle-transition' entries), so one closed grammar here would reject working manifests. A label is what every dialect needs — CnRowActions renders an entry from its label and icon, so an entry without one became a full-height, clickable, EMPTY row in the overflow menu. Two shapes hit this, both meaning \"show the built-in\": a bare string (\"edit\") and a key-only object ({\"key\": \"edit\"}). Built-ins are enabled with config.actionToggles / the show*Action keys, never by naming them here."
+						},
+						"rowIndicators": {
+							"type": "array",
+							"description": "type='index': state indicators the page declares for its rows. Each entry names a `field` (a dotted path on the row), a condition (`equals`, `in`, or plain truthiness when neither is given), an `icon` (a CnIcon name) and a `text` (the text alternative, required). An entry without `text` does not render, because an icon with no text is colour and shape alone. The page declares which indicators exist; a record cannot add one the page has not declared. Maps to CnIndexPage `rowIndicators`.",
+							"items": {
+								"$ref": "#/$defs/rowIndicator"
+							}
+						},
+						"rowIndicatorCap": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 3,
+							"description": "type='index': how many declared indicators render on the row itself before the rest move into the row menu. Maps to CnIndexPage `rowIndicatorCap`."
+						},
+						"quickEditFields": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"minLength": 1
+							},
+							"description": "type='index': the fields a quick edit asks for, opened from a row without leaving the list. The page names them; a record cannot open a form on a field the page did not name. A field this caller may not write (see `writableField`) renders read-only rather than missing. Maps to CnIndexPage `quickEditFields`."
+						},
+						"writableField": {
+							"type": "string",
+							"default": "@self.writableFields",
+							"description": "type='index': the dotted path where a record lists the fields this caller may write. A row carrying nothing there leaves every field the quick edit named editable; an empty list is a refusal and locks them all. Maps to CnIndexPage `writableField`."
+						},
+						"viewTabs": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"minLength": 1
+							},
+							"description": "type='index': saved view ids this page renders as tabs instead of as entries in the views control. A view appears in one place or the other, never both. An id naming a view that no longer exists produces no tab, rather than a tab that opens nothing. Maps to CnIndexPage `viewTabs`."
+						},
+						"priorityField": {
+							"type": "string",
+							"description": "type='index': the field carrying a record's DERIVED priority. The list reads the value and sorts on it; it never computes one. A record with no priority, or one outside `priorityLevels`, sorts after every ranked record in BOTH directions and stays in the list. Maps to CnIndexPage `priorityField`."
+						},
+						"priorityLevels": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"minLength": 1
+							},
+							"description": "type='index': the priority values in rank order, lowest first (e.g. ['low', 'medium', 'high']). Needed because a priority does not sort alphabetically into the order a person means. Maps to CnIndexPage `priorityLevels`."
+						},
+						"listShortcuts": {
+							"type": "boolean",
+							"default": false,
+							"description": "type='index': offer the list's keyboard shortcuts. Every shortcut is also listed in the command palette and on the help key, from one catalogue, because a shortcut nobody can find does not count. Maps to CnIndexPage `listShortcuts`."
+						},
+						"rowActionField": {
+							"type": "string",
+							"description": "type='index': the dotted path on each row where the server lists the actions this caller may run on that record (default '@self.actions'). A row's menu is then the intersection of what `config.actions` declares and what the server allows: an action the server allows but the page does not declare stays out, and an action the page declares but the server refuses stays out with its reason kept. A row carrying nothing at this path leaves the declaration standing. Maps to CnIndexPage `rowActionField`."
 						},
 						"editOpensDetail": {
 							"type": "boolean",
@@ -2715,7 +3101,7 @@
 			},
 			"allOf": [
 				{
-					"description": "splitView and manualOrder are index-page mechanics. splitView emits a second route beside an index route and mounts the detail pane inside CnIndexPage; manualOrder holds a per-user row order for a list. Declared on a detail, dashboard or custom page they would validate and then do nothing, which is the failure this branch refuses out loud (case-page-and-list-as-a-place).",
+					"description": "splitView, manualOrder, savedViewPlaces, savedViewTree, board and dateAxis are index-page mechanics. splitView emits a second route beside an index route and mounts the detail pane inside CnIndexPage; manualOrder holds a per-user row order for a list; savedViewPlaces turns this page's saved views into addressable places. Declared on a detail, dashboard or custom page they would validate and then do nothing, which is the failure this branch refuses out loud (case-page-and-list-as-a-place, saved-view-as-a-place).",
 					"if": {
 						"not": {
 							"properties": { "type": { "const": "index" } },
@@ -2726,7 +3112,11 @@
 						"not": {
 							"anyOf": [
 								{ "required": ["splitView"] },
-								{ "required": ["manualOrder"] }
+								{ "required": ["manualOrder"] },
+								{ "required": ["savedViewPlaces"] },
+								{ "required": ["savedViewTree"] },
+								{ "required": ["board"] },
+								{ "required": ["dateAxis"] }
 							]
 						}
 					}
