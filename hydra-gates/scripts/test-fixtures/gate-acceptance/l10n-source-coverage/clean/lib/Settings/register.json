@@ -1,0 +1,15 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Not user visible", "description": "Packaging metadata." },
+  "components": {
+    "schemas": {
+      "publication": {
+        "title": "Publication",
+        "description": "Something a catalogue publishes.",
+        "properties": {
+          "summary": { "type": "string", "title": "Summary" }
+        }
+      }
+    }
+  }
+}

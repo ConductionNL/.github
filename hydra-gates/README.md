@@ -95,6 +95,14 @@ Then `composer update conduction/hydra-gates`.
 `vendor/conduction/hydra-gates` lands at about 1.2 MB. The org profile, the
 website and the docs tree are `export-ignore`d and do not follow.
 
+### Retiring your vendored `check-l10n.js`
+
+Gate 117 runs the shared `scripts/check-l10n.js`, which reads PHP `t()` calls and
+`lib/Settings` schema JSON as sources of a MISSING translation, not only of an
+unused one. Every per-app copy could only ever read `src/`. See
+[MIGRATION-check-l10n.md](MIGRATION-check-l10n.md) for how an app moves across
+and what to do with the findings it inherits.
+
 ### Upgrading to `v1.1.0` from `v1.0.x`
 
 `^1.0` picks this up on the next `composer update`, and **verdicts move**. Three
