@@ -32,6 +32,30 @@ vendored schemas (`scripts/schemas/`) and the distributable entry point
 (`bin/hydra-gates`). `ConductionNL/hydra` no longer carries a copy — it
 delegates here (see [Why it lives in `.github`](#why-it-lives-in-github)).
 
+### The vendored manifest schema, and who keeps it current
+
+`scripts/schemas/app-manifest-v2.schema.json` is a **copy** of the schema
+`@conduction/nextcloud-vue` publishes. Gates 22 and 53 judge every app's
+manifest against this copy on purpose: the fleet's pinned library generations
+differ, and pinned-first would mean "valid against whatever the app happened to
+install".
+
+A copy with no keeper drifts. Measured 2026-09-19 it was four minor versions
+behind (2.33.0 against a published 2.37.0), and the two instruments gave
+opposite verdicts on the same file: dossiq's `npm run check:manifest` passed
+with zero errors while gates 22 and 53 rejected `savedViewPlaces`, a key the
+library had published. No app could fix that, because the schema is not in any
+app's repo (#785).
+
+`.github/workflows/hydra-gates-schema-sync.yml` now watches the registry every
+Monday and opens a pull request when the copy falls behind. It opens a pull
+request rather than pushing, because CI resolves these gates at `@main`: a
+bump reaches all 21 swept apps the minute it lands. The pull request carries
+the output of `scripts/lib/diff_schema_strictness.js`, which names every
+constraint that got **stricter**. `none` means the bump can only turn red into
+green. Anything else means it can redden a manifest that passes today, and the
+fleet's effective manifests need validating against both schemas first.
+
 ---
 
 ## Adopting it in a repo
