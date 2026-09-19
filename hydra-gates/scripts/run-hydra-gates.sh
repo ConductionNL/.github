@@ -12992,6 +12992,91 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 117 — l10n-source-coverage  (WARNING ONLY, launch 2026-09-19)
+#
+# A user-visible string with no key in l10n/en.json renders its source text to
+# every reader, in every locale, and nothing downstream notices.
+#
+# WHY THIS IS A GATE AND NOT TWENTY-ONE SCRIPTS. Twenty-one apps vendored a
+# `check-l10n.js`, and by 2026-09-19 those copies had drifted into THIRTEEN
+# distinct versions across fifteen repositories (three repos ship none at all,
+# and three carry two copies each at different paths). Drift was not the worst
+# of it. EVERY ONE of the thirteen computed `missing` the same way:
+#
+#     const missing = [...usedKeys].filter((k) => !keys.has(k))
+#
+# with `usedKeys` built by walking src/ for t() calls. PHP and schema JSON
+# appeared in the better copies only as things that SUPPRESS an "unused"
+# warning. So no app in the fleet could see a server-side or schema string
+# that had reached no catalogue at all: a `->t('…')` could clear a warning and
+# could never raise one.
+#
+# MEASURED on opencatalogi at development@4af8e55a: 49 strings passed to a PHP
+# translate call and 319 register/schema strings have no key in en.json — 368
+# findings on a repo whose own vendored check reports zero, because the src/
+# leg really is clean.
+# The src/ leg agreeing with the incumbent is the control: the new findings
+# come from the new sources, not from a different reading of the old one.
+#
+# WARNING FIRST, per the fleet rule that a new gate never lands blocking. All
+# 21 core repos set `enable-hydra-gates: true` and resolve this file at @main,
+# so a blocking merge reddens them the same minute. openregister alone carries
+# 1,273 findings. The runner passes `--warn-only`, so the checker's exit code
+# is 0 whatever it finds, and this block calls `_warn`, never `_fail`.
+#
+# PROMOTION TO BLOCKING is two deliberate edits here: drop `--warn-only` from
+# the invocation and swap `_warn` for `_fail`. Owner: the l10n debt sweep.
+#
+# FULL-TREE, not diff-scoped, for the reason gates 84, 93, 94, 95, 96 and 102
+# give: a string is either covered or it is not, and a diff-scoped version
+# reports clean on every PR that does not happen to touch a catalogue.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard — a gate that only
+# runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_lsc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-l10n-source-coverage.log
+: > "${_lsc_log}"
+if [ -f appinfo/info.xml ] && [ -f l10n/en.json ]; then
+    set +e
+    node "${SCRIPT_DIR}/check-l10n.js" . --warn-only > "${_lsc_log}" 2>&1
+    _lsc_rc=$?
+    # `set +e`, not `set -e`: errexit off is the state this script actually
+    # runs in. See the note at the top of this file.
+    set +e
+
+    # An empty scope must not print the same word as a clean full-tree read.
+    _lsc_checked=$(sed -n 's/^checked \([0-9]\{1,\}\) source string.*/\1/p' "${_lsc_log}" 2>/dev/null | tail -1)
+    case "${_lsc_checked}" in ''|*[!0-9]*) _lsc_checked=0 ;; esac
+
+    if [ "${_lsc_rc}" -eq 4 ] || { [ "${_lsc_rc}" -eq 0 ] && [ "${_lsc_checked}" -eq 0 ]; }; then
+        _skip_empty_scope 117 "l10n-source-coverage" "user-visible string checkable against an English catalogue (a src/ t() call, a PHP ->t(), a manifest field or a lib/Settings schema title, plus l10n/en.json)"
+    elif ! _helper_finished "${_lsc_log}" '^checked [0-9]+ source string'; then
+        # A CRASH IS NOT A FINDING. The checker prints findings as it goes, so
+        # a run that died halfway looks exactly like one that finished with
+        # findings unless the terminal marker is required.
+        _lsc_why=$(head -3 "${_lsc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 117 "l10n-source-coverage" wiring "check-l10n.js exited ${_lsc_rc} without printing its terminal 'checked N source string(s)' summary, so translation coverage is UNVERIFIED by this run. Checker output: ${_lsc_why:-<empty>}. See ${_lsc_log}."
+    else
+        _lsc_en=$(sed -n 's/^missing from en.json: \([0-9]\{1,\}\).*/\1/p' "${_lsc_log}" 2>/dev/null | tail -1)
+        case "${_lsc_en}" in ''|*[!0-9]*) _lsc_en=0 ;; esac
+        _lsc_nl=$(sed -n 's/^missing from nl.json: \([0-9]\{1,\}\).*/\1/p' "${_lsc_log}" 2>/dev/null | tail -1)
+        case "${_lsc_nl}" in ''|*[!0-9]*) _lsc_nl=0 ;; esac
+        _lsc_unused=$(sed -n 's/^unused in en.json: \([0-9]\{1,\}\).*/\1/p' "${_lsc_log}" 2>/dev/null | tail -1)
+        case "${_lsc_unused}" in ''|*[!0-9]*) _lsc_unused=0 ;; esac
+
+        if [ "${_lsc_en}" -eq 0 ] && [ "${_lsc_nl}" -eq 0 ] && [ "${_lsc_unused}" -eq 0 ]; then
+            _pass 117 "l10n-source-coverage"
+        else
+            _warn 117 "l10n-source-coverage" "${_lsc_en} user-visible string(s) have no key in l10n/en.json, ${_lsc_nl} none in l10n/nl.json, and ${_lsc_unused} catalogue key(s) no source produces. Each finding names the source that produced it: SRC, PHP, MANIFEST or SCHEMA. The PHP and SCHEMA lines are what the vendored per-app copies could never report. Report-only at launch (2026-09-19) because 14 of 21 repos carry inherited findings; promotion to blocking is a deliberate edit to this block. See ${_lsc_log}"
+        fi
+    fi
+elif [ -f appinfo/info.xml ]; then
+    _skip 117 "l10n-source-coverage" na "this app ships no l10n/en.json, so there is no English catalogue to check any string against."
+else
+    _skip 117 "l10n-source-coverage" na "no appinfo/info.xml, so this is not a Nextcloud app and declares no app id for t() calls to be keyed on."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
