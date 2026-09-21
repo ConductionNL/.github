@@ -39,6 +39,21 @@
 #   P9  `:is(.a, .b)` keeps its comma — the selector is matched whole                 → PASS
 #   P10 `html .btn` (ancestor boost) is a MORE specific guard for `.btn`              → PASS
 #   P11 the repo-wide universal reset in ANOTHER file covers plain motion, not !important motion → PASS / FAIL
+#
+# P12-P17 pin the review findings on this suite's own first round (#788), each
+# one a case where the checker disagreed with the cascade it claims to model:
+#
+#   P12 an ancestor-scoped guard is a guard whatever the ancestor is named      → PASS
+#   P12b …but only on a combinator boundary: `.xbtn` does not guard `.btn`      → FAIL
+#   P13 importance is read per DECLARATION: a plain `transition: none` beside an
+#       `animation: none !important` does not inherit its importance            → FAIL
+#   P14 EQUAL specificity and importance is decided by source order — a guard
+#       block placed ABOVE the motion does not override it                      → FAIL
+#   P14b …the same file with the block below the motion                         → PASS
+#   P15 a literal duration beside a zeroed token still animates                 → FAIL
+#   P16 a token redefined to a duration that still animates is not an override  → FAIL
+#   P16b …and `0.01ms`, the universal reset's hair-over-zero, still is          → PASS
+#   P17 a guard only covers its OWN family: `animation` stops no `transition`   → FAIL
 
 set -u
 
@@ -366,6 +381,130 @@ _reset_file "${_app}"
 printf '.spinner { animation: spin 1s linear infinite !important; }\n' > "${_app}/css/motion.css"
 _assert "P11b …and does not cover !important motion elsewhere → FAIL" "FAIL" "$(_run45 "${_app}")"
 _log_has "P11b the finding lands on the motion file, not the reset" "css/motion.css"
+
+# ---------------------------------------------------------------------------
+# P12 — an ancestor boost is more specific whatever the ancestor is called.
+# `html`, `body` and `:root` used to be the only ones accepted, so `:root .btn`
+# and `.app-wrapper .btn` — identical in shape and in specificity — disagreed.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/p12"
+_mkapp "${_app}"
+cat > "${_app}/css/scoped.css" <<'CSS'
+.btn { transition: background-color 0.3s ease; }
+@media (prefers-reduced-motion: reduce) {
+	.app-wrapper .btn { transition: none; }
+}
+CSS
+_assert "P12 a guard scoped by an arbitrary ancestor still guards → PASS" "PASS" "$(_run45 "${_app}")"
+
+# P12b — CONTROL for the boundary: `.xbtn` ends with `btn` but is a different
+# class, not an ancestor-scoped `.btn`. Without the combinator test this passes.
+_app="${_tmp}/p12b"
+_mkapp "${_app}"
+cat > "${_app}/css/scoped.css" <<'CSS'
+.btn { transition: background-color 0.3s ease; }
+@media (prefers-reduced-motion: reduce) {
+	.xbtn { transition: none; }
+}
+CSS
+_assert "P12b a guard that merely ENDS in the same letters is not a guard → FAIL" "FAIL" "$(_run45 "${_app}")"
+_log_has "P12b the finding names the unguarded selector" "selector=.btn"
+
+# ---------------------------------------------------------------------------
+# P13 — importance is a property of a DECLARATION, not of the block it sits in.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/p13"
+_mkapp "${_app}"
+cat > "${_app}/css/mixed.css" <<'CSS'
+.btn:hover { transition: background-color 0.3s ease; }
+@media (prefers-reduced-motion: reduce) {
+	.btn { transition: none; animation: none !important; }
+}
+CSS
+_assert "P13 a plain guard does not borrow the !important of its neighbour → FAIL" "FAIL" "$(_run45 "${_app}")"
+_log_has "P13 the finding names the still-animating selector" "selector=.btn:hover"
+
+# ---------------------------------------------------------------------------
+# P14 — equal specificity AND equal importance: the later declaration wins, so
+# a reduced-motion block placed above the motion overrides nothing.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/p14"
+_mkapp "${_app}"
+cat > "${_app}/css/order.css" <<'CSS'
+@media (prefers-reduced-motion: reduce) {
+	.btn { transition: none; }
+}
+.btn { transition: background-color 0.3s ease; }
+CSS
+_assert "P14 a guard block ABOVE the motion loses on source order → FAIL" "FAIL" "$(_run45 "${_app}")"
+_log_has "P14 the finding names the selector" "selector=.btn"
+
+# P14b — CONTROL: the identical file with the two rules swapped.
+_app="${_tmp}/p14b"
+_mkapp "${_app}"
+cat > "${_app}/css/order.css" <<'CSS'
+.btn { transition: background-color 0.3s ease; }
+@media (prefers-reduced-motion: reduce) {
+	.btn { transition: none; }
+}
+CSS
+_assert "P14b …and below it, wins → PASS" "PASS" "$(_run45 "${_app}")"
+
+# ---------------------------------------------------------------------------
+# P15 — the token convention covers a declaration only when the token is the
+# ONLY thing setting its duration.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/p15"
+_mkapp "${_app}"
+cat > "${_app}/css/partial.css" <<'CSS'
+:root { --dur: 300ms; }
+.mock { transition: opacity var(--dur) ease, transform 0.4s ease; }
+@media (prefers-reduced-motion: reduce) {
+	:root { --dur: 0ms; }
+}
+CSS
+_assert "P15 a literal duration beside a zeroed token still animates → FAIL" "FAIL" "$(_run45 "${_app}")"
+
+# ---------------------------------------------------------------------------
+# P16 — redefining the token is not the same as zeroing it.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/p16"
+_mkapp "${_app}"
+cat > "${_app}/css/token.css" <<'CSS'
+:root { --dur: 300ms; }
+.mock { transition: opacity var(--dur) ease; }
+@media (prefers-reduced-motion: reduce) {
+	:root { --dur: 250ms; }
+}
+CSS
+_assert "P16 a token redefined to 250ms is not a reduced-motion override → FAIL" "FAIL" "$(_run45 "${_app}")"
+
+# P16b — CONTROL: the universal reset's canonical `0.01ms` must keep counting.
+_app="${_tmp}/p16b"
+_mkapp "${_app}"
+cat > "${_app}/css/token.css" <<'CSS'
+:root { --dur: 300ms; }
+.mock { transition: opacity var(--dur) ease; }
+@media (prefers-reduced-motion: reduce) {
+	:root { --dur: 0.01ms; }
+}
+CSS
+_assert "P16b …and the reset's hair-over-zero 0.01ms still is → PASS" "PASS" "$(_run45 "${_app}")"
+
+# ---------------------------------------------------------------------------
+# P17 — a guard covers its own property family and no other.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/p17"
+_mkapp "${_app}"
+cat > "${_app}/css/family.css" <<'CSS'
+.btn { transition: background-color 0.3s ease; }
+@media (prefers-reduced-motion: reduce) {
+	.btn { animation: none !important; }
+}
+CSS
+_assert "P17 an animation guard stops no transition → FAIL" "FAIL" "$(_run45 "${_app}")"
+_log_has "P17 the finding names the selector" "selector=.btn"
+
 
 echo ""
 if [ "${_failures}" -eq 0 ]; then
