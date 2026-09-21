@@ -7719,14 +7719,79 @@ try:
 except Exception:
     sys.exit(0)
 
-# A repo-wide universal reduced-motion reset covers every stylesheet AND every
-# scoped <style> block (it is `*` + `!important`), so it globally guards. See
-# the pre-pass in the runner for why this is not diff-scoped.
-if os.environ.get('HYDRA_RM_GLOBAL_GUARD') == '1':
-    sys.exit(0)
+# PRESENCE IS NOT COVERAGE (thematiq#604, 2026-09-17).
+#
+# Until 2026-09-21 this checker asked one question per file: does a
+# `@media (prefers-reduced-motion …)` block exist anywhere in it? One did in
+# thematiq's css/systems/nldesign/theme.css, so the gate said PASS — at
+# `6dcbbaf9`, where a commit had added `:not(.action-button)` to four
+# `!important` motion selectors while the reset block below them kept the
+# bare `.button-vue, button, .button`. Equal specificity before, so the reset
+# won on source order; strictly less specific after, so it lost the cascade
+# on every button in the app while the block that was supposed to stop the
+# motion sat right there in the file. The gate said PASS again at `67caeb85`,
+# after the selectors were mirrored. Same verdict on the broken and the fixed
+# file: the gate was not observing the property it is named after.
+#
+# So the question is now asked per SELECTOR. Every selector that carries a
+# motion declaration must be overridden by some rule inside a reduced-motion
+# block, under the cascade's actual rules:
+#
+#   * equal importance → the MORE SPECIFIC selector wins; on EQUAL specificity
+#     the later declaration wins, so `G == M` additionally requires the guard
+#     to sit after the motion in the file (source position is carried through
+#     `_rules`, not assumed — the assumption was this checker's own residue of
+#     the defect it exists to catch);
+#   * unequal importance → `!important` wins regardless of specificity.
+#
+# Which gives the four shapes below (`M` = motion selector, `G` = guard):
+#
+#   G == M                       covered when G is later in the file, unless M
+#                                is !important and G is not
+#   G extends M (`.btn:not(.x)`) covered, order-independent — G is more specific
+#   G descends to M (`.wrap .btn`, `html .btn`, `.wrap>.btn`)
+#                                same — an ancestor boost is more specific
+#   M extends/descends to G      covered only when G is !important and M is not
+#   G is `*`                     covered only when G is !important and M is not
+#
+# An ancestor-scoped guard is credited although this checker cannot know that
+# every element the motion selector matches sits under that ancestor. That is
+# deliberate: specificity is what the cascade weighs, the gate has no `exclude`
+# hatch, and a false positive on a working guard is unappealable. `html`,
+# `body` and `:root` used to be the only ancestors accepted, which made two
+# guards of identical shape — `:root .btn` and `.app-wrapper .btn` — disagree.
+#
+# A guard only ever covers its OWN property family: `animation: none !important`
+# in a reduce block stops no transition, so guards and motion are matched on
+# `transition` vs `animation` and importance is read per declaration, not per
+# rule.
+#
+# Guards are FILE-LOCAL. The only guard that crosses files is the universal
+# reset below; a repo that centralises its overrides in a dedicated stylesheet
+# naming real selectors is still judged file by file, and each motion file is
+# reported under the presence rule exactly as it was before 2026-09-21.
+#
+# `*` has specificity 0. The repo-wide universal reset the pre-pass detects
+# (HYDRA_RM_GLOBAL_GUARD) is therefore a `*` guard fed into the same check,
+# not an early exit: it silences every plain motion declaration in the repo
+# and NONE of the `!important` ones — which is exactly what thematiq's own
+# comment above its reset block says, and why that file repeats its selectors
+# verbatim instead of writing `*`.
+#
+# Two idioms that are correct without a matching selector are recognised as
+# such: `@media (prefers-reduced-motion: no-preference) { …motion… }` (the
+# motion itself is conditional), and a duration token —
+# `transition: opacity var(--dur)` with `--dur: 0ms` redefined inside the
+# reduced-motion block (the atom-design convention). Nested selectors (SCSS,
+# CSS Nesting) resolve `&` against their parent before matching.
+GLOBAL_GUARD = os.environ.get('HYDRA_RM_GLOBAL_GUARD') == '1'
 
 STYLESHEET = re.compile(r'\.(css|scss|sass|less)$', re.IGNORECASE)
 MOTION = re.compile(r'\b(transition|animation)\s*:\s*([^;}]*)', re.IGNORECASE)
+# Any motion-family property inside a reduced-motion block makes that rule a
+# guard for its selectors — `transition-duration: 0.01ms !important` is how
+# the universal reset is written, and it never spells `transition:` in full.
+MOTION_PROP = re.compile(r'\b(transition|animation)(?:-[a-z-]+)?\s*:', re.IGNORECASE)
 
 # THE GUARD MUST RECOGNISE THE MEDIA QUERIES PEOPLE ACTUALLY WRITE (#287).
 #
@@ -7737,6 +7802,42 @@ MOTION = re.compile(r'\b(transition|animation)\s*:\s*([^;}]*)', re.IGNORECASE)
 # All three are correct, and all three would have been reported as findings the
 # moment stylesheets came into scope — a false-positive engine.
 GUARD = re.compile(r'@media[^{]*prefers-reduced-motion', re.IGNORECASE)
+CUSTOM_PROP = re.compile(r'(--[\w-]+)\s*:\s*([^;}]*)')
+VAR_REF = re.compile(r'var\(\s*(--[\w-]+)')
+# A duration, in the two units CSS accepts for one. Used twice: a custom
+# property only counts as a reduced-motion override when it is redefined to a
+# duration that does not animate, and a motion declaration only rides on that
+# override when it has no literal duration of its own beside the `var()`.
+TIME = re.compile(r'(\d*\.?\d+)\s*(ms|s)\b', re.IGNORECASE)
+
+def _ms(num, unit):
+    return float(num) * (1000.0 if unit.lower() == 's' else 1.0)
+
+def _nonzero_time(value):
+    """True when the value spells a duration that actually animates."""
+    for num, unit in TIME.findall(value):
+        try:
+            if _ms(num, unit) > 1.0:
+                return True
+        except ValueError:
+            pass
+    return False
+
+def _zeroish(value):
+    """`0`, `0s`, `0ms` and the `0.01ms` of the canonical universal reset — the
+    reset uses a hair over zero on purpose, so that animation events still
+    fire. `--dur: 250ms` inside a reduced-motion block is NOT an override; it
+    used to count as one because only the property NAME was read."""
+    v = value.strip().lower().replace('!important', '').strip()
+    if v in ('0', '0s', '0ms'):
+        return True
+    times = TIME.findall(v)
+    if not times:
+        return False
+    try:
+        return all(_ms(n, u) <= 1.0 for n, u in times)
+    except ValueError:
+        return False
 
 # A COMMENTED-OUT DECLARATION IS NOT A DECLARATION (#294, same lesson).
 def _mask_comments(text, scss):
@@ -7747,19 +7848,139 @@ def _mask_comments(text, scss):
         text = re.sub(r'(?<!:)//[^\n]*', lambda m: ' ' * len(m.group(0)), text)
     return text
 
-def _motion_without_guard(block):
-    """True when the block animates something and never guards it.
+def _split_commas(s):
+    """Split a selector list on top-level commas only.
+
+    `:not(.a, .b)` and `:is(.a, .b)` keep theirs — splitting inside the
+    parentheses would manufacture two selectors that exist nowhere."""
+    parts, depth, cur = [], 0, []
+    for ch in s:
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth = max(0, depth - 1)
+        if ch == ',' and depth == 0:
+            parts.append(''.join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append(''.join(cur))
+    return [p.strip() for p in parts if p.strip()]
+
+def _resolve(head, parents):
+    """Nested selectors: `&:hover` under `.btn` is `.btn:hover`; a bare `.icon`
+    under `.btn` is `.btn .icon`. A top-level rule has no parents."""
+    children = _split_commas(head)
+    if not parents:
+        return children
+    out = []
+    for p in parents:
+        for c in children:
+            out.append(c.replace('&', p) if '&' in c else p + ' ' + c)
+    return out
+
+def _rules(text):
+    """Flatten a (comment-masked) stylesheet into (selectors, declarations, state, pos).
+
+    `pos` is the offset of the rule's opening brace — source order, which the
+    cascade needs whenever specificity and importance tie.
+
+    `state` is 'reduce' inside a `prefers-reduced-motion: reduce` block,
+    'nopref' inside the `no-preference` idiom, '' otherwise. Media / supports /
+    layer / container blocks pass their contents through; every other at-rule
+    body (`@keyframes`, `@font-face`, …) is parsed and discarded — `from {}` and
+    `50% {}` are not selectors."""
+    results = []
+    n = len(text)
+
+    def block(pos, parents, state):
+        decls, prelude = [], []
+        while pos < n:
+            ch = text[pos]
+            if ch == '}':
+                return pos + 1, ''.join(decls) + ''.join(prelude)
+            if ch == '{':
+                start = pos
+                head = ''.join(prelude).strip()
+                prelude = []
+                low = head.lower()
+                if low.startswith('@'):
+                    inner_state = state
+                    if 'prefers-reduced-motion' in low:
+                        inner_state = 'nopref' if 'no-preference' in low else 'reduce'
+                    if low.startswith(('@media', '@supports', '@layer', '@container')):
+                        pos, inner = block(pos + 1, parents, inner_state)
+                        if parents and inner.strip():
+                            # `.a { @media (prefers-reduced-motion: reduce) { transition: none } }`
+                            results.append((parents, inner, inner_state, start))
+                    else:
+                        mark = len(results)
+                        pos, _ = block(pos + 1, None, inner_state)
+                        del results[mark:]
+                else:
+                    sels = _resolve(head, parents)
+                    pos, inner = block(pos + 1, sels, state)
+                    results.append((sels, inner, state, start))
+                continue
+            if ch == ';':
+                decls.append(''.join(prelude) + ';')
+                prelude = []
+            else:
+                prelude.append(ch)
+            pos += 1
+        return pos, ''.join(decls) + ''.join(prelude)
+
+    block(0, None, '')
+    return results
+
+def _motion_decls(decls):
+    """Yield (family, important, value) per declaration that animates something.
 
     `transition: none` / `animation: none` are how a reduced-motion fallback
     is WRITTEN. Counting them as motion would make every correct guard block
     its own finding."""
-    if GUARD.search(block):
-        return False
-    for m in MOTION.finditer(block):
-        value = m.group(2).strip().lower()
-        if value.split()[0:1] in ([], ['none'], ['unset'], ['initial'], ['inherit']):
+    for m in MOTION.finditer(decls):
+        value = m.group(2).strip()
+        if value.lower().split()[0:1] in ([], ['none'], ['unset'], ['initial'], ['inherit']):
             continue
-        return True
+        yield (m.group(1).lower(), '!important' in value.lower(), value)
+
+def _norm(sel):
+    sel = re.sub(r'\s+', ' ', sel.strip())
+    return re.sub(r'\s*([>+~])\s*', r'\1', sel)
+
+def _extends(longer, shorter):
+    """`.btn:hover` and `button:not(.x)` extend `.btn` / `button` — same compound,
+    one more simple selector. `.btn-primary` (a different class) and `.btn .icon`
+    (a descendant — a different element) do not."""
+    return longer.startswith(shorter) and len(longer) > len(shorter) and longer[len(shorter)] in ':.[#'
+
+def _descends(longer, shorter):
+    """`.app-wrapper .btn`, `html .btn` and `.wrap>.btn` all add an ancestor to
+    `.btn`: strictly more specific, and they match `.btn` elements under that
+    ancestor. `.xbtn` does not end on a combinator boundary and is unrelated."""
+    return (longer.endswith(shorter) and len(longer) > len(shorter)
+            and longer[-len(shorter) - 1] in ' >+~')
+
+def _more_specific(g, m):
+    return _extends(g, m) or _descends(g, m)
+
+def _covered(m, fam, mi, mpos, guards):
+    """Does some guard override motion selector `m` (family=`fam`, important=`mi`,
+    declared at `mpos`) under the cascade?"""
+    for g, gfam, gi, gpos in guards:
+        if gfam != fam:
+            continue                     # an animation guard stops no transition
+        if mi and not gi:
+            continue                     # an !important motion beats every plain guard
+        if g == m:
+            if gi == mi and gpos < mpos:
+                continue                 # same weight, but the motion is declared later
+            return True
+        if _more_specific(g, m):
+            return True                  # strictly more specific, not less important
+        if gi and not mi and (g == '*' or _more_specific(m, g)):
+            return True                  # less specific, but !important against a plain declaration
     return False
 
 def _is_minified(text):
@@ -7773,18 +7994,69 @@ def _is_minified(text):
     something no hand-written stylesheet has and every minified one does."""
     return any(len(line) > 500 for line in text.split('\n'))
 
+def _check(block_text, scss, where):
+    text = _mask_comments(block_text, scss)
+    rules = _rules(text)
+    guards, tokens, motion = [], set(), []
+    for sels, decls, state, pos in rules:
+        if state == 'reduce':
+            tokens.update(name for name, value in CUSTOM_PROP.findall(decls) if _zeroish(value))
+            # Per DECLARATION, not per rule: a block that pairs a plain
+            # `transition: none` with an `animation: none !important` grants
+            # importance to the animation guard only.
+            for part in decls.split(';'):
+                mp = MOTION_PROP.search(part)
+                if mp:
+                    gi = '!important' in part.lower()
+                    guards.extend((_norm(s), mp.group(1).lower(), gi, pos) for s in sels)
+        elif state == '':
+            for fam, mi, value in _motion_decls(decls):
+                motion.append((sels, fam, mi, pos, VAR_REF.findall(value), value))
+    if not rules and MOTION.search(text):
+        # Brace-less syntax (indented .sass): no selectors to match, so fall
+        # back to the presence question this checker asked before 2026-09-21.
+        motion.append((['<indented syntax>'], 'transition', False, 0, [], ''))
+        if GUARD.search(text) or GLOBAL_GUARD:
+            return []
+    if not motion:
+        return []
+    if not GUARD.search(text) and not GLOBAL_GUARD:
+        return [f'{fname}: {where} rule=motion-without-reduced-motion-fallback']
+    if GLOBAL_GUARD:
+        # The repo-wide reset zeroes both families, and sits in another file —
+        # source order across files is not knowable, so it is placed before
+        # everything and only ever wins on importance, never on order.
+        guards.extend(('*', f, True, -1) for f in ('transition', 'animation'))
+    findings, seen = [], set()
+    for sels, fam, mi, mpos, refs, value in motion:
+        if refs and all(r in tokens for r in refs) and not _nonzero_time(value):
+            # Every duration token it reads is zeroed in the reduced-motion
+            # block AND it spells no literal duration of its own — a
+            # `transition: opacity var(--dur) ease, transform 0.4s ease` still
+            # animates the transform however the token is redefined.
+            continue
+        for s in sels:
+            s = _norm(s)
+            if s in seen:
+                continue
+            if not _covered(s, fam, mi, mpos, guards):
+                seen.add(s)
+                findings.append(f'{fname}: {where} rule=motion-selector-not-overridden-by-reduced-motion-fallback'
+                                f' selector={s}' + (' (!important — the fallback needs equal or higher specificity, also !important)' if mi else ''))
+    return findings
+
 if STYLESHEET.search(fname):
     if _is_minified(src):
         sys.exit(0)
     scss = not fname.lower().endswith('.css')
-    if _motion_without_guard(_mask_comments(src, scss)):
-        print(f'{fname}: stylesheet rule=motion-without-reduced-motion-fallback')
+    for line in _check(src, scss, 'stylesheet'):
+        print(line)
 else:
     for m in re.finditer(r'<style\b([^>]*)>(.*?)</style>', src, re.IGNORECASE | re.DOTALL):
-        attrs, block = m.group(1), m.group(2)
+        attrs, blk = m.group(1), m.group(2)
         scss = bool(re.search(r'lang\s*=\s*["\']?(scss|sass|less)', attrs, re.IGNORECASE))
-        if _motion_without_guard(_mask_comments(block, scss)):
-            print(f'{fname}: <style> rule=motion-without-reduced-motion-fallback')
+        for line in _check(blk, scss, '<style>'):
+            print(line)
 PYRM
         # `$?` immediately after a heredoc-fed command is the command's status;
         # captured into a named variable rather than tested inline so
@@ -7802,7 +8074,7 @@ PYRM
     elif [ "${_rm_fail}" -eq 0 ]; then
         _pass 45 "prefers-reduced-motion"
     else
-        _fail 45 "prefers-reduced-motion" "${_rm_fail} <style> block(s)/stylesheet(s) with motion but no reduced-motion fallback — see ${_rm_log}"
+        _fail 45 "prefers-reduced-motion" "${_rm_fail} finding(s): motion with no reduced-motion fallback, or a motion selector the fallback does not override under the cascade — see ${_rm_log}"
     fi
 fi
 
