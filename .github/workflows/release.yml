@@ -1000,10 +1000,47 @@ jobs:
           # unverified path in SILENCE is the failure this change exists to end.
           GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN || github.token }}
           HAVE_PAT: ${{ secrets.FLEET_DISPATCH_TOKEN != '' }}
+          # Kept separately so the probe below can fall back to it.
+          FALLBACK_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+
+          # AN EXPIRED PAT IS NOT AN ABSENT ONE, AND THE FALLBACK ABOVE ONLY
+          # COVERS THE ABSENT ONE.
+          #
+          # `secrets.X || github.token` tests for the empty string. A secret
+          # that still EXISTS and no longer authenticates passes that test, so
+          # GH_TOKEN carries a dead credential and every `gh` call 401s.
+          #
+          # Measured 2026-09-22: FLEET_DISPATCH_TOKEN was set 2026-08-21 and
+          # expired thirty days later, on 2026-09-20. From that moment every
+          # release run in the fleet failed on this step with
+          # `HTTP 401: Bad credentials` -- portaliq, dossiq, decidiq,
+          # openregister and thematiq all alike -- and because this step runs
+          # BEFORE packaging and tagging, nothing was released anywhere for
+          # two days. The 401 appeared only inside the step log; the job
+          # simply read "Open the version-bump pull request: failure".
+          #
+          # So probe the token before trusting it, and degrade to GITHUB_TOKEN
+          # exactly as when the secret is missing. A degraded release still
+          # ships; a dead credential must not take the fleet offline.
+          if [ "${HAVE_PAT}" = "true" ] \
+            && ! gh api "repos/${{ github.repository }}" --jq .full_name >/dev/null 2>&1; then
+            echo "::error::FLEET_DISPATCH_TOKEN is set but does not authenticate against ${{ github.repository }}. It has most likely expired -- rotate the organisation secret. Falling back to GITHUB_TOKEN so this release still publishes."
+            export GH_TOKEN="${FALLBACK_TOKEN}"
+            HAVE_PAT="expired"
+          fi
+
+          # Two ways to end up on GITHUB_TOKEN, and the log must say which:
+          # "is not set here" sent anyone reading a fallback warning to look
+          # for a missing secret that was in fact present and expired.
           if [ "${HAVE_PAT}" != "true" ]; then
-            echo "::warning::FLEET_DISPATCH_TOKEN is not set here. Opening this pull request with GITHUB_TOKEN, so its checks will NOT run and it can merge unverified. See the note on this step."
+            if [ "${HAVE_PAT}" = "expired" ]; then
+              WHY="FLEET_DISPATCH_TOKEN is set but does not authenticate"
+            else
+              WHY="FLEET_DISPATCH_TOKEN is not set here"
+            fi
+            echo "::warning::${WHY}. Opening this pull request with GITHUB_TOKEN, so its checks will NOT run and it can merge unverified. See the note on this step."
           fi
           BR="${{ steps.bump.outputs.bump_branch }}"
 
@@ -1035,9 +1072,14 @@ jobs:
           # older PR's version is already published under its own tag, and the
           # new PR carries the branch further forward than the old one did.
           #
-          # Never fails the release. The tag and the package are already
-          # published by the time this runs, so a failure to tidy up is a
-          # backlog item, not a broken release.
+          # Tidying up must never fail the release. Note that this is a
+          # PROPERTY OF THE `||` HANDLERS, not of the step's position: the
+          # package is built, tagged and published by the steps BELOW, so an
+          # unhandled non-zero here takes the whole release down. Two earlier
+          # comments in this step claimed the opposite and that is how the
+          # 2026-09-20 token expiry went from a tidy-up problem to a two-day
+          # fleet-wide release outage. Every command in this step handles its
+          # own failure for that reason.
           gh pr list \
             --repo "${{ github.repository }}" \
             --base "${{ github.ref_name }}" \
@@ -1072,7 +1114,10 @@ jobs:
 
           Raised as a pull request rather than pushed directly because
           ${{ github.ref_name }} requires one; a direct push is rejected with GH013
-          and takes the release down with it."
+          and takes the release down with it." || {
+            echo "::error::Could not open the version-bump pull request for ${BR}. The release continues: the tag and the package are published by the steps below, and ${{ github.ref_name }} stays one version behind the tag until this bump lands. Open the pull request by hand from ${BR}."
+            exit 0
+          }
 
           # CLOSE THE LOOP. Opening the pull request is not the same as landing
           # the bump, and until 2026-08-24 nothing did the second half: every
@@ -1091,9 +1136,9 @@ jobs:
           #
           # `allow_auto_merge` must be true on the repository or this errors —
           # it was false fleet-wide until 2026-08-24 and is now enabled on all
-          # 17 core apps. A failure here must not fail the release: the tag and
-          # the package are already published by this point, so the bump PR
-          # staying open is a backlog item, not a broken release.
+          # 17 core apps. A failure here must not fail the release -- the bump
+          # PR staying open is a backlog item, and the package below has not
+          # been built yet, so an unhandled failure costs the release itself.
           #
           # BUT NEVER AUTO-MERGE A BUMP THAT GOES BACKWARDS.
           #
@@ -1156,10 +1201,29 @@ jobs:
           # silent one if the secret is absent.
           GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN || github.token }}
           HAVE_PAT: ${{ secrets.FLEET_DISPATCH_TOKEN != '' }}
+          FALLBACK_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
+
+          # Same probe as the version-bump step: an EXPIRED secret is not an
+          # empty one, so `secrets.X || github.token` never fires for it. This
+          # step cannot fail the job -- every command handles itself -- but
+          # without the probe a dead PAT means no sync PR at all, and
+          # development silently stops catching up with beta.
+          if [ "${HAVE_PAT}" = "true" ] \
+            && ! gh api "repos/${{ github.repository }}" --jq .full_name >/dev/null 2>&1; then
+            echo "::error::FLEET_DISPATCH_TOKEN is set but does not authenticate against ${{ github.repository }}. It has most likely expired -- rotate the organisation secret. Falling back to GITHUB_TOKEN for the sync pull request."
+            export GH_TOKEN="${FALLBACK_TOKEN}"
+            HAVE_PAT="expired"
+          fi
+
           if [ "${HAVE_PAT}" != "true" ]; then
-            echo "::warning::FLEET_DISPATCH_TOKEN is not set here. Opening this pull request with GITHUB_TOKEN, so its checks will NOT run and it can merge unverified. See the note on this step."
+            if [ "${HAVE_PAT}" = "expired" ]; then
+              WHY="FLEET_DISPATCH_TOKEN is set but does not authenticate"
+            else
+              WHY="FLEET_DISPATCH_TOKEN is not set here"
+            fi
+            echo "::warning::${WHY}. Opening this pull request with GITHUB_TOKEN, so its checks will NOT run and it can merge unverified. See the note on this step."
           fi
           SRC="${{ github.ref_name }}"
           BR="sync/${SRC}-to-development-${{ env.NEW_VERSION }}"
