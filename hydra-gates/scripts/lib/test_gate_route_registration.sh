@@ -51,6 +51,11 @@
 #   delegated-registrar/        AppHost call in a registrar -> 3 generics exempt
 #                               `gadget#run` bound nowhere  -> gate-14 FAILS
 #   delegated-registrar-absent/ the SAME app minus that one file -> all 4 FAIL
+#   store-plane/                aliasStoreController() in a registrar
+#                               -> store#search / store#install exempt
+#                               `gadget#run` bound nowhere  -> gate-14 FAILS
+#   store-plane-absent/         the SAME app with that call demoted to a
+#                               DOCBLOCK -> both store routes MUST be reported
 #   monitoring-capitalised/     a capitalised name is now SELECTED -> gate-30 FAILS
 #                               a metrics posture 20+ lines up   -> not a finding
 #   monitoring-per-object/      healthPing#show / #validate ignored
@@ -125,6 +130,7 @@ echo
 for _f in routes-standard routes-standard-missing-update \
           psr4-namespaced-controller psr4-namespaced-controller-missing-method \
           delegated-registrar delegated-registrar-absent \
+          store-plane store-plane-absent \
           monitoring-capitalised monitoring-per-object monitoring-per-object-only \
           monitoring-none knr-braces; do
     [ -d "${FIXTURES}/${_f}" ] || _bad "fixture ${FIXTURES}/${_f} does not exist — this suite would be green on nothing"
@@ -244,6 +250,35 @@ if _run "${FIXTURES}/delegated-registrar-absent"; then
         "delegated-registrar-absent: ALL FOUR absent controllers are reported — removing the one registrar file flips every verdict"
     _expect_log "${_RRLOG}" "HealthController\.php route='health#index'" \
         "delegated-registrar-absent: health#index is reported when nothing binds it"
+fi
+
+# ---------------------------------------------------------------------------
+# 2b. WOO-559 — the store plane is adoption too, and its sibling
+#
+# `Bootstrap::aliasStoreController()` shipped after both detectors above and
+# is deliberately not part of `Bootstrap::register()`, so a store-plane
+# adopter matched neither and had its two working routes reported as
+# controller-class-not-found. StoreController is absent BY DESIGN here
+# (ADR-114 D4): the leaf declares a store, the engine serves it.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/store-plane"; then
+    _expect_gate 14 "FAIL" "store-plane: the unbound controller is still a finding"
+    _expect_log "${_RRLOG}" "GadgetController\.php route='gadget#run' rule=controller-class-not-found" \
+        "store-plane: gadget#run is bound by nothing and IS reported"
+    _expect_not_log "${_RRLOG}" "StoreController" \
+        "store-plane: neither store route is reported — the engine binds the name"
+    _expect_lines "${_RRLOG}" 1 \
+        "store-plane: exactly ONE finding"
+fi
+
+if _run "${FIXTURES}/store-plane-absent"; then
+    _expect_gate 14 "FAIL" "store-plane-absent: a docblock is not a binding"
+    _expect_lines "${_RRLOG}" 3 \
+        "store-plane-absent: BOTH store routes and gadget#run are reported — demoting the call to prose flips the verdict"
+    _expect_log "${_RRLOG}" "StoreController\.php route='store#search'" \
+        "store-plane-absent: store#search is reported when only prose names the call"
+    _expect_log "${_RRLOG}" "StoreController\.php route='store#install'" \
+        "store-plane-absent: store#install is reported when only prose names the call"
 fi
 
 # ---------------------------------------------------------------------------

@@ -332,6 +332,17 @@ very next line. decidiq and filinq were both red on `development` for this, and
 planninq had already paid for a hand-vendored copy. Suppressing the finding would
 also suppress the next genuinely unused parameter in the same method.
 
+Gate-14 reads the same call, for its own reason. `StoreController` is absent
+from the leaf BY DESIGN (ADR-114 Decision 4 — the leaf declares a store, the
+engine serves it), so `store#search` and `store#install` name a class that is
+not on disk and route-reachability reported them as `controller-class-not-found`
+while they resolved fine at runtime. A file that names `AppHost\Bootstrap` AND
+calls `aliasStoreController()`, both in non-comment code, now counts as AppHost
+adoption and `store` joins the exempt slugs. Prose does not count, and the
+control pair in `test-fixtures/route-registration/store-plane{,-absent}/` holds
+it to that: the sibling differs only by the call living in a docblock, and there
+both routes must still be reported.
+
 **The stub carries the engine's public surface only, and it can drift.** When
 `openregister/lib/AppHost/Bootstrap.php` changes a public signature, change this
 file with it. A stub that disagrees with the engine is worse than no stub,

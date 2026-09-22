@@ -1092,11 +1092,55 @@ if [ "${_HYDRA_APPHOST}" -eq 0 ] && [ -d lib ]; then
         | xargs -0 -r grep -lE 'AppHost\\+Controller\\+Generic' 2>/dev/null \
         || true)
 fi
+# ---------------------------------------------------------------------------
+# THE STORE PLANE IS ALSO ADOPTION (portaliq, WOO-559)
+# ---------------------------------------------------------------------------
+# A third way in, and the narrowest. `Bootstrap::aliasStoreController()`
+# shipped 2026-09-04, after both detectors above were written, and it is
+# deliberately NOT part of `Bootstrap::register()`: that one-call helper also
+# re-binds SettingsService, the repair steps and the admin settings under the
+# leaf's names, which an app that binds its own controllers by hand must not
+# take. So a store-plane adopter calls this one method and nothing else, and
+# matches neither detector above — `Bootstrap::register(` is absent, and
+# GenericStoreController is not one of the five generics the planix detector
+# knows.
+#
+# The effect was that `store#search` and `store#install` were reported as
+# `controller-class-not-found` while resolving correctly at runtime: exactly
+# the planix failure (#237) one method over, and the same for every app that
+# adopts the plane next. `StoreController` is absent BY DESIGN — ADR-114
+# Decision 4 has the leaf declare a store and the engine host it.
+#
+# Judged to the same standard as its two siblings, and it has to be: this
+# admits a missing controller, so a loose match here is a blanket exemption.
+# BOTH signals, in the SAME file, in NON-COMMENT code — the engine's namespace
+# and the specific method. Prose does not count, and that is not hypothetical:
+# `delegated-registrar-absent/` was EXEMPTED BY ITS OWN DOCBLOCK when the
+# first cut of the sibling widening used two raw greps, and the file that
+# explains this architecture is exactly the file that spells the call out.
+# Control pair: `store-plane/` (exempt, with a `gadget#run` that must still
+# FAIL) and `store-plane-absent/` (the same app with the call demoted to a
+# docblock — both store routes MUST be reported).
+if [ "${_HYDRA_APPHOST}" -eq 0 ] && [ -d lib ]; then
+    while IFS= read -r _ah_f; do
+        [ -f "${_ah_f}" ] || continue
+        _ah_code=$(_php_code_only "${_ah_f}")
+        printf '%s\n' "${_ah_code}" | grep -qE 'AppHost\\+Bootstrap' || continue
+        printf '%s\n' "${_ah_code}" | grep -qE 'aliasStoreController[[:space:]]*\(' || continue
+        _HYDRA_APPHOST=1
+        _HYDRA_APPHOST_SITE="${_ah_f}"
+        break
+    done < <(_enum_tracked '\.php$' lib \
+        | tr '\n' '\0' \
+        | xargs -0 -r grep -lE 'aliasStoreController[[:space:]]*\(' 2>/dev/null \
+        || true)
+fi
 # The five controller class names Bootstrap::register() aliases, as route
-# slugs. Source of truth: openregister lib/AppHost/Bootstrap.php
-# ::registerControllers(). Deliberately an explicit list, not a wildcard —
+# slugs, plus `store` for the plane above. Source of truth: openregister
+# lib/AppHost/Bootstrap.php ::registerControllers() and
+# ::aliasStoreController(). Deliberately an explicit list, not a wildcard —
 # a wildcard would let ANY missing controller hide behind AppHost adoption.
-_HYDRA_APPHOST_SLUGS="dashboard preferences settings health metrics"
+_HYDRA_APPHOST_SLUGS="dashboard preferences settings health metrics store"
 
 # The app's own top namespace, read from its own file:
 # `namespace OCA\<App>\AppInfo;`. Empty when there is no Application.php, which
