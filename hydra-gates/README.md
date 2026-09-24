@@ -337,11 +337,16 @@ from the leaf BY DESIGN (ADR-114 Decision 4 — the leaf declares a store, the
 engine serves it), so `store#search` and `store#install` name a class that is
 not on disk and route-reachability reported them as `controller-class-not-found`
 while they resolved fine at runtime. A file that names `AppHost\Bootstrap` AND
-calls `aliasStoreController()`, both in non-comment code, now counts as AppHost
-adoption and `store` joins the exempt slugs. Prose does not count, and the
-control pair in `test-fixtures/route-registration/store-plane{,-absent}/` holds
-it to that: the sibling differs only by the call living in a docblock, and there
-both routes must still be reported.
+makes the static call `Bootstrap::aliasStoreController(`, both in non-comment
+code, now counts as adoption of the STORE PLANE — and of nothing else: it
+exempts the `store` slug only, never the five generics `Bootstrap::register()`
+aliases, because the engine keeps them as separate calls. Prose does not count,
+and neither does an import beside a same-named method of the app's own. The
+fixtures in `test-fixtures/route-registration/store-plane{,-absent,-coincidental}/`
+hold it to all three: `store-plane/` still reports an unwired `settings#index`,
+the `-absent` sibling differs only by the call living in a docblock, and the
+`-coincidental` one imports Bootstrap but calls `$this->aliasStoreController()`
+— in both of those, both store routes must still be reported.
 
 **The stub carries the engine's public surface only, and it can drift.** When
 `openregister/lib/AppHost/Bootstrap.php` changes a public signature, change this

@@ -1114,33 +1114,44 @@ fi
 # Judged to the same standard as its two siblings, and it has to be: this
 # admits a missing controller, so a loose match here is a blanket exemption.
 # BOTH signals, in the SAME file, in NON-COMMENT code — the engine's namespace
-# and the specific method. Prose does not count, and that is not hypothetical:
+# and the static call `Bootstrap::aliasStoreController(` as ONE token, the way
+# the first detector demands `Bootstrap::register(`. Two independent greps
+# were not enough: a stale `use …\AppHost\Bootstrap;` next to the app's OWN
+# `$this->aliasStoreController(` flipped the verdict with no engine call
+# anywhere. Prose does not count either, and that is not hypothetical:
 # `delegated-registrar-absent/` was EXEMPTED BY ITS OWN DOCBLOCK when the
 # first cut of the sibling widening used two raw greps, and the file that
 # explains this architecture is exactly the file that spells the call out.
 # Control pair: `store-plane/` (exempt, with a `gadget#run` that must still
 # FAIL) and `store-plane-absent/` (the same app with the call demoted to a
-# docblock — both store routes MUST be reported).
-if [ "${_HYDRA_APPHOST}" -eq 0 ] && [ -d lib ]; then
+# docblock — both store routes MUST be reported), plus
+# `store-plane-coincidental/` (the stale import + own-method case above).
+#
+# ITS OWN FLAG, NOT `_HYDRA_APPHOST`. This plane serves ONE slug. Setting the
+# shared flag would have handed a store-only adopter the other five generics
+# too, so a `settings#index` with no controller anywhere would pass as
+# "AppHost provides it" — which `store-plane/` now asserts against. The two
+# planes are separate calls in the engine, so they are separate facts here.
+_HYDRA_APPHOST_STORE=0
+if [ -d lib ]; then
     while IFS= read -r _ah_f; do
         [ -f "${_ah_f}" ] || continue
         _ah_code=$(_php_code_only "${_ah_f}")
         printf '%s\n' "${_ah_code}" | grep -qE 'AppHost\\+Bootstrap' || continue
-        printf '%s\n' "${_ah_code}" | grep -qE 'aliasStoreController[[:space:]]*\(' || continue
-        _HYDRA_APPHOST=1
-        _HYDRA_APPHOST_SITE="${_ah_f}"
+        printf '%s\n' "${_ah_code}" | grep -qE 'Bootstrap::aliasStoreController[[:space:]]*\(' || continue
+        _HYDRA_APPHOST_STORE=1
         break
     done < <(_enum_tracked '\.php$' lib \
         | tr '\n' '\0' \
-        | xargs -0 -r grep -lE 'aliasStoreController[[:space:]]*\(' 2>/dev/null \
+        | xargs -0 -r grep -lE 'Bootstrap::aliasStoreController[[:space:]]*\(' 2>/dev/null \
         || true)
 fi
 # The five controller class names Bootstrap::register() aliases, as route
-# slugs, plus `store` for the plane above. Source of truth: openregister
-# lib/AppHost/Bootstrap.php ::registerControllers() and
-# ::aliasStoreController(). Deliberately an explicit list, not a wildcard —
+# slugs. Source of truth: openregister lib/AppHost/Bootstrap.php
+# ::registerControllers(). Deliberately an explicit list, not a wildcard —
 # a wildcard would let ANY missing controller hide behind AppHost adoption.
-_HYDRA_APPHOST_SLUGS="dashboard preferences settings health metrics store"
+# `store` is NOT in it: that slug is answered by `_HYDRA_APPHOST_STORE` alone.
+_HYDRA_APPHOST_SLUGS="dashboard preferences settings health metrics"
 
 # The app's own top namespace, read from its own file:
 # `namespace OCA\<App>\AppInfo;`. Empty when there is no Application.php, which
@@ -1222,7 +1233,13 @@ _apphost_supplies_route() {
 
 # _apphost_serves <route-slug> — 0 when this app adopts AppHost AND the slug is
 # one of the generics AppHost provides, i.e. the missing file is expected.
+# `store` is judged by the store-plane detector only, and it answers for
+# nothing else.
 _apphost_serves() {
+    if [ "$1" = "store" ]; then
+        [ "${_HYDRA_APPHOST_STORE}" -eq 1 ]
+        return
+    fi
     [ "${_HYDRA_APPHOST}" -eq 1 ] || return 1
     case " ${_HYDRA_APPHOST_SLUGS} " in
         *" $1 "*) return 0 ;;

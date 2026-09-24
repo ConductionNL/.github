@@ -54,8 +54,13 @@
 #   store-plane/                aliasStoreController() in a registrar
 #                               -> store#search / store#install exempt
 #                               `gadget#run` bound nowhere  -> gate-14 FAILS
+#                               `settings#index` bound nowhere -> REPORTED: the
+#                               store plane does not grant the five generics
 #   store-plane-absent/         the SAME app with that call demoted to a
 #                               DOCBLOCK -> both store routes MUST be reported
+#   store-plane-coincidental/   a stale Bootstrap import + the app's OWN
+#                               aliasStoreController() -> both store routes
+#                               MUST be reported
 #   monitoring-capitalised/     a capitalised name is now SELECTED -> gate-30 FAILS
 #                               a metrics posture 20+ lines up   -> not a finding
 #   monitoring-per-object/      healthPing#show / #validate ignored
@@ -130,7 +135,7 @@ echo
 for _f in routes-standard routes-standard-missing-update \
           psr4-namespaced-controller psr4-namespaced-controller-missing-method \
           delegated-registrar delegated-registrar-absent \
-          store-plane store-plane-absent \
+          store-plane store-plane-absent store-plane-coincidental \
           monitoring-capitalised monitoring-per-object monitoring-per-object-only \
           monitoring-none knr-braces; do
     [ -d "${FIXTURES}/${_f}" ] || _bad "fixture ${FIXTURES}/${_f} does not exist — this suite would be green on nothing"
@@ -265,10 +270,22 @@ if _run "${FIXTURES}/store-plane"; then
     _expect_gate 14 "FAIL" "store-plane: the unbound controller is still a finding"
     _expect_log "${_RRLOG}" "GadgetController\.php route='gadget#run' rule=controller-class-not-found" \
         "store-plane: gadget#run is bound by nothing and IS reported"
+    _expect_log "${_RRLOG}" "SettingsController\.php route='settings#index' rule=controller-class-not-found" \
+        "store-plane: a store-only adopter does NOT get the five AppHost generics — settings#index is reported"
     _expect_not_log "${_RRLOG}" "StoreController" \
         "store-plane: neither store route is reported — the engine binds the name"
-    _expect_lines "${_RRLOG}" 1 \
-        "store-plane: exactly ONE finding"
+    _expect_lines "${_RRLOG}" 2 \
+        "store-plane: exactly TWO findings (gadget#run, settings#index)"
+fi
+
+if _run "${FIXTURES}/store-plane-coincidental"; then
+    _expect_gate 14 "FAIL" "store-plane-coincidental: an import plus a same-named OWN method is not the engine call"
+    _expect_lines "${_RRLOG}" 2 \
+        "store-plane-coincidental: BOTH store routes are reported"
+    _expect_log "${_RRLOG}" "StoreController\.php route='store#search'" \
+        "store-plane-coincidental: store#search is reported"
+    _expect_log "${_RRLOG}" "StoreController\.php route='store#install'" \
+        "store-plane-coincidental: store#install is reported"
 fi
 
 if _run "${FIXTURES}/store-plane-absent"; then

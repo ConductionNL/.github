@@ -13,5 +13,9 @@ return [
         // NOT the store plane and bound by nothing: a real 500 at request
         // time, and the anti-widening half of this fixture.
         ['name' => 'gadget#run', 'url' => '/api/gadget', 'verb' => 'POST'],
+        // An AppHost GENERIC slug this app never wired: it calls only the
+        // store plane, not Bootstrap::register(), so nothing binds
+        // SettingsController. Store-plane adoption must not exempt it.
+        ['name' => 'settings#index', 'url' => '/api/settings', 'verb' => 'GET'],
     ],
 ];
