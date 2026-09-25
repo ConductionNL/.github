@@ -336,6 +336,8 @@ Most guards use `(^|[;&|]\s*)cmd\b` patterns to catch commands both at the start
 
 Authorized git push phrases (case-insensitive): `push for me`, `commit and push`, `please git push`, `push my changes`.
 
+The phrase must be in the last message the human typed — plain text, text sent along with a pasted image, or the arguments of a slash command. Entries Claude Code writes itself are not human input: `isMeta` entries (the `[Image: source: …]` line after a pasted image, the body of an invoked skill), tool results, task notifications, messages from other sessions and compaction summaries neither grant nor revoke push authorization.
+
 ## What `check-settings-version.sh` does
 
 - Fires once per session (keyed to the transcript path via a flag file in `$XDG_RUNTIME_DIR` or `~/.claude/`, with `chmod 600`).
