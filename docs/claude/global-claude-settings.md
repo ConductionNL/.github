@@ -65,6 +65,9 @@ The source name is included so a stale mirror is visible at a glance: `GitHub` f
 > NEW SESSION — GLOBAL CLAUDE SETTINGS: UPDATE REQUIRED
 > Installed: v0.1.0 (outdated) | Latest: v1.0.0 (on origin/main)
 > Say "update my global settings to 1.0.0" to apply the update.
+> Afterwards, relock with (A) full lock, or (B) lock without settings.json (keeps the VSCode model picker working; small risk: the main file goes without the kernel lock).
+
+The relock step always offers both options, each with its own command, and says why (B) is there. It is the same choice described under [Troubleshooting → keep `settings.json` unlocked](#model-or-the-model-picker-fails-with-eperm-operation-not-permitted-open-claudesettingsjson). Since v2.5.2 it is part of the update message itself, not a note in the docs.
 
 **Configuration error** (prominently displayed):
 
@@ -501,7 +504,7 @@ The CLI confirms with "Set model to Fable 5.1 for this session only" and the swi
 
 **Fix — one-off switch.** If you only need to change the persisted model once, run the unlock step from [README → Updating](../../global-settings/README.md#updating) in your own terminal, switch the model in Claude Code, then run the relock step. Don't skip the relock.
 
-**Fix — keep `settings.json` unlocked, lock everything else.** If you switch models with the picker often enough that the two fixes above are friction rather than protection, drop just that one file from the relock list:
+**Fix — keep `settings.json` unlocked, lock everything else.** Since v2.5.2 this is option **(B)** in the update message's relock step, next to the full lock (A). If you switch models with the picker often enough that the two fixes above are friction rather than protection, drop just that one file from the relock list:
 
 ```bash
 # Note: no $HOME/.claude/settings.json in this list.
