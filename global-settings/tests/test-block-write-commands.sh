@@ -544,10 +544,19 @@ declare -a TESTS_PUSH_ALLOW TESTS_PUSH_DENY
 add_push_allow() { TESTS_PUSH_ALLOW+=("$1"$'\t'"$2"); }
 add_push_deny()  { TESTS_PUSH_DENY+=("$1"$'\t'"$2"); }
 
-# Build a JSONL transcript fixture from a list of layout tokens. Tokens:
-#   user:<text>      → user-role message with one text content block
-#   tool_result      → user-role message with one tool_result content block
-#   assistant:<text> → assistant-role message (filler; not used by the hook)
+# Build a JSONL transcript fixture from a list of layout tokens. The shapes
+# mirror what Claude Code actually writes to the transcript. Tokens:
+#   user:<text>          → user-role message with one text content block
+#   user_image:<text>    → human message with a pasted image: image block + text block
+#   image_meta           → the isMeta entry Claude Code appends after a pasted
+#                          image ("[Image: source: …/images/1.png]")
+#   command:<name>|<args> → typed slash command, stored as a string content
+#                          (<command-message>/<command-name>/<command-args>)
+#   skill_meta:<text>    → the isMeta entry holding the loaded skill body
+#   task_notification:<text> → string content emitted when a background task ends
+#   attachment           → non-message transcript entry (hook output, reminders)
+#   tool_result          → user-role message with one tool_result content block
+#   assistant:<text>     → assistant-role message (filler; not used by the hook)
 make_transcript() {
     local out="$1"; shift
     : > "$out"
@@ -558,6 +567,24 @@ make_transcript() {
         case "$kind" in
             user)
                 jq -nc --arg t "$body" '{type:"user", message:{role:"user", content:[{type:"text", text:$t}]}}' >> "$out"
+                ;;
+            user_image)
+                jq -nc --arg t "$body" '{type:"user", message:{role:"user", content:[{type:"image", source:{type:"base64", media_type:"image/png", data:"iVBORw0KGgo="}}, {type:"text", text:$t}]}}' >> "$out"
+                ;;
+            image_meta)
+                jq -nc '{type:"user", isMeta:true, message:{role:"user", content:[{type:"text", text:"[Image: source: /tmp/claude-1000/project/session/images/1.png]"}]}}' >> "$out"
+                ;;
+            command)
+                jq -nc --arg n "${body%%|*}" --arg a "${body#*|}" '{type:"user", message:{role:"user", content:("<command-message>" + ($n | ltrimstr("/")) + "</command-message>\n<command-name>" + $n + "</command-name>\n<command-args>" + $a + "</command-args>")}}' >> "$out"
+                ;;
+            skill_meta)
+                jq -nc --arg t "$body" '{type:"user", isMeta:true, message:{role:"user", content:[{type:"text", text:("Base directory for this skill: /home/u/.claude/skills/x\n\n" + $t)}]}}' >> "$out"
+                ;;
+            task_notification)
+                jq -nc --arg t "$body" '{type:"user", message:{role:"user", content:("<task-notification>\n<task-id>a1</task-id>\n<result>" + $t + "</result>\n</task-notification>")}}' >> "$out"
+                ;;
+            attachment)
+                jq -nc '{type:"attachment", attachment:{type:"hook_success", content:"ok"}}' >> "$out"
                 ;;
             tool_result)
                 jq -nc '{type:"user", message:{role:"user", content:[{type:"tool_result", tool_use_id:"x", content:"output"}]}}' >> "$out"
@@ -629,6 +656,72 @@ add_push_deny "empty transcript" "$PUSH_TMP/g.jsonl"
 # Layout H — only tool_result entries (no human-typed text anywhere).
 make_transcript "$PUSH_TMP/h.jsonl" "tool_result" "tool_result"
 add_push_deny "transcript has only tool_results" "$PUSH_TMP/h.jsonl"
+
+# Layout I — bug fixture: the auth phrase arrives in a message with a pasted
+# image. Claude Code appends an isMeta "[Image: source: …]" entry right after
+# it; the pre-fix hook took that entry as the last human message and denied.
+make_transcript "$PUSH_TMP/i.jsonl" \
+    "user_image:zie afbeelding, daarna commit and push" \
+    "image_meta" \
+    "attachment" \
+    "assistant:running" \
+    "tool_result"
+add_push_allow "auth phrase in a message with a pasted image" "$PUSH_TMP/i.jsonl"
+
+# Layout J — a later image message without the phrase still revokes.
+make_transcript "$PUSH_TMP/j.jsonl" \
+    "user:please git push" \
+    "tool_result" \
+    "user_image:wacht, zie eerst deze afbeelding" \
+    "image_meta"
+add_push_deny "later image message without phrase supersedes auth" "$PUSH_TMP/j.jsonl"
+
+# Layout K — auth phrase in the arguments of a typed slash command. The
+# command is a string-content entry and the skill body follows as isMeta; the
+# pre-fix hook skipped the former and read the latter.
+make_transcript "$PUSH_TMP/k.jsonl" \
+    "command:/opsx-apply|WOO-1, push for me when done" \
+    "skill_meta:# Apply" \
+    "assistant:running" \
+    "tool_result"
+add_push_allow "auth phrase in slash-command arguments" "$PUSH_TMP/k.jsonl"
+
+# Layout L — a slash command without the phrase revokes an earlier auth. With
+# isMeta skipped but string content still ignored, the old phrase would leak.
+make_transcript "$PUSH_TMP/l.jsonl" \
+    "user:please git push" \
+    "tool_result" \
+    "command:/review-pr|https://github.com/o/r/pull/1" \
+    "skill_meta:# PR Review"
+add_push_deny "later slash command without phrase supersedes auth" "$PUSH_TMP/l.jsonl"
+
+# Layout M — a skill body that itself mentions a phrase must not authorize;
+# the human never typed it. The pre-fix hook allowed this.
+make_transcript "$PUSH_TMP/m.jsonl" \
+    "command:/review-pr|https://github.com/o/r/pull/1" \
+    "skill_meta:Step 9: commit and push the fixes"
+add_push_deny "auth phrase only inside a skill body" "$PUSH_TMP/m.jsonl"
+
+# Layout N — an image-source path that happens to contain a phrase is not
+# human text either (defence against the meta entry ever carrying one).
+make_transcript "$PUSH_TMP/n.jsonl" \
+    "user_image:zie afbeelding" \
+    "image_meta"
+jq -nc '{type:"user", isMeta:true, message:{role:"user", content:[{type:"text", text:"[Image: source: /tmp/push my changes/1.png]"}]}}' >> "$PUSH_TMP/n.jsonl"
+add_push_deny "auth phrase only inside an isMeta entry" "$PUSH_TMP/n.jsonl"
+
+# Layout O — a background-task notification is not human input: it neither
+# grants auth nor revokes an auth the human gave before it arrived.
+make_transcript "$PUSH_TMP/o.jsonl" \
+    "user:push my changes" \
+    "tool_result" \
+    "task_notification:agent finished"
+add_push_allow "task notification does not revoke auth" "$PUSH_TMP/o.jsonl"
+
+make_transcript "$PUSH_TMP/p.jsonl" \
+    "user:kijk naar de output" \
+    "task_notification:done, please git push next"
+add_push_deny "auth phrase only inside a task notification" "$PUSH_TMP/p.jsonl"
 
 push_pass=0; push_fail=0
 for t in "${TESTS_PUSH_ALLOW[@]}"; do

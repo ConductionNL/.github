@@ -30,18 +30,33 @@ ask() {
 # after Claude runs any tool, the most-recent type=="user" entry is a tool_result
 # with no text block, which would otherwise erase a still-valid authorization
 # given by the human one turn earlier and deny every retry within the session.
+# We must also skip isMeta entries: Claude Code appends one after a message
+# with a pasted image ("[Image: source: …/images/1.png]") and one holding the
+# body of an invoked skill. Both carry text blocks, so without the filter the
+# meta entry became the "last message" — the phrase typed alongside an image
+# was lost, and a skill body mentioning a phrase could authorize on its own.
+# A typed slash command is stored as string content with the typed text in
+# <command-args>; it counts as a human message (so it can both grant and
+# revoke). Other string content (task notifications, messages from other
+# sessions, compaction summaries) is not human-typed and is ignored.
 # NOTE: reads the FULL content of the last human-typed user message (not just
 # the last line), so multi-paragraph messages with the auth phrase on any line
 # work correctly.
 git_push_authorized() {
     [[ -z "$transcript_path" || ! -f "$transcript_path" ]] && return 1
-    # Pipe: (1) emit each user message that has at least one text block, one per
-    #           line (skips tool_result-only entries),
-    #       (2) slurp all, take the last, join all text blocks into one
-    #           searchable string.
+    # Pipe: (1) emit the searchable text of each human-typed user message as a
+    #           JSON string, one per line (text blocks joined; for a slash
+    #           command, its arguments),
+    #       (2) keep the last one and decode it.
     local last_msg
-    last_msg=$(jq -rc 'select(.type == "user") | select([.message.content[]? | select(.type == "text")] | length > 0)' "$transcript_path" 2>/dev/null \
-        | jq -rs 'last | [.message.content[] | select(.type == "text") | .text] | join(" ")' 2>/dev/null)
+    last_msg=$(jq -c 'select(.type == "user" and .isMeta != true) | .message.content
+        | if type == "string" then
+            select(test("^\\s*<command-(name|message)>"))
+            | ([capture("<command-args>(?<a>[\\s\\S]*?)</command-args>").a] | first // "")
+          elif type == "array" and any(.[]; .type == "text") then
+            [.[] | select(.type == "text") | .text] | join(" ")
+          else empty end' "$transcript_path" 2>/dev/null \
+        | tail -n 1 | jq -r '.' 2>/dev/null)
     [[ -z "$last_msg" ]] && return 1
     echo "$last_msg" | grep -qiE '(push for me|commit and push|please git push|push my changes)'
 }
