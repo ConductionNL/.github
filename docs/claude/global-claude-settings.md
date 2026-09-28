@@ -65,6 +65,9 @@ The source name is included so a stale mirror is visible at a glance: `GitHub` f
 > NEW SESSION — GLOBAL CLAUDE SETTINGS: UPDATE REQUIRED
 > Installed: v0.1.0 (outdated) | Latest: v1.0.0 (on origin/main)
 > Say "update my global settings to 1.0.0" to apply the update.
+> Afterwards, relock with (A) full lock, or (B) lock without settings.json (keeps the VSCode model picker working, but the main file loses the kernel lock and is then guarded only by the regex hooks).
+
+The relock step always offers both options, each with its own command, and says why (B) is there. It is the same choice described under [Troubleshooting → keep `settings.json` unlocked](#model-or-the-model-picker-fails-with-eperm-operation-not-permitted-open-claudesettingsjson). Since v2.5.2 it is part of the update message itself, not a note in the docs.
 
 **Configuration error** (prominently displayed):
 
@@ -501,18 +504,24 @@ The CLI confirms with "Set model to Fable 5.1 for this session only" and the swi
 
 **Fix — one-off switch.** If you only need to change the persisted model once, run the unlock step from [README → Updating](../../global-settings/README.md#updating) in your own terminal, switch the model in Claude Code, then run the relock step. Don't skip the relock.
 
-**Fix — keep `settings.json` unlocked, lock everything else.** If you switch models with the picker often enough that the two fixes above are friction rather than protection, drop just that one file from the relock list:
+**Fix — keep `settings.json` unlocked, lock everything else.** Since v2.5.2 this is option **(B)** in the update message's relock step, next to the full lock (A). If you switch models with the picker often enough that the two fixes above are friction rather than protection, drop just that one file from the relock list:
 
 ```bash
 # Note: no $HOME/.claude/settings.json in this list.
 sudo chattr +i $HOME/.claude/hooks/*.sh $HOME/.claude/settings-version
 ```
 
-Be clear about what this costs. `settings.json` carries `permissions.deny` and the hook wiring, so it is the file an attacker would most want to edit — you are giving up layer 4 on exactly that file. What still defends it: the `permissions.deny` rules that block the Edit/Write tools, plus the protected-path guards in `block-write-commands.sh` and `block-config-tool-writes.sh`. The deny rules themselves live *in* `settings.json`, i.e. in the file you just unlocked — but the two hooks that enforce the same boundary stay kernel-locked, and they deny every edit to `settings.json` regardless of what the deny list says. That is what keeps the unlock bounded: a session cannot rewrite the deny list, because the locked hooks stop it before it gets there. That is a real position to take, not a broken setup; it is weaker than pinning the model project-locally and keeping all four layers, which stays the recommendation.
+Be clear about what this costs. `settings.json` carries `permissions.deny` and the hook wiring, so it is the file an attacker would most want to edit — you are giving up layer 4 on exactly that file. What still defends it: the `permissions.deny` rules that block the Edit/Write tools, plus the protected-path guards in `block-write-commands.sh` and `block-config-tool-writes.sh`. The deny rules themselves live *in* `settings.json`, i.e. in the file you just unlocked. The two hooks that enforce the same boundary keep their scripts kernel-locked, and they deny Claude's edits to `settings.json` regardless of what the deny list says. That still leaves three gaps:
+
+- **The hooks are regex checks.** The [security model](../../global-settings/README.md#security-model--defense-in-depth) calls a regex hook "fundamentally limited" against an adaptive LLM.
+- **The hooks depend on the unlocked file.** They run only because `settings.json` registers them, so one write that slips past them can unregister them for the next session.
+- **The hooks only police Claude.** Any other process running as you (an `npm install` or `composer install` script, a test runner) can change `settings.json` with nothing in the way.
+
+So the unlock is limited, not harmless. That is a real position to take, not a broken setup. It is weaker than pinning the model project-locally and keeping all four layers, which stays the recommendation.
 
 **What not to do.**
 
-- Don't leave the lock off *entirely* "because the picker is annoying" — unlocking the hooks along with the settings file disarms the only protection layer that survives a compromised hook chain. Dropping `settings.json` alone from the relock (previous fix) is a bounded trade; unlocking `hooks/*.sh` is not.
+- Don't leave the lock off *entirely* "because the picker is annoying" — unlocking the hooks along with the settings file disarms the only protection layer that survives a compromised hook chain. Dropping `settings.json` alone from the relock (previous fix) is a limited trade; unlocking `hooks/*.sh` as well is not.
 - Don't add `model` to the shared `global-settings/settings.json`. It is a per-user preference, it would be overwritten on every settings update, and the file is still locked — the picker would keep failing.
 
 ### An update fails with `Permission denied` after you ran `sudo chattr -i`

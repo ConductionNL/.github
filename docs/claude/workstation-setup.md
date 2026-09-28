@@ -165,8 +165,16 @@ cp "$REPO_ROOT/global-settings/VERSION"                       ~/.claude/settings
 cp "$REPO_ROOT/global-settings/settings-repo-url.example"     ~/.claude/settings-repo-url
 
 # Kernel-level immutability (v1.7.0+). Without this the strongest defense layer stays off.
+# Pick ONE of the two lines. (A) runs as written; for (B), comment out the (A)
+# line and uncomment the (B) line.
+# (A) full lock — strongest, but the VSCode model picker then fails with EPERM:
 sudo chattr +i ~/.claude/settings.json ~/.claude/hooks/*.sh ~/.claude/settings-version
+# (B) lock without settings.json — the picker keeps working, but the main file
+#     settings.json loses the kernel lock (a real risk):
+# sudo chattr +i ~/.claude/hooks/*.sh ~/.claude/settings-version
 ```
+
+> **(A) or (B)?** See [`global-settings/README.md` → Updating](../../global-settings/README.md#updating) step 4 for why (B) exists and what it costs.
 
 **Optional — opt in to notification sounds** (v2.2.0+, silent by default):
 
