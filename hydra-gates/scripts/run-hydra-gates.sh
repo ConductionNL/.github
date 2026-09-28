@@ -4546,10 +4546,21 @@ fi
 # Newman) by placing `@e2e exclude <reason>` after the spec's ## Purpose
 # heading, which suppresses all its scenarios without per-scenario markers.
 #
+# THE SCENARIOS OF AN OPEN CHANGE COUNT (hydra#711, 2026-09-28). A change's
+# scenarios live in openspec/changes/<change>/specs/<cap>/spec.md until it is
+# archived, and this gate used to read openspec/specs/ only: the PR that
+# writes a change and the PRs that implement it came back EMPTY SCOPE, and a
+# scenario reached the gate after the code meant to satisfy it had merged.
+# Now a touched delta spec is in scope, and so is every delta spec of an open
+# change the diff touches any file in (an implementation PR ticks tasks.md).
+# A delta scenario's ref is <cap>::<slug>, the ref it keeps after archive. A
+# scenario a MODIFIED block restates from the main spec is not new; REMOVED
+# and RENAMED blocks owe no test; openspec/changes/archive/ is skipped.
+#
 # See scripts/lib/check_e2e_coverage.py for the parse + annotation logic.
 # See .claude/skills/hydra-gate-e2e-coverage/SKILL.md for the fix action.
 # ---------------------------------------------------------------------------
-if [ -d openspec/specs ] || [ -d tests/e2e ]; then
+if [ -d openspec/specs ] || [ -d openspec/changes ] || [ -d tests/e2e ]; then
     _e2e_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-e2e-coverage.log
     : > "${_e2e_log}"
     _e2e_ran=1
@@ -4625,7 +4636,7 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
             # missing and no change the author could make would put a spec
             # file into a diff that does not touch one. See _skip's header.
             _e2e_ran=0
-            _skip 19 "e2e-coverage" na "the diff against '${BASE_REF}' touched NO spec file, so no scenario was inspected. Delta-scoped out (the ADR-020 diff-scoping rule, kept for this gate at every file scope since 2026-09-12), as gate-16 is for the same change — not a gap: the specs in this repo are unchanged from the base, so this change introduces no scenario whose @e2e traceability could be missing. This gate runs on the next change that touches a spec; the whole-repo sweep is a run with no base. See ${_e2e_log}."
+            _skip 19 "e2e-coverage" na "the diff against '${BASE_REF}' touched NO spec file and no open change, so no scenario was inspected. Delta-scoped out (the ADR-020 diff-scoping rule, kept for this gate at every file scope since 2026-09-12), as gate-16 is for the same change — not a gap: the specs in this repo are unchanged from the base, so this change introduces no scenario whose @e2e traceability could be missing. This gate runs on the next change that touches a spec; the whole-repo sweep is a run with no base. See ${_e2e_log}."
         elif [ "${_e2e_fail}" -eq 4 ]; then
             _e2e_ran=0
             _skip 19 "e2e-coverage" na "no openspec/specs/*/spec.md in this repository — there is no declared scenario for an e2e test to trace back to."

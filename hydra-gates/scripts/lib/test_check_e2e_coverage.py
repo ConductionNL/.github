@@ -2398,22 +2398,16 @@ class FlatSpecAnchorTest(unittest.TestCase):
 
 
 class ChangedSpecFilesShapeTest(unittest.TestCase):
-    """Diff scoping selects both spec shapes and nothing else."""
+    """Diff scoping selects both spec shapes, open change deltas, and nothing else.
+
+    This test used to re-implement the filter it was testing, so it could not
+    fail on the real one, and it asserted that a change delta is "not a spec".
+    That expectation was hydra#711 written down: gate 19 never read a scenario
+    in an open change.
+    """
 
     def _select(self, paths: list[str]) -> set[str]:
-        # changed_spec_files' filter, applied to a synthetic diff listing.
-        keep = set()
-        for line in paths:
-            line = line.strip()
-            if not line.startswith("openspec/specs/") or not line.endswith(".md"):
-                continue
-            rest = line[len("openspec/specs/"):]
-            depth = rest.count("/")
-            if depth == 1 and rest.endswith("/spec.md"):
-                keep.add(line)
-            elif depth == 0 and rest.lower() not in cec._NOT_A_SPEC:
-                keep.add(line)
-        return keep
+        return cec.select_spec_paths(paths)
 
     def test_selects_both_shapes_and_rejects_the_rest(self):
         selected = self._select([
@@ -2422,13 +2416,196 @@ class ChangedSpecFilesShapeTest(unittest.TestCase):
             "openspec/specs/README.md",                # documentation
             "openspec/specs/kanban/design.md",         # not a spec source
             "openspec/specs/a/b/spec.md",              # too deep
-            "openspec/changes/foo/specs/x/spec.md",    # a change, not a spec
+            "openspec/changes/foo/specs/x/spec.md",    # an open change's delta
+            "openspec/changes/foo/tasks.md",           # not a spec source
+            "openspec/changes/archive/2026-01-01-foo/specs/x/spec.md",  # archived
             "src/components/Thing.vue",                # not markdown
         ])
         self.assertEqual(
             selected,
-            {"openspec/specs/projects.md", "openspec/specs/kanban/spec.md"},
+            {"openspec/specs/projects.md", "openspec/specs/kanban/spec.md",
+             "openspec/changes/foo/specs/x/spec.md"},
         )
+
+
+# ---------------------------------------------------------------------------
+# THE SCENARIOS OF AN OPEN CHANGE (hydra#711)
+#
+# A change's scenarios live in openspec/changes/<change>/specs/<cap>/spec.md
+# until the change is archived. The gate read openspec/specs/ only, so the PR
+# that writes a change and the PRs that implement it reported EMPTY SCOPE, and
+# the scenarios reached the gate only after the code meant to satisfy them had
+# merged. 3,897 scenarios in six repos sat there on 28 Sep 2026.
+# ---------------------------------------------------------------------------
+
+DELTA_ADDED = """\
+## ADDED Requirements
+
+### Requirement: Show the thing
+
+#### Scenario: The thing is shown
+
+- WHEN a user opens the page
+- THEN the thing is shown
+"""
+
+DELTA_ADDED_EXCLUDED = """\
+## ADDED Requirements
+
+### Requirement: Plumb the thing
+
+#### Scenario: The thing is plumbed
+
+@e2e exclude pure plumbing, verified by PHPUnit
+
+- WHEN the job runs
+- THEN the thing is plumbed
+"""
+
+DELTA_MODIFIED_EXISTING = """\
+## MODIFIED Requirements
+
+### Requirement: Foo behaviour
+
+Foo shall do bar, and faster.
+
+#### Scenario: Foo does bar
+
+- WHEN foo is called
+- THEN bar happens
+"""
+
+DELTA_REMOVED = """\
+## REMOVED Requirements
+
+### Requirement: Old thing
+
+**Reason**: nobody used it.
+
+#### Scenario: The old thing works
+
+- WHEN the old thing is used
+- THEN it works
+"""
+
+
+class OpenChangeScenarioTest(unittest.TestCase):
+    """hydra#711: gate 19 reads the scenarios of an open change."""
+
+    # The git fixture of GateModeTest, borrowed rather than inherited so its
+    # own tests do not run twice.
+    setUp = GateModeTest.setUp
+    tearDown = GateModeTest.tearDown
+    _run = GateModeTest._run
+    _commit = GateModeTest._commit
+    _gate = GateModeTest._gate
+
+    CHANGE = "openspec/changes/add-thing/specs/thing/spec.md"
+
+    def _base_readme(self) -> str:
+        _write(self.root, "README.md", "# app\n")
+        return self._commit("base")
+
+    def test_a_change_pr_that_adds_a_delta_scenario_is_checked(self):
+        base = self._base_readme()
+        _write(self.root, self.CHANGE, DELTA_ADDED)
+        self._commit("write the change")
+        rc, out = self._gate(base)
+        self.assertNotEqual(rc, cec.EXIT_EMPTY_SCOPE, out)
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+        self.assertIn("thing::the-thing-is-shown — new scenario without a test", out)
+
+    def test_a_change_pr_with_the_test_passes(self):
+        base = self._base_readme()
+        _write(self.root, self.CHANGE, DELTA_ADDED)
+        _write(self.root, "tests/e2e/thing.spec.ts",
+               "// @e2e thing::the-thing-is-shown\n"
+               "test('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
+        self._commit("write the change and its test")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_an_implementation_pr_that_ticks_tasks_reads_the_change_scenarios(self):
+        _write(self.root, "README.md", "# app\n")
+        _write(self.root, self.CHANGE, DELTA_ADDED)
+        _write(self.root, "openspec/changes/add-thing/tasks.md", "- [ ] 1.1 build it\n")
+        base = self._commit("the change is on the base")
+        _write(self.root, "lib/Thing.php", "<?php\n")
+        _write(self.root, "openspec/changes/add-thing/tasks.md", "- [x] 1.1 build it\n")
+        self._commit("implement and tick")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+        # The scenario predates this PR, so it is missing, not new.
+        self.assertIn("thing::the-thing-is-shown — missing @e2e", out)
+        self.assertNotIn("new scenario without a test", out)
+
+    def test_an_exclusion_in_a_change_spec_is_read(self):
+        _write(self.root, "README.md", "# app\n")
+        _write(self.root, self.CHANGE, DELTA_ADDED_EXCLUDED)
+        _write(self.root, "openspec/changes/add-thing/tasks.md", "- [ ] 1.1 build it\n")
+        base = self._commit("the change is on the base")
+        _write(self.root, "openspec/changes/add-thing/tasks.md", "- [x] 1.1 build it\n")
+        self._commit("tick")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_a_modified_copy_of_an_existing_scenario_is_not_new(self):
+        _write(self.root, "README.md", "# app\n")
+        _write(self.root, "openspec/specs/my-spec/spec.md", SPEC_WITH_EXCLUSION.replace(
+            "### Requirement: Plumbing", "### Requirement: Plumbing\n\n@e2e exclude plumbing, PHPUnit"))
+        base = self._commit("base with an excluded requirement")
+        _write(self.root, "openspec/changes/tweak/specs/my-spec/spec.md",
+               "## MODIFIED Requirements\n\n### Requirement: Plumbing\n\n"
+               "@e2e exclude plumbing, PHPUnit\n\n#### Scenario: Internal wiring\n\n"
+               "- WHEN the wiring is set up\n- THEN it connects faster\n")
+        self._commit("modify it in a change")
+        rc, out = self._gate(base)
+        # The scenario exists in the main spec at the base, so the exclusion
+        # it carries there still counts; only a scenario the change adds is new.
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_a_modified_delta_scenario_covered_by_an_existing_test_passes(self):
+        _write(self.root, "README.md", "# app\n")
+        _write(self.root, "openspec/specs/my-spec/spec.md", BASIC_SPEC)
+        _write(self.root, "tests/e2e/my.spec.ts",
+               "// @e2e my-spec::foo-does-bar\n"
+               "test('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
+        base = self._commit("base")
+        _write(self.root, "openspec/changes/faster/specs/my-spec/spec.md", DELTA_MODIFIED_EXISTING)
+        self._commit("change")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_a_removed_requirement_needs_no_test(self):
+        base = self._base_readme()
+        _write(self.root, "openspec/changes/drop-old/specs/old/spec.md", DELTA_REMOVED)
+        self._commit("remove")
+        rc, out = self._gate(base)
+        self.assertNotIn("the-old-thing-works", out)
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_an_archived_change_stays_out_of_scope(self):
+        base = self._base_readme()
+        _write(self.root, "openspec/changes/archive/2026-01-01-add-thing/specs/thing/spec.md",
+               DELTA_ADDED)
+        _write(self.root, "openspec/specs/other/spec.md", BASIC_SPEC)
+        self._commit("archive")
+        _write(self.root, "openspec/changes/archive/2026-01-01-add-thing/specs/thing/spec.md",
+               DELTA_ADDED + "\nprose\n")
+        base2 = self._commit("touch the archive")
+        del base2
+        rc, out = self._gate(base)
+        self.assertNotIn("thing::", out)
+
+    def test_a_full_sweep_reads_open_changes_too(self):
+        _write(self.root, "README.md", "# app\n")
+        _write(self.root, self.CHANGE, DELTA_ADDED)
+        self._commit("change only")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cec.run_gate(self.root)
+        self.assertEqual(rc, cec.EXIT_FAIL, buf.getvalue())
+        self.assertIn("thing::the-thing-is-shown — missing @e2e", buf.getvalue())
 
 
 class ClassifyEvidenceTest(unittest.TestCase):

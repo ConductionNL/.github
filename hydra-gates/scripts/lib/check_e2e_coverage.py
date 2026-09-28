@@ -26,6 +26,16 @@ ref is built from comes from whichever shape it is:
     openspec/specs/<spec-name>/spec.md      -> <spec-name>   (parent directory)
     openspec/specs/<spec-name>.md           -> <spec-name>   (file stem)
 
+The delta spec of an OPEN CHANGE is read too (hydra#711)::
+
+    openspec/changes/<change>/specs/<cap>/spec.md -> <cap>
+
+In diff mode a touched delta is in scope, and so is every delta of an open
+change the diff touches any file in. ``REMOVED`` and ``RENAMED`` blocks owe no
+test, and ``openspec/changes/archive/`` is history and is skipped. Until
+2026-09-28 the gate read ``openspec/specs/`` only, so a change's scenarios were
+first checked after the code meant to satisfy them had merged.
+
 The flat shape was invisible to this gate until 2026-09-08. Measured across
 the 21 core apps that day, planninq kept 153 of its 224 scenarios in 13 flat
 files and the gate reported 70. Those scenarios were not counted, not
@@ -390,6 +400,92 @@ def spec_files(spec_root: Path) -> list[Path]:
     return sorted(set(found))
 
 
+# ---------------------------------------------------------------------------
+# THE SCENARIOS OF AN OPEN CHANGE (hydra#711)
+# ---------------------------------------------------------------------------
+#
+# A change's scenarios live in `openspec/changes/<change>/specs/<cap>/spec.md`
+# until the change is archived, and only then land in `openspec/specs/`. This
+# gate read `openspec/specs/` alone, so the PR that writes a change and the PRs
+# that implement it reported EMPTY SCOPE, and a scenario reached the gate only
+# after the code meant to satisfy it had merged. Counted on 28 Sep 2026: 3,897
+# scenarios in open changes across six repos, none of them read here, and no
+# `@e2e exclude` reason written inside a change read either.
+#
+# A delta scenario's ref is `<cap>::<slug>`, the ref it keeps once archived, so
+# an anchor written against the change keeps working after the archive.
+# `openspec/changes/archive/` is history, not an open change, and is skipped.
+# A `## REMOVED Requirements` (or RENAMED) block describes what goes away, so
+# its scenarios are not asked for a test.
+_CHANGES_DIR = "openspec/changes/"
+_ARCHIVE_DIR = "archive"
+_DELTA_DROP_RE = re.compile(r"^##\s+(?:REMOVED|RENAMED)\s+Requirements\b", re.IGNORECASE)
+_H2_RE = re.compile(r"^##\s")
+
+
+def _open_change_of(rel: str) -> str | None:
+    """The change name a repo-relative path sits in, or None.
+
+    ``openspec/changes/add-x/tasks.md`` -> ``add-x``. An archived change and a
+    path outside ``openspec/changes/<name>/`` return None.
+    """
+    if not rel.startswith(_CHANGES_DIR):
+        return None
+    parts = rel[len(_CHANGES_DIR):].split("/")
+    if len(parts) < 2 or parts[0] in ("", _ARCHIVE_DIR):
+        return None
+    return parts[0]
+
+
+def is_change_spec_path(rel: str) -> bool:
+    """True for ``openspec/changes/<change>/specs/<cap>/spec.md`` of an open change."""
+    change = _open_change_of(rel)
+    if change is None:
+        return False
+    rest = rel[len(_CHANGES_DIR) + len(change) + 1:].split("/")
+    return len(rest) == 3 and rest[0] == "specs" and rest[2] == "spec.md" and rest[1] != ""
+
+
+def _is_change_spec_file(spec_path: Path) -> bool:
+    """Path form of :func:`is_change_spec_path`, read from the path's own parts."""
+    parts = spec_path.parts
+    return (
+        len(parts) >= 6
+        and parts[-1] == "spec.md"
+        and parts[-3] == "specs"
+        and parts[-5] == "changes"
+        and parts[-6] == "openspec"
+        and parts[-4] != _ARCHIVE_DIR
+    )
+
+
+def change_spec_files(app_dir: Path) -> list[Path]:
+    """Every delta spec of every open change under ``app_dir``."""
+    changes = app_dir / "openspec" / "changes"
+    if not changes.is_dir():
+        return []
+    return sorted(
+        p for p in changes.glob("*/specs/*/spec.md")
+        if p.is_file() and p.parts[-4] != _ARCHIVE_DIR
+    )
+
+
+def strip_delta_removals(text: str) -> str:
+    """Drop ``## REMOVED Requirements`` and ``## RENAMED Requirements`` blocks.
+
+    A removed requirement is not built, so its scenarios owe no test. The
+    block runs to the next ``## `` heading.
+    """
+    out: list[str] = []
+    dropping = False
+    for line in text.splitlines():
+        if _H2_RE.match(line):
+            dropping = bool(_DELTA_DROP_RE.match(line))
+        if not dropping:
+            out.append(line)
+    return "\n".join(out) + ("\n" if text.endswith("\n") else "")
+
+
 def spec_name_collisions(spec_root: Path) -> dict[str, list[str]]:
     """Find spec names claimed by more than one file.
 
@@ -456,6 +552,8 @@ def parse_spec_scenarios(spec_path: Path) -> list[dict]:
         text = spec_path.read_text(encoding="utf-8")
     except OSError:
         return []
+    if _is_change_spec_file(spec_path):
+        text = strip_delta_removals(text)
     return parse_spec_text(text, spec_name)
 
 
@@ -2100,28 +2198,54 @@ def _git(args: list[str], cwd: Path) -> str:
         return ""
 
 
-def changed_spec_files(base_ref: str, app_dir: Path) -> set[str]:
-    """Return relative paths of spec.md files touched in the PR diff."""
-    diff = _git(["diff", "-U0", "--diff-filter=ACMR", "--name-only",
-                 f"{base_ref}...HEAD"], app_dir)
-    if not diff.strip():
-        diff = _git(["diff", "-U0", "--diff-filter=ACMR", "--name-only",
-                     base_ref], app_dir)
-    paths: set[str] = set()
-    for line in diff.splitlines():
+def select_spec_paths(paths) -> set[str]:
+    """The spec sources among repo-relative paths: both main shapes and open change deltas.
+
+    Pure, so the selection a diff gets is the selection a test asserts.
+    """
+    keep: set[str] = set()
+    for line in paths:
         line = line.strip()
-        if not line.startswith("openspec/specs/") or not line.endswith(".md"):
+        if not line.endswith(".md"):
+            continue
+        if is_change_spec_path(line):
+            keep.add(line)
+            continue
+        if not line.startswith("openspec/specs/"):
             continue
         rest = line[len("openspec/specs/"):]
         depth = rest.count("/")
         # `<name>/spec.md` — the classic shape, exactly one level down.
         if depth == 1 and rest.endswith("/spec.md"):
-            paths.add(line)
+            keep.add(line)
             continue
         # `<name>.md` — the flat shape, which this gate used to skip entirely.
         # README.md is documentation about the directory, not a spec.
         if depth == 0 and rest.lower() not in _NOT_A_SPEC:
-            paths.add(line)
+            keep.add(line)
+    return keep
+
+
+def changed_spec_files(base_ref: str, app_dir: Path) -> set[str]:
+    """Return relative paths of spec files the PR diff brings into scope.
+
+    A spec file the diff touches, main or change delta. And every delta spec of
+    an open change the diff touches ANY file in: an implementation PR ticks the
+    change's ``tasks.md`` and does not edit its specs, and it is the PR those
+    scenarios are about (hydra#711).
+    """
+    diff = _git(["diff", "-U0", "--diff-filter=ACMR", "--name-only",
+                 f"{base_ref}...HEAD"], app_dir)
+    if not diff.strip():
+        diff = _git(["diff", "-U0", "--diff-filter=ACMR", "--name-only",
+                     base_ref], app_dir)
+    lines = [ln.strip() for ln in diff.splitlines() if ln.strip()]
+    paths = select_spec_paths(lines)
+    changes = {c for c in (_open_change_of(ln) for ln in lines) if c}
+    for change in changes:
+        for spec_md in (app_dir / "openspec" / "changes" / change / "specs").glob("*/spec.md"):
+            if spec_md.is_file():
+                paths.add(str(spec_md.relative_to(app_dir)))
     return paths
 
 
@@ -2168,7 +2292,17 @@ def added_scenario_refs(base_ref: str, app_dir: Path,
         # stdout, so every scenario in it is added. `_git` already swallows
         # the non-zero exit git uses for "no such path at that commit".
         base_text = _git(["show", f"{base}:{rel}"], app_dir)
+        if base_text and is_change_spec_path(rel):
+            base_text = strip_delta_removals(base_text)
         base_refs = {s["ref"] for s in parse_spec_text(base_text, spec_name)} if base_text else set()
+        if is_change_spec_path(rel):
+            # A MODIFIED block restates scenarios the main spec already has.
+            # Those predate the change, so they are not new here either.
+            for main_rel in (f"openspec/specs/{spec_name}/spec.md",
+                             f"openspec/specs/{spec_name}.md"):
+                main_text = _git(["show", f"{base}:{main_rel}"], app_dir)
+                if main_text:
+                    base_refs |= {s["ref"] for s in parse_spec_text(main_text, spec_name)}
         added |= head_refs - base_refs
     return added
 
@@ -2342,13 +2476,15 @@ def run_gate(app_dir: Path) -> int:
 
     spec_root = app_dir / "openspec" / "specs"
     all_specs = {str(p.relative_to(app_dir)) for p in spec_files(spec_root)}
+    # The deltas of open changes are declared scenarios too (hydra#711).
+    all_specs |= {str(p.relative_to(app_dir)) for p in change_spec_files(app_dir)}
 
     if not all_specs:
         print(
             f"[gate-{GATE_NUM}] e2e-coverage: NOT APPLICABLE — no "
-            f"openspec/specs/*/spec.md or openspec/specs/*.md in this "
-            f"repository, so there is no declared scenario for an e2e test to "
-            f"trace back to."
+            f"openspec/specs/*/spec.md, openspec/specs/*.md or "
+            f"openspec/changes/*/specs/*/spec.md in this repository, so there "
+            f"is no declared scenario for an e2e test to trace back to."
         )
         return EXIT_NOT_APPLICABLE
 
@@ -2362,7 +2498,8 @@ def run_gate(app_dir: Path) -> int:
         if not touched:
             print(
                 f"[gate-{GATE_NUM}] e2e-coverage: EMPTY SCOPE — diff-scoped "
-                f"against '{base_ref}' and NO spec file was touched. "
+                f"against '{base_ref}' and NO spec file was touched, "
+                f"main or open change. "
                 f"{len(all_specs)} spec file(s) exist here and NONE were "
                 f"inspected: @e2e traceability (ADR-020) is UNVERIFIED by this "
                 f"run. This is not a pass. Audit the whole tree by running "
