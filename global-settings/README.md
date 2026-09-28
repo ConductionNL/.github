@@ -54,17 +54,18 @@ cp "$REPO_ROOT/global-settings/settings-repo-url.example" ~/.claude/settings-rep
 # Finally — apply the kernel-level immutable lock (v1.7.0+).
 # This is the single piece of protection that no Claude command can bypass:
 # even if every other guard fails, the kernel refuses the write.
-# Pick ONE of the two lines:
+# Pick ONE of the two lines. (A) runs as written; for (B), comment out the (A)
+# line and uncomment the (B) line.
 # (A) full lock — strongest, but the VSCode model picker then fails with EPERM:
 sudo chattr +i ~/.claude/settings.json ~/.claude/hooks/*.sh ~/.claude/settings-version
-# (B) lock without settings.json — the picker keeps working; the main file
-#     settings.json goes without the kernel lock (small risk, see "Updating" step 4):
+# (B) lock without settings.json — the picker keeps working, but the main file
+#     settings.json loses the kernel lock (a real risk, see "Updating" step 4):
 # sudo chattr +i ~/.claude/hooks/*.sh ~/.claude/settings-version
 ```
 
 Restart Claude Code after installing. Requires `jq`, `md5sum`, `curl`, and `chattr` on `PATH` (chattr is part of `e2fsprogs` — present on every standard Linux distro).
 
-> **Known side effect of the lock — model switching.** The model picker fails with `Failed to set model: EPERM: operation not permitted` and does nothing, because the VSCode extension persists every switch by rewriting the locked `~/.claude/settings.json`. This is the lock working as designed, not a broken install. There are two ways out. The first is to relock with option (B), which leaves `settings.json` without the kernel lock (see [Updating](#updating) step 4 for why that is a small risk). The recommended way is to keep (A) and pin your default model in the project-local settings file, which the lock does not cover. Steps, verification and what not to do: [global-claude-settings.md → Troubleshooting](../docs/claude/global-claude-settings.md#troubleshooting).
+> **Known side effect of the lock — model switching.** The model picker fails with `Failed to set model: EPERM: operation not permitted` and does nothing, because the VSCode extension persists every switch by rewriting the locked `~/.claude/settings.json`. This is the lock working as designed, not a broken install. There are two ways out. The first is to relock with option (B), which takes the kernel lock off `settings.json` (see [Updating](#updating) step 4 for what that costs). The recommended way is to keep (A) and pin your default model in the project-local settings file, which the lock does not cover. Steps, verification and what not to do: [global-claude-settings.md → Troubleshooting](../docs/claude/global-claude-settings.md#troubleshooting).
 
 ## Online version checking
 
@@ -218,11 +219,17 @@ When you see a version warning at session start:
 
    **Why (B) exists.** The VSCode extension saves every model switch by rewriting `~/.claude/settings.json`. Under (A) that write gets `EPERM`, so the picker shows `Failed to set model` and does nothing.
 
-   **What (B) costs.** `settings.json` is the main file the whole setup hangs off. It holds `permissions.deny` and wires every hook, and (B) leaves exactly that file without the kernel lock. The risk is small, but it is not zero. The hooks that refuse every Claude edit to `settings.json` (`block-write-commands.sh`, `block-config-tool-writes.sh`) stay kernel-locked under (B), so a session still cannot rewrite the deny list. You give up layer 4 on that one file. Layers 1–3 still cover it.
+   **What (B) costs.** `settings.json` is the main file the whole setup hangs off. It holds `permissions.deny` and registers every guard hook, and (B) takes the kernel lock off exactly that file. What stays in front of it:
 
-   **To keep all four layers and still switch models**, use (A) and pin your model in project-local settings. Both routes, and the trade-off in full, are in [global-claude-settings.md → Troubleshooting](../docs/claude/global-claude-settings.md#troubleshooting).
+   - **Layer 1 is no separate barrier.** `permissions.deny` lives inside the file you just unlocked.
+   - **Layers 2–3, the guard hooks** (`block-write-commands.sh`, `block-config-tool-writes.sh`), deny Claude's edits to `settings.json`, and their scripts stay kernel-locked. But they are regex checks, which the [security model](#security-model--defense-in-depth) calls bypassable. They also run only because `settings.json` registers them, so one write that slips past them can unregister them for the next session.
+   - **Nothing stops other processes.** The guard hooks only police Claude's tool calls. Any other process running as you, such as an `npm install` or `composer install` script, can rewrite `settings.json` under (B).
 
-> ⚠️ Don't skip step 4. Without it, the kernel-level protection stays off until the next time you run `sudo chattr +i`. The hooks still defend in depth, but the strongest layer is unarmed. (B) is a bounded trade. Leaving `hooks/*.sh` unlocked is not.
+   That makes (B) a limited but real risk, not a free one. It is a reasonable choice if you use the picker a lot and accept that trade.
+
+   **The recommendation stays (A) plus a model pin in project-local settings.** That keeps all four layers and still lets you switch models. Both routes, and the trade-off in full, are in [global-claude-settings.md → Troubleshooting](../docs/claude/global-claude-settings.md#troubleshooting).
+
+> ⚠️ Don't skip step 4. Without it, the kernel-level protection stays off until the next time you run `sudo chattr +i`. The hooks still defend in depth, but the strongest layer is unarmed. (B) unlocks one file on purpose. Leaving `hooks/*.sh` unlocked as well disarms the guards themselves.
 
 ### The update contract
 
