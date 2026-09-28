@@ -439,6 +439,14 @@ those an `@e2e exclude` does not count — they are reported on their own lines 
 `new scenario without a test` and counted separately on the summary line. A
 scenario written today is written with its test; an exclusion is for a scenario
 that predates the suite. Existing scenarios keep their exclusion semantics.
+Since hydra#711 (2026-09-28) the gate also reads the scenarios of **open
+changes**: a touched `openspec/changes/<change>/specs/<cap>/spec.md` is in scope,
+and so is every delta spec of an open change the diff touches any file in, so
+an implementation PR that ticks the change's `tasks.md` is checked against the
+change's scenarios. A delta scenario's ref is `<cap>::<slug>`, the ref it keeps
+after archive. A scenario a `MODIFIED` block restates from the main spec is not
+new, `REMOVED` and `RENAMED` blocks owe no test, and `openspec/changes/archive/`
+is skipped. Before this, both kinds of PR came back `EMPTY SCOPE`.
 
 A delta gate also has to decide what *counts* as a change, and a plain `git diff`
 answers "a line moved". gate-16 therefore compares each changed file against its
