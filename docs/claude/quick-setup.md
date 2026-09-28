@@ -31,7 +31,7 @@ The canonical [`workstation-setup.md`](./workstation-setup.md) documents the Win
 
 ## 2. Which repos to clone
 
-Two layers — pick what you need, skip the rest. The `ConductionNL` URLs are HTTPS: `.github` is public and clones anonymously, the private repos (`hydra`) need the `gh auth login` from §3.3 first.
+Two layers — pick what you need, skip the rest. The `ConductionNL` URLs are HTTPS. `.github` and the app repos are public and clone anonymously, so clone them now. **For a private repo (`hydra`), do §3.3 (`gh auth login`) first and come back here**, because an anonymous HTTPS clone of a private repo fails.
 
 **Always:**
 
@@ -54,6 +54,7 @@ git clone https://github.com/ConductionNL/integriq.git
 
 ```bash
 cd ~/nextcloud-docker-dev/apps-extra   # workspace layout per getting-started.md
+# hydra is private: run `gh auth login` (§3.3) before this clone
 git clone https://github.com/ConductionNL/hydra.git
 ```
 
