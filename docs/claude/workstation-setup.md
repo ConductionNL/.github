@@ -218,11 +218,11 @@ Conduction's platform is **GitHub** (under the `ConductionNL` org). The 2026-05-
 
 **[Codeberg Authentication Setup](./codeberg-auth-setup.md)** remains available for that last case — SSH key generation, `keychain` for passphrase persistence across shells, `tea` CLI install + token scopes, VS Code Gitea extension, and how to switch existing repo remotes. You do not need it for ConductionNL work.
 
-Quick smoke test — this is the one that matters for ConductionNL work:
+Quick smoke test — this is the one that matters for ConductionNL work. Pick **HTTPS** when `gh auth login` asks for the git protocol and let it authenticate git; that covers clone, push and pull with no SSH key and no passphrase prompt (run `gh auth setup-git` if you skipped that question):
 
 ```bash
-ssh -T git@github.com     # expect: "Hi <user>! You've successfully authenticated..."
-gh auth status            # expect: "Logged in to github.com account <user>"
+gh auth status            # expect: "Logged in to github.com account <user>" and "Git operations protocol: https"
+# ssh -T git@github.com   # only if you deliberately use SSH remotes (optional key, see quick-setup.md §3.4)
 ```
 
 Only if you also set up a non-Conduction Forgejo host, per the Codeberg guide above:
@@ -351,7 +351,7 @@ Access is restricted to the [`ConductionNL/hydra`](https://github.com/Conduction
 # Clone inside your apps-extra workspace, alongside the project repos
 # (matches the workspace layout in getting-started.md)
 cd path/to/apps-extra
-git clone git@github.com:ConductionNL/hydra.git
+git clone https://github.com/ConductionNL/hydra.git
 cd hydra
 cat CLAUDE.md
 ```

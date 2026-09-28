@@ -1,5 +1,7 @@
 # Codeberg Authentication Setup (WSL + VS Code + Claude Code)
 
+> ⚠️ **Not needed for ConductionNL work.** ConductionNL lives on GitHub. The 2026-05-29 move to Codeberg was reversed (directive 2026-07-17, executed 2026-07-23), and `gh auth login` over HTTPS is all the git auth you need, with no key and no passphrase prompt ([Quick Setup §3.3](./quick-setup.md#3-commands-in-order)). Use this guide only for a non-Conduction repo that genuinely lives on a Forgejo host. If you followed it earlier and your terminal now asks for the Codeberg key's passphrase on every start, comment out the `keychain` line from [Step 5](#step-5--set-up-keychain-so-the-passphrase-persists-across-shells) in `~/.bashrc`. When you need the key again, run `keychain ~/.ssh/id_ed25519_codeberg` once, or restore the line.
+
 This guide takes you from a fresh WSL install to a fully-authenticated Codeberg workstation, so every tool you use — `git` from any shell, VS Code's source control panel, the Gitea extension, the `tea` CLI, and Claude Code's Bash tool — can clone, push, and create pull requests on Codeberg without re-authenticating.
 
 The setup is two layers:
@@ -226,7 +228,7 @@ git clone git@codeberg.org:<owner>/<repo-name>.git
 If you find a **Conduction** repo whose remote still points at `codeberg.org`, that is stale state from the reversed migration — switch it back:
 
 ```bash
-git -C /path/to/repo remote set-url origin git@github.com:ConductionNL/<repo-name>.git
+git -C /path/to/repo remote set-url origin https://github.com/ConductionNL/<repo-name>.git
 ```
 
 **Sanity check** for any repo whose remote you switched:
@@ -563,7 +565,7 @@ The 2026-05-29 migration to Codeberg **was reversed**: directive 2026-07-17, exe
 
 - The same SSH key works on GitHub too — add the same `.pub` to <https://github.com/settings/keys>.
 - Skills that talk to git hosts (`create-pr`, `review-pr`, `report-out`, `opsx-*`) detect the platform from the git remote URL and dispatch to `gh` / `glab` / `tea` accordingly. No skill is tied to one host.
-- For a Conduction repo the correct remote is always GitHub: `git remote set-url origin git@github.com:ConductionNL/<repo>.git`.
+- For a Conduction repo the correct remote is always GitHub: `git remote set-url origin https://github.com/ConductionNL/<repo>.git` (HTTPS via `gh auth login`; no SSH key needed).
 
 ## See also
 
