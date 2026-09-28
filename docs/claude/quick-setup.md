@@ -31,13 +31,13 @@ The canonical [`workstation-setup.md`](./workstation-setup.md) documents the Win
 
 ## 2. Which repos to clone
 
-Two layers — pick what you need, skip the rest:
+Two layers — pick what you need, skip the rest. The `ConductionNL` URLs are HTTPS: `.github` is public and clones anonymously, the private repos (`hydra`) need the `gh auth login` from §3.3 first.
 
 **Always:**
 
 ```bash
 # The org repo with docs, global Claude settings, and shared tooling
-git clone git@github.com:ConductionNL/.github.git ~/.github
+git clone https://github.com/ConductionNL/.github.git ~/.github
 ```
 
 **If you'll work on a Conduction Nextcloud app** (most developers):
@@ -45,8 +45,8 @@ git clone git@github.com:ConductionNL/.github.git ~/.github
 ```bash
 git clone https://github.com/nextcloud/nextcloud-docker-dev.git ~/nextcloud-docker-dev
 cd ~/nextcloud-docker-dev/apps-extra
-git clone git@github.com:ConductionNL/openregister.git
-git clone git@github.com:ConductionNL/integriq.git
+git clone https://github.com/ConductionNL/openregister.git
+git clone https://github.com/ConductionNL/integriq.git
 # Add other app repos as needed (opencatalogi, filinq, …)
 ```
 
@@ -54,7 +54,7 @@ git clone git@github.com:ConductionNL/integriq.git
 
 ```bash
 cd ~/nextcloud-docker-dev/apps-extra   # workspace layout per getting-started.md
-git clone git@github.com:ConductionNL/hydra.git
+git clone https://github.com/ConductionNL/hydra.git
 ```
 
 > **Hydra vs .github — quick reminder.** `.github` is *the manual* (docs, way-of-work, global settings, public Hydra one-pager). `hydra` is *the factory* (containers, agent personas, orchestration scripts, the `.claude/skills/` catalogue). See [`docs/hydra/README.md`](../hydra/README.md#hydra-repo-vs-github-repo) for the full breakdown.
@@ -76,9 +76,11 @@ nvm install 20 && nvm use 20 && nvm alias default 20
 sudo apt update && sudo apt install -y php8.1-cli php8.1-curl php8.1-mbstring php8.1-xml php8.1-zip php8.1-sqlite3 composer
 
 # --- 3.3 Git-host CLIs (gh = primary) ---
-# gh (GitHub — all ConductionNL work)
+# gh (GitHub — all ConductionNL work). Pick HTTPS as the git protocol and let
+# gh authenticate git: that is all the git auth ConductionNL work needs.
 sudo apt install -y gh
 gh auth login
+gh auth setup-git                    # idempotent; makes `git push` use gh's token
 # glab (GitLab — only for non-Conduction client work)
 # sudo apt install -y glab && glab auth login
 # tea (Gitea/Forgejo — only for a non-Conduction repo on a Forgejo host)
@@ -86,8 +88,11 @@ gh auth login
 # sudo chmod +x /usr/local/bin/tea
 # See codeberg-auth-setup.md for the token scopes and login command.
 
-# --- 3.4 GitHub SSH key ---
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github -C "<your@email>"
+# --- 3.4 GitHub SSH key — OPTIONAL, skip unless you want SSH remotes ---
+# HTTPS via gh (3.3) already covers clone/push/pull. An SSH key with a
+# passphrase adds a prompt once per WSL boot through keychain; only set it up
+# if you deliberately want git@github.com: remotes.
+# ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github -C "<your@email>"
 # Paste ~/.ssh/id_ed25519_github.pub at https://github.com/settings/keys
 # Then add to ~/.ssh/config:
 #   Host github.com
@@ -95,8 +100,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github -C "<your@email>"
 #       User git
 #       IdentityFile ~/.ssh/id_ed25519_github
 #       IdentitiesOnly yes
-sudo apt install -y keychain
-keychain ~/.ssh/id_ed25519_github
+# sudo apt install -y keychain
+# keychain ~/.ssh/id_ed25519_github
 
 # --- 3.5 OpenSpec CLI + Claude Code CLI ---
 npm install -g @fission-ai/openspec @anthropic-ai/claude-code
@@ -132,8 +137,9 @@ openspec --version                   # 1.x
 npx playwright --version             # 1.x
 
 # Git-host auth
-ssh -T git@github.com                # → "Hi <YourGitHubUsername>! You've successfully authenticated..."
-gh auth status                       # logged in to github.com
+gh auth status                       # logged in to github.com, "Git operations protocol: https"
+git ls-remote https://github.com/ConductionNL/hydra.git HEAD   # → a sha, no prompt (needs hydra access)
+# ssh -T git@github.com              # only if you set up the optional SSH key in 3.4
 
 # Claude global settings active
 ls -l ~/.claude/settings.json        # exists, immutable bit will show via lsattr
