@@ -9,7 +9,7 @@ Current version: see [`VERSION`](VERSION)
 | File                          | Install as                                    | Purpose                                                                                                                     |
 | ----------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `settings.json`               | `~/.claude/settings.json`                     | Permissions allowlist + hooks                                                                                               |
-| `block-write-commands.sh`     | `~/.claude/hooks/block-write-commands.sh`     | Guards Bash write operations, prompts for approval                                                                          |
+| `block-write-commands.sh`     | `~/.claude/hooks/block-write-commands.sh`     | Guards Bash write operations, prompts for approval. Hard-blocks writes against production (`kubectl`/`oc`/`helm` on a `*-prod` namespace or context, v2.6.0) |
 | `block-polling.sh`            | `~/.claude/hooks/block-polling.sh`            | Blocks hand-rolled waiting: CI watch commands, poll loops, long sleeps, idle heartbeats (velocity plan item 5, 2026-09-12)   |
 | `block-config-tool-writes.sh` | `~/.claude/hooks/block-config-tool-writes.sh` | Guards Write/Edit/MultiEdit calls — denies tools that write to `~/.claude/` or produce scripts that would (added in v1.7.0) |
 | `check-settings-version.sh`   | `~/.claude/hooks/check-settings-version.sh`   | Warns at session start if settings are outdated                                                                             |
@@ -249,6 +249,21 @@ Claude reinstalls each file with `chmod 555` (hooks) or `chmod 444` (`settings-v
 
 If Claude reports `Permission denied` mid-update, that is this and nothing else. The correct response is to run the step-1 `chmod u+w` and let Claude continue — not to have it work around the block with `rm`/`mv`/`cp` (all denied on protected paths too, and a half-removed hook is worse than a stale one).
 
+## Production is read-only (v2.6.0)
+
+`block-write-commands.sh` hard-denies `kubectl` / `oc` with a mutating verb (`apply`, `create`, `delete`, `edit`, `patch`, `replace`, `scale`, `set`, `label`, `annotate`, `exec`, `cp`, `drain`, `cordon`, `uncordon`, `taint`, `run`, `expose`, `autoscale`, `debug`, `attach`, `rollout` except `status`/`history`) and `helm install|upgrade|uninstall|delete|rollback`, whenever the same command segment names a `*-prod` namespace or context. No phrase unlocks it: Claude gives you the filled-in command and you run it. Reads (`get`, `describe`, `logs`, `top`, `rollout status`) and every non-prod namespace are not this guard's business.
+
+The check runs **before** every `ask` guard. An ask exits the hook, so a production write chained after, for example, `gh pr create` would otherwise get through on one approval of the gh prompt.
+
+### Data is not a command
+
+The production check and the `git push` check read the command with the *data* taken out (`data_free_cmd`), so a commit message or PR body that mentions `git push` is no longer hard-denied as a push. Removed, and nothing else:
+
+- the body of a heredoc fed to a data sink (`cat`, `tee`, `git`, `gh`, `jq`, `wc`, `sort`, `head`, `tail`, `grep`, `less`, `more`) on a line without a pipe or command substitution;
+- the quoted value of `-m`/`--message`/`-b`/`--body`/`-t`/`--title`/`--notes` on a `git commit|tag|notes` or `gh pr|issue|release` line — single-quoted always, double-quoted only without `$(` or a backtick.
+
+Still seen: a push or production write inside `bash -c`, `eval`, `$(…)`, backticks, a heredoc fed to `bash`/`sh`/`python`/…, and `cat <<EOF | bash`. The config guard is **not** part of this change: it keeps scanning the full command, because there a false deny is cheaper than a gap.
+
 ## ⚠️ Bumping the version — REQUIRED on every change
 
 **Any commit that modifies an *installed artifact* in `global-settings/` MUST also increment `VERSION`.** An installed artifact is anything the [Install](#install) steps copy into `~/.claude/` — `settings.json`, the hook scripts, and the `.example` files.
@@ -269,7 +284,7 @@ Use the `/verify-global-settings-version` command to check whether a version bum
 The settings use four independent layers of protection, each catching what the others miss:
 
 1. **Deny-list** (`settings.json` deny rules) — hard-blocks file edits to `~/.claude/` config files and destructive Bash commands. These cannot be overridden from within a Claude session. The rules are `Edit(...)` only: one `Edit(path)` rule covers every file-editing tool (Write, MultiEdit, NotebookEdit), while a `Write(path)` rule is not matched by file-permission checks at all — the seven inert `Write(...)` twins were dropped in v2.4.5.
-2. **Bash hook** (`block-write-commands.sh`) — runs on every Bash command. Catches write operations, command chaining, obfuscation, symlink attacks, and (since v1.7.0) `chattr` attempts on protected paths plus script-body scans for invoked scripts that target `~/.claude/`. Can deny (hard block) or ask (prompt the user).
+2. **Bash hook** (`block-write-commands.sh`) — runs on every Bash command. Catches write operations, command chaining, obfuscation, symlink attacks, and (since v1.7.0) `chattr` attempts on protected paths plus script-body scans for invoked scripts that target `~/.claude/`. Can deny (hard block) or ask (prompt the user). Since v2.6.0 it also hard-blocks production writes and ignores *data* in two checks — see [Production is read-only](#production-is-read-only-v260).
 3. **Tool hook** (`block-config-tool-writes.sh`, added in v1.7.0) — runs on Write/Edit/MultiEdit tool calls. Denies tools whose `file_path` is a protected `~/.claude/` config file, and denies tools that would create a _script_ whose body, when executed, would write to a protected path. Closes the "write a script then run it" bypass. Since v2.4.6 the body scan exempts the canonical sources in this repo's `global-settings/` directory (matched by their exact filenames, plus `tests/*.sh`) — those files *are* the update mechanism, so their bodies necessarily contain the operations the scan looks for, and without the exemption Claude could never maintain them. The exemption matches on a canonicalized path (`realpath -m`, plus an outright refusal to exempt any path still carrying a `..` component), so neither a traversal nor a symlinked parent can reach an exempt pattern while landing on an installed file. The exemption covers staging only. What still holds after it: the installed copies stay covered by this hook's `file_path` guard and by layer 4, and layer 2 catches the common invocation shapes (`bash <path>`, `source <path>`, bare-path execution) if such a script is run. Layer 2's script-body scan is not exhaustive — it reads the first token of each command segment, so wrapper forms like `nohup bash <path>` or `timeout 5 bash <path>` slip past it. That limit is not introduced here: staging an executable payload was already possible pre-exemption via any path a script-extension check doesn't cover (`/tmp/x.txt` with no shebang, then `bash /tmp/x.txt`). Layer 4 is what actually closes it, which is why the relock matters.
 4. **Kernel immutability** (`chattr +i`, the new authoritative layer in v1.7.0) — once set, the kernel refuses every write to the file regardless of permissions, regardless of which process attempts it, regardless of any hook outcome. Only `root` can clear the bit, and only `sudo chattr -i` (which Claude is hard-blocked from running) toggles it.
 
