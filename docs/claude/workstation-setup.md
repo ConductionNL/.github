@@ -183,6 +183,13 @@ cp "$REPO_ROOT/global-settings/sound-config.sh.example" ~/.claude/sound-config.s
 ${EDITOR:-nano} ~/.claude/sound-config.sh   # flip SOUND_ENABLED=1
 ```
 
+**Optional — start a personal `~/.claude/CLAUDE.md`** (working agreements Claude loads in every session; not versioned or locked). Copies only when you have none yet:
+
+```bash
+[ -e ~/.claude/CLAUDE.md ] || cp "$REPO_ROOT/docs/claude/examples/global-CLAUDE.md.example" ~/.claude/CLAUDE.md
+${EDITOR:-nano} ~/.claude/CLAUDE.md          # fill in the placeholders, drop what you don't want
+```
+
 Restart Claude Code after installing. For the full reference (permissions table, hook behavior, update flow, sound config details, troubleshooting) see **[global-claude-settings.md](./global-claude-settings.md)** and the canonical **[`global-settings/README.md`](../../global-settings/README.md)**.
 
 > **Later, when you update**, unlocking is two commands, not one: `sudo chattr -i …` clears the kernel flag, and a plain `chmod u+w …` clears the read-only mode that the previous update left behind. Claude is hard-denied both `chattr` and any write-enabling `chmod`, so it cannot do the second one for you — it can only stop and ask. The full sequence is in [`global-settings/README.md` → Updating](../../global-settings/README.md#updating).

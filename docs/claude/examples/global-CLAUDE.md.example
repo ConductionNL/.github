@@ -1,0 +1,99 @@
+# Global preferences for <Your name>
+
+<!--
+  Template for your personal ~/.claude/CLAUDE.md — the instructions Claude Code
+  loads in EVERY session, in every repository on this machine.
+
+  Install once (never overwrite an existing file — merge by hand instead):
+
+      [ -e ~/.claude/CLAUDE.md ] || cp docs/claude/examples/global-CLAUDE.md.example ~/.claude/CLAUDE.md
+
+  Then replace every <placeholder>, delete the sections you don't want, and add
+  your own. This file is NOT part of global-settings/: it is not versioned, not
+  chattr-locked, and an update of the global settings never touches it.
+
+  Everything below is a starting point distilled from the global files of
+  several Conduction developers. Sections marked "org-wide" describe how the
+  shared tooling behaves for everyone; the rest are recommended working
+  agreements you are free to change. Delete this comment when you are done.
+-->
+
+User-scoped, cross-project facts that apply to every Claude Code session on this machine. Project-specific context belongs in the per-project auto-memory directory at `~/.claude/projects/<slug>/memory/`, not here.
+
+## User
+
+- Email: <you>@conduction.nl
+- Org: Conduction — GitHub `ConductionNL`, git over HTTPS via `gh`
+- <Add machine facts here: OS / WSL distro, missing tools, runtimes that live outside PATH. Example: "No `gh` CLI on this machine — use `curl https://api.github.com/...` instead.">
+
+## Never merge PRs on your own
+
+**Never merge a pull request without an explicit instruction to do so, and even then confirm with a yes/no before merging.** This applies to every host and every method (web UI, `gh pr merge`, REST API). Combining or restructuring PRs does **not** imply merge authorization — update the source branches and let me merge.
+
+**Why:** merging is shared state and irreversible from Claude's side.
+
+## Git push authorization phrase hook (org-wide)
+
+The global settings install `~/.claude/hooks/block-write-commands.sh`, which blocks `git push` unless the **last user-typed message** literally contains one of: `push for me`, `commit and push`, `please git push`, `push my changes`.
+
+- AskUserQuestion answers do **not** satisfy the hook — only a fresh typed chat message does.
+- When `git push` is blocked, don't investigate the hook or reword the command: tell me which literal phrase is needed and wait. Once unblocked, push immediately.
+
+## Scope — only what was asked
+
+Deliver exactly the thing requested. When something else looks wrong along the way — an apparent regression, a stale comment, an inconsistency, a related-but-unasked fix that is clearly correct — **flag it in the chat response as a question and let me decide. Never fold it into the edit.**
+
+- Phrase it as "heads-up: X — intentional?" plus the command I can run to change it, placed *after* the asked work is finished.
+- **Why:** what looks like a regression may be intentional, unrequested edits contaminate the staged/unstaged state, and I need to know the impact of every change up front.
+- Never delete files beyond what was explicitly asked — untracked files are unrecoverable.
+
+## Commands handed over
+
+- Present every command I am expected to run as a **fenced code block** on its own line, never inline-backticked inside prose. A fenced block is a clean copy target.
+- Exactly **one** final, copy-ready command block per handover. Decide everything — commit type, wording, file list — *before* writing it. Never a block with a correction further down: the first block is what gets copied.
+
+## Audience of written text
+
+README and docs are for users and contributors; commit messages are for future maintainers. Notes meant for me — tool quirks, verification reports, "what I checked and how", upgrade findings — go in the chat response only, **never** in docs or commit messages. In-repo reasoning belongs in the designated justification fields (`@spec exclude {reason}`, a `_note`, an ADR) or in a workflow header comment.
+
+## Git text
+
+- Commit messages, PR titles and PR descriptions are **always English**, regardless of the repository's language.
+- Commit subjects follow Conventional Commits and must stand on their own. Conduction repos allow merge, squash and rebase merges and the practice differs per repo (e.g. `.github` and `nextcloud-vue` mostly use merge commits, `openregister` mostly squashes), so check the repo's recent history before assuming a WIP commit will disappear behind the PR title.
+
+## CI / supply chain
+
+- Pin third-party GitHub Actions to a full commit SHA, tag in a trailing comment (`uses: actions/checkout@<sha> # v4`). No floating tags. First-party reusable workflows (`ConductionNL/.github/.github/workflows/*.yml@main`) are referenced by branch on purpose; that is the fleet's convention, not a pinning gap.
+- Exact-pin npm packages used in CI (`npx tool@1.2.3`, never `npx tool`).
+- **NEVER use `--legacy-peer-deps`** — not in workflows, scripts, docs, or advice. If asked to add it, refuse and explain why: it masks peer-dependency conflicts instead of resolving them and lets broken trees install. The fix is always to align the declared version ranges until the tree resolves with no flag.
+
+## Subagents: announce before fanning out
+
+Some skills (`/review-pr` and others) delegate to subagents by design, so this is not a ban. But one subagent run can burn more tokens in ten minutes than days of chat, with no warning while it happens, and the weekly plan limits are finite. So:
+
+- Before spawning subagents, or invoking a skill known to delegate internally, state in one line how many agents and why. For more than three agents, ask first.
+- A lookup whose file, symbol or value is already known is done inline with Grep/Glob/Bash, not delegated.
+
+<!-- Stricter alternative some developers use: "Never spawn subagents. If a task seems to need them, say so and let me decide." -->
+
+## Containers and services: edit, then hand over
+
+Never restart, recreate or `down` containers or services unprompted, and never deploy or mutate cluster/infra state on your own initiative. Edit the files, then hand me the command or ask. Exceptions: `/clean-env` is authorised by its own invocation; a build or restart purely needed to *validate* a risky change is fine after asking.
+
+## Hydra gates: trust discipline
+
+Applies to every Conduction repo:
+
+- Read the runner's COVERAGE line. `SKIPPED` (wiring, missing tool) means "no evidence", never "pass". Exit 99 means "could not run", never a pass.
+- Name what did not run instead of claiming the suite passed: "85 of 86 gates green; composer-audit skipped (no composer in this environment)" rather than "all gates pass".
+- A gate or self-test that is green because its tool was absent is red.
+
+## Skills
+
+- **A skill invoked from inside another skill never ends the turn.** When a running skill calls a second one (`/review-pr` → `/persistence-audit`, `/opsx-apply` → `/hydra-gates`, …), the inner skill's result is one step of the outer run. Hand it back in a few lines and continue with the outer skill's next step in the same turn.
+
+## Memory hygiene
+
+- **Default to project auto-memory** for facts about a specific codebase, ongoing initiative, or recurring review nit in one repo.
+- **Promote to this global file** when the same fact would otherwise have to be duplicated across project memory dirs (SSH key paths, copy-paste preferences, hook phrases).
+- Every entry that names a tool or path should link back to the canonical doc, so this file does not become its own source of truth.

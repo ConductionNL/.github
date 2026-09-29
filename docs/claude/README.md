@@ -429,6 +429,15 @@ Save this as `.claude/settings.local.json` in your project root. It is gitignore
 
 > **Review before keeping:** entries like `Bash(bash:*)` and `Bash(rm:*)` are intentionally broad for initial setup — tighten or remove them once you know which commands Claude actually needs on your project.
 
+### ~/.claude/CLAUDE.md (personal, optional)
+
+Your working agreements with Claude — scope, handover format, commit language, when to ask first — loaded in every session in every repository. It is personal and not part of the versioned [global settings](../../global-settings/README.md#not-part-of-the-global-settings-your-own-claudeclaudemd), so an update never touches it. Start from the [example template](./examples/global-CLAUDE.md.example) only if you have none yet:
+
+```bash
+[ -e ~/.claude/CLAUDE.md ] || cp docs/claude/examples/global-CLAUDE.md.example ~/.claude/CLAUDE.md
+# Fill in the placeholders, drop the sections you don't want
+```
+
 ### CLAUDE.local.md
 
 Contains environment-specific credentials and API tokens (passwords, keys, endpoints). **Never commit this file.**
@@ -494,19 +503,27 @@ This repo contains **documentation**, **global settings**, and **project templat
 │       ├── workstation-setup.md         # New machine setup (WSL2, VS Code, tools)
 │       ├── global-claude-settings.md    # Global settings reference
 │       ├── retrofit.md                  # Legacy app retrofit playbook
-│       └── examples/                    # Project-level template files
+│       └── examples/                    # Template files (project-level, plus the personal global CLAUDE.md)
+│           ├── global-CLAUDE.md.example     # Template for your personal ~/.claude/CLAUDE.md
 │           ├── CLAUDE.local.md.example      # Template for project .claude/CLAUDE.local.md
 │           ├── .mcp.json.example            # Template for project root .mcp.json (browser-1 only)
 │           └── browser-pool-shared.json.example  # Opt-in 7-browser pool pointing at the shared server
 │
 ├── global-settings/                  # Mandatory user-level settings for ~/.claude/
+│   ├── README.md                         # Install, update, version-bump policy and security model
 │   ├── settings.json                     # → ~/.claude/settings.json (global read-only policy)
 │   ├── block-write-commands.sh           # → ~/.claude/hooks/block-write-commands.sh
+│   ├── block-polling.sh                  # → ~/.claude/hooks/block-polling.sh (blocks hand-rolled waiting and poll loops)
 │   ├── block-config-tool-writes.sh       # → ~/.claude/hooks/block-config-tool-writes.sh
 │   ├── check-settings-version.sh         # → ~/.claude/hooks/check-settings-version.sh
 │   ├── sound-notify.sh                   # → ~/.claude/hooks/sound-notify.sh (optional sound wrapper; silent by default)
+│   ├── user-hooks-dispatch.sh            # → ~/.claude/hooks/user-hooks-dispatch.sh (runs your ~/.claude/user-hooks.json)
+│   ├── VERSION                           # → ~/.claude/settings-version (version tracking for update checks)
+│   ├── settings-repo-url.example         # → ~/.claude/settings-repo-url (GitHub slug for the online version check)
+│   ├── settings-repo-ref.example         # → ~/.claude/settings-repo-ref (optional; branch to track, default main)
 │   ├── sound-config.sh.example           # → ~/.claude/sound-config.sh (opt-in, user-editable)
-│   └── VERSION                           # Version tracking for update checks
+│   ├── user-hooks.example.json           # → ~/.claude/user-hooks.json (opt-in per-user hooks)
+│   └── tests/                            # Test suites for the hooks (not installed)
 │
 └── usage-tracker/                    # Claude token usage monitoring tool
 ```

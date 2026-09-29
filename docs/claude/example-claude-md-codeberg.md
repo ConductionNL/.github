@@ -41,3 +41,4 @@ ssh -T git@codeberg.org     # expect: "Hi there, <YourCodebergUsername>!"
 ## See also
 
 - [Codeberg Authentication Setup](./codeberg-auth-setup.md) — full setup walkthrough, edge cases, and troubleshooting table.
+- [Full `~/.claude/CLAUDE.md` template](./examples/global-CLAUDE.md.example) — the whole personal global file, of which this Codeberg block would be one section.
