@@ -505,13 +505,20 @@ This repo contains **documentation**, **global settings**, and **project templat
 │           └── browser-pool-shared.json.example  # Opt-in 7-browser pool pointing at the shared server
 │
 ├── global-settings/                  # Mandatory user-level settings for ~/.claude/
+│   ├── README.md                         # Install, update, version-bump policy and security model
 │   ├── settings.json                     # → ~/.claude/settings.json (global read-only policy)
 │   ├── block-write-commands.sh           # → ~/.claude/hooks/block-write-commands.sh
+│   ├── block-polling.sh                  # → ~/.claude/hooks/block-polling.sh (blocks hand-rolled waiting and poll loops)
 │   ├── block-config-tool-writes.sh       # → ~/.claude/hooks/block-config-tool-writes.sh
 │   ├── check-settings-version.sh         # → ~/.claude/hooks/check-settings-version.sh
 │   ├── sound-notify.sh                   # → ~/.claude/hooks/sound-notify.sh (optional sound wrapper; silent by default)
+│   ├── user-hooks-dispatch.sh            # → ~/.claude/hooks/user-hooks-dispatch.sh (runs your ~/.claude/user-hooks.json)
+│   ├── VERSION                           # → ~/.claude/settings-version (version tracking for update checks)
+│   ├── settings-repo-url.example         # → ~/.claude/settings-repo-url (GitHub slug for the online version check)
+│   ├── settings-repo-ref.example         # → ~/.claude/settings-repo-ref (optional; branch to track, default main)
 │   ├── sound-config.sh.example           # → ~/.claude/sound-config.sh (opt-in, user-editable)
-│   └── VERSION                           # Version tracking for update checks
+│   ├── user-hooks.example.json           # → ~/.claude/user-hooks.json (opt-in per-user hooks)
+│   └── tests/                            # Test suites for the hooks (not installed)
 │
 └── usage-tracker/                    # Claude token usage monitoring tool
 ```
