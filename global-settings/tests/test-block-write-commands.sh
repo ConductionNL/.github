@@ -492,6 +492,54 @@ add_ask "bun add" "bun add lodash"
 # Redirect guard — a /dev/null decoy must not suppress the ask for a real redirect.
 add_ask "redirect: relative target + /dev/null decoy" "echo x > outfile; true >/dev/null"
 
+# ── v2.6.0 production is read-only ────────────────────────────────────────────
+# kubectl/oc/helm writes against a *-prod namespace or context are hard-denied;
+# reads pass; non-prod is not this guard's business.
+add_deny "prod: kubectl delete -n"              "kubectl -n openwoo-prod delete pod nextcloud-0"
+add_deny "prod: kubectl delete, ns after verb"  "kubectl delete pod nextcloud-0 -n openwoo-prod"
+add_deny "prod: --namespace=… form"             "kubectl delete pod x --namespace=keepiq-prod"
+add_deny "prod: --context"                      "kubectl --context emk-prod apply -f x.yaml"
+add_deny "prod: exec"                           "kubectl exec -n keepiq-prod deploy/nextcloud -- php occ status"
+add_deny "prod: cp"                             "kubectl cp ./x keepiq-prod/nextcloud-0:/tmp/x"
+add_deny "prod: rollout restart"                "kubectl rollout restart deploy/nextcloud -n openwoo-prod"
+add_deny "prod: scale"                          "kubectl -n openwoo-prod scale deploy/x --replicas=0"
+add_deny "prod: oc delete"                      "oc -n openwoo-prod delete pod x"
+add_deny "prod: helm upgrade"                   "helm upgrade nc ./chart -n openwoo-prod"
+add_deny "prod: helm rollback"                  "helm rollback nc 3 --kube-context emk-prod"
+add_deny "prod: env assignment first"           "KUBECONFIG=/x/cfg kubectl -n openwoo-prod delete pod y"
+add_deny "prod: chained after a read"           "kubectl get pods -n openwoo-prod && kubectl -n openwoo-prod delete pod y"
+add_deny "prod: inside bash -c"                 "bash -c \"kubectl -n openwoo-prod delete pod y\""
+add_deny "prod: after an ask-guard (gh)"        "gh pr create --title t --body b && kubectl -n openwoo-prod delete pod y"
+add_deny "prod: heredoc fed to bash"            $'bash <<\'EOF\'\nkubectl -n openwoo-prod delete pod y\nEOF'
+add_allow "prod: get"                           "kubectl get pods -n openwoo-prod"
+add_allow "prod: logs"                          "kubectl logs -n openwoo-prod nextcloud-0 --tail=50"
+add_allow "prod: describe"                      "kubectl -n openwoo-prod describe pod nextcloud-0"
+add_allow "prod: rollout status"                "kubectl rollout status deploy/x -n openwoo-prod"
+add_allow "prod: helm list/status"              "helm status nc -n openwoo-prod"
+add_allow "non-prod: delete on accept"          "kubectl -n openwoo-accept delete pod x"
+add_allow "prod word, no kubectl"               "grep -rn openwoo-prod plans/"
+add_allow "prod: mentioned in a commit message" "git commit -m 'kubectl -n openwoo-prod delete is blocked now'"
+add_allow "prod: in a heredoc commit message"   $'git commit -F - <<\'EOF\'\ndocs: kubectl -n openwoo-prod delete pod x is blocked\nEOF'
+
+# ── v2.6.0 git push: data is not a push ───────────────────────────────────────
+# A commit message or PR body that mentions `git push` is data. Everything that
+# can still execute a push stays denied (no auth phrase in these fixtures).
+add_allow "push: -m message mentions git push"  "git commit -m \"document the git push flow\""
+add_allow "push: single-quoted message"         "git commit -m 'git push is authorized by phrase'"
+add_allow "push: heredoc commit message"        $'git commit -F - <<\'EOF\'\nfix: explain why git push needs a phrase\nEOF'
+add_allow "push: tag annotation"                "git tag -a v1.2.3 -m 'run git push --tags afterwards'"
+add_ask   "push: gh pr body mentions git push"  "gh pr create --title t --body \"after merge, git push the tag\""
+add_ask   "push: cat > file heredoc"            $'cat > notes.md <<\'EOF\'\ngit push origin main\nEOF'
+add_deny  "push: still denied after a commit"   "git commit -m 'x' && git push"
+add_deny  "push: heredoc fed to bash"           $'bash <<\'EOF\'\ngit push origin main\nEOF'
+add_deny  "push: cat heredoc piped to bash"     $'cat <<\'EOF\' | bash\ngit push origin main\nEOF'
+add_deny  "push: heredoc fed to python"         $'python3 - <<\'EOF\'\nimport os; os.system("git push")\nEOF'
+add_deny  "push: eval"                          "eval \"git push origin main\""
+add_deny  "push: command substitution in -m"    "git commit -m \"\$(git push origin main)\""
+add_deny  "push: backticks in -m"               "git commit -m \"\`git push\`\""
+add_deny  "push: bash -c"                       "bash -c 'git push'"
+add_deny  "push: after the heredoc ends"        $'git commit -F - <<\'EOF\'\nmsg\nEOF\ngit push origin main'
+
 # ── runner ────────────────────────────────────────────────────────────────────
 pass=0; fail=0; fail_details=()
 for t in "${TESTS_ALLOW[@]}"; do
