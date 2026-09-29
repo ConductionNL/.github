@@ -72,6 +72,10 @@ How to write Architectural Decision Records: structure, format, when to create o
 
 Guidelines for writing and maintaining documentation within a project: structure, tone, what to document, and how docs connect to the spec-driven workflow.
 
+### [Writing Controllers](./writing-controllers.md)
+
+How to author Nextcloud controllers in Conduction apps: auth attributes, response envelope, exception translation, security-config fail-modes and public-surface hardening, with the gates that enforce each rule.
+
 ### [App Lifecycle](./app-lifecycle.md)
 
 Creating and managing Nextcloud apps: design research (`/app-design`), bootstrapping from template or onboarding an existing repo (`/app-create`), thinking through goals and features (`/app-explore`), applying config to code (`/app-apply`), and auditing for drift (`/app-verify`). Includes `project.md` and `openspec/config.yaml` templates, and an onboarding checklist.
@@ -479,6 +483,7 @@ This repo contains **documentation**, **global settings**, and **project templat
 │       ├── skill-level-sources.md       # Annotated external sources for the L1–L7 framework
 │       ├── writing-adrs.md              # How to write ADRs
 │       ├── writing-docs.md              # Documentation standards
+│       ├── writing-controllers.md       # Nextcloud controller authoring rules
 │       ├── app-lifecycle.md             # Nextcloud app lifecycle
 │       ├── frontend-standards.md        # Frontend coding standards
 │       ├── parallel-agents.md           # Parallel agents and cap usage

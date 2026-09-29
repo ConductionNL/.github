@@ -193,7 +193,7 @@ App repos do **NOT** carry copies of the org-wide ADRs. Earlier they had stale d
 ADRs are for *design decisions* — the principled statement of what and why. Gates (`hydra-gate-*`) are for *mechanical enforcement* — the deterministic check that catches drift. Most decisions want both:
 
 - **Principle only** → ADR. E.g. ADR-014 (licensing) — the rule is "EUPL-1.2 unless documented exception"; enforcement is a docblock check that already exists.
-- **Mechanically checkable and worth enforcing on every PR** → ADR + companion gate. E.g. ADR-049 (config fail-mode) + gate-50 `security-config-fail-mode`; ADR-051 (exception translation) + gate-49 `controller-exception-translation`. The ADR states the invariant; the gate operationalises it.
+- **Mechanically checkable and worth enforcing on every PR** → ADR + companion gate. E.g. ADR-102 (config fail-mode) + gate-50 `security-config-fail-mode`; ADR-105 (exception translation) + gate-49 `controller-exception-translation`. The ADR states the invariant; the gate operationalises it.
 - **Purely mechanical** (no principled rationale) → gate only. E.g. gate-1 (SPDX headers) — the invariant is "every PHP file has SPDX + copyright"; that's a mechanical property, not a design decision.
 
 Prefer both when the design decision is a rule authors are likely to forget on individual PRs. Gate-only is only for rules that mostly enforce themselves through language / framework conventions. ADR-only is only for rules whose enforcement is inherently semantic (needs human judgment).

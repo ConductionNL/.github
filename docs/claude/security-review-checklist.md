@@ -1,6 +1,6 @@
 # Security Review Checklist
 
-Pre-flight for any PR that touches security-sensitive code in a Conduction app. Referenced by [writing-controllers.md](./writing-controllers.md); intended to be referenced by the review-pr skill's Step 4b (persistence-audit offer) — follow-up wiring in a separate PR against hydra's `review-pr` skill.
+Pre-flight for any PR that touches security-sensitive code in a Conduction app. Referenced by [writing-controllers.md](./writing-controllers.md); intended to be referenced by the review-pr skill's persistence-audit step — follow-up wiring in a separate PR against hydra's `review-pr` skill.
 
 ## When this checklist fires
 
@@ -20,18 +20,18 @@ Run through this list before opening the PR — the reviewer will run through it
 
 ### 1. Admin-surface CRUD uses `#[AuthorizedAdminSetting]` (ADR-005)
 
-Every mutating endpoint on an admin surface (federation peers, catalogs, register/schema config, app-config) carries `#[AuthorizedAdminSetting(settings: <AppAdmin>::class)]` — NOT `#[NoAdminRequired]`. Framework-enforced. Reference case: opencatalogi PR #79 F1/F2.
+Every mutating endpoint on an admin surface (federation peers, catalogs, register/schema config, app-config) carries `#[AuthorizedAdminSetting(settings: <AppAdmin>::class)]` — NOT `#[NoAdminRequired]`. Framework-enforced: admins, plus users an admin delegated that settings section to. `<AppAdmin>` implements `IDelegatedSettings`; never pass the app ID. Reference case: opencatalogi PR #79 F1/F2.
 
-### 2. `@NoCSRFRequired` co-change (ADR-005, gate-48)
+### 2. `#[NoCSRFRequired]` co-change (ADR-005, gate-48)
 
-Are you REMOVING `@NoCSRFRequired` from any controller method in this PR? If yes:
+Are you REMOVING `#[NoCSRFRequired]` (or the legacy `@NoCSRFRequired` annotation) from any controller method in this PR? If yes:
 
 - [ ] Every frontend caller of the endpoint in `src/**/*.{vue,js,ts}` is also updated in this PR.
 - [ ] Update either uses `@nextcloud/axios` (auto-injects `requesttoken`) OR adds `OCS-APIRequest: true` to headers.
 
 Reference case: opencatalogi PR #79 F8 — @NoCSRFRequired retained on `destroy()` while the delete-modal fetch still sent no CSRF header. Silent 412 waiting to happen.
 
-### 3. Downstream `@throws` are translated (ADR-051, gate-49)
+### 3. Downstream `@throws` are translated (ADR-105, gate-49)
 
 For every controller method that calls a service method documenting `@throws X`, verify:
 
@@ -40,9 +40,9 @@ For every controller method that calls a service method documenting `@throws X`,
 
 Tracked exception classes are listed in [writing-controllers.md § Rule 3](./writing-controllers.md). Reference case: opencatalogi PR #86 — `destroy()` called `deleteObject()` without a try/catch → HTTP 500 on the defended path.
 
-### 4. Security-relevant config reads have a fail-mode (ADR-049, gate-50)
+### 4. Security-relevant config reads have a fail-mode (ADR-102, gate-50)
 
-For every `$this->config->getValueString/Bool/Int('appid', 'key', '')` in changed files where the key matches a security predicate (register/schema scope, allow_list, csrf, rbac, permission, auth, *_secret, instance_aliases, trusted_domains):
+For every `IAppConfig::getValueString/Bool/Int('appid', 'key', '')` or `IConfig::getAppValue*` read in changed files where the key matches the security predicate in [writing-controllers.md § Rule 4](./writing-controllers.md#rule-4-security-config-fail-mode-adr-102-gate-50) (gate-50 detects only the `IAppConfig` form):
 
 - [ ] Empty default is handled within 10 lines: fail-closed early return, log-warn, or explicit non-empty guard.
 
