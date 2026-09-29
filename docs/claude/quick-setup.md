@@ -121,6 +121,8 @@ less global-settings/README.md      # then copy-paste the install block
 
 For step 3.7's full install block (it includes a `sudo chattr +i` step that's easier to copy-paste from the README than transcribe here), see [`global-settings/README.md`](../../global-settings/README.md#install). Restart Claude Code after installing.
 
+Optionally, start your personal `~/.claude/CLAUDE.md` from [`examples/global-CLAUDE.md.example`](./examples/global-CLAUDE.md.example). It holds your working agreements with Claude and is not part of the versioned global settings.
+
 ## 4. Validation
 
 If all of the following succeed, your workstation is ready:

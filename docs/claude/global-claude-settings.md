@@ -4,6 +4,8 @@ These are **mandatory** settings for anyone working on Conduction projects with 
 
 Project files under `.claude/` in this repo (for example `settings.json` with MCP allowlists) **complement** this; they do not replace the global policy.
 
+Your personal `~/.claude/CLAUDE.md` (working agreements Claude loads in every session) is **not** part of the global settings: not versioned, not locked, never touched by an update. A starting template lives at [`docs/claude/examples/global-CLAUDE.md.example`](./examples/global-CLAUDE.md.example); see [`global-settings/README.md`](../../global-settings/README.md#not-part-of-the-global-settings-your-own-claudeclaudemd) for how to install it.
+
 ## Versioned canonical files
 
 The canonical files live under **[`global-settings/`](../../global-settings/)**. The version is tracked in [`global-settings/VERSION`](../../global-settings/VERSION).

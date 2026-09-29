@@ -188,6 +188,18 @@ rm ~/.claude/user-hooks.json
 
 The dispatcher never blocks Claude regardless of state — a broken personal hook exits with a warning to stderr and Claude keeps going.
 
+## Not part of the global settings: your own `~/.claude/CLAUDE.md`
+
+The global settings decide what Claude is *allowed* to do. How Claude should *work* for you — scope, handover format, commit language, when to ask first — goes in your personal `~/.claude/CLAUDE.md`, which Claude Code loads in every session. That file is deliberately not shipped from this directory: it is not versioned, not `chattr +i`-locked, and an update never touches it.
+
+A starting point is [`docs/claude/examples/global-CLAUDE.md.example`](../docs/claude/examples/global-CLAUDE.md.example). Copy it only when you have no `~/.claude/CLAUDE.md` yet; otherwise merge the sections you want by hand:
+
+```bash
+[ -e ~/.claude/CLAUDE.md ] || cp "$REPO_ROOT/docs/claude/examples/global-CLAUDE.md.example" ~/.claude/CLAUDE.md
+```
+
+Then fill in the placeholders and delete what you don't want. Its "org-wide" section on the push-authorization phrases describes how `block-write-commands.sh` behaves, so update the template when that hook's phrases change.
+
 ## Updating
 
 When you see a version warning at session start:
