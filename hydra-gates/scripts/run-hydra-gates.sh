@@ -8793,7 +8793,7 @@ fi
 # ---------------------------------------------------------------------------
 # Gate 49: Controller-exception-translation — a controller method that
 # calls a service function with documented `@throws DoesNotExistException`
-# (or NotFoundException, PermissionException, ValidationException, ...)
+# (or NotFoundException, NotAuthorizedException, ValidationException, ...)
 # must either wrap the call in try/catch translating to JSONResponse, OR
 # declare the same @throws in its own docblock so propagation is
 # intentional. Observed 2026-07-03 on opencatalogi#86 — destroy() called
@@ -8887,14 +8887,17 @@ except ImportError as exc:                       # pragma: no cover - wiring
     )
     sys.exit(3)
 # Documented-throw shapes we track — these are known-not-auto-translated by NC's dispatcher.
+# Keep in step with the table in ADR-105 and docs/claude/writing-controllers.md.
 TRACKED = [
     'DoesNotExistException',
     'MultipleObjectsReturnedException',
     'NotFoundException',
-    'PermissionException',
+    'NotAuthorizedException',
     'ValidationException',
-    'ForbiddenException',
     'CustomValidationException',
+    'ObjectExistsException',
+    'LockedException',
+    'SchemaNotInRegisterException',
     'AppendOnlyException',
     'ArchivalImmutableException',
 ]
@@ -8993,7 +8996,7 @@ for fp in files:
         # or its docblock declares @throws for one of them, accept it as intentionally handled.
         #
         # `\Throwable` and `\Exception` count too. They are SUPERSETS of every
-        # name in TRACKED, so a method catching one of them handles all nine and
+        # name in TRACKED, so a method catching one of them handles all of them and
         # more. Rejecting them reported the broadest possible translation as no
         # translation at all — measured on hermiq#162, where three controller
         # methods each caught \Throwable, returned a translated JSON error and
