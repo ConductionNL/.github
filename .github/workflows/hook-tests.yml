@@ -32,3 +32,6 @@ jobs:
 
       - name: Run no-polling hook tests
         run: bash global-settings/tests/test-block-polling.sh
+
+      - name: Run version-check hook tests
+        run: bash global-settings/tests/test-check-settings-version.sh

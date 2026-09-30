@@ -243,6 +243,17 @@ When you see a version warning at session start:
 
 > ⚠️ Don't skip step 4. Without it, the kernel-level protection stays off until the next time you run `sudo chattr +i`. The hooks still defend in depth, but the strongest layer is unarmed. (B) unlocks one file on purpose. Leaving `hooks/*.sh` unlocked as well disarms the guards themselves.
 
+### Which files the notice installs, and what "up to date" means (v2.7.0)
+
+The file blocks in the notice are not a hand-maintained list. `check-settings-version.sh` reads the canonical `settings.json` from the same source it took `VERSION` from and emits one block per hook script it registers, plus `settings.json` itself first and `VERSION` last. A hook that is wired is therefore a hook that gets installed. Before v2.7.0 the list lived in the script and fell behind `settings.json` twice: v2.4.1 added two hooks it had missed, and `block-polling.sh`, registered since v2.5.0, was never on it, so following the notice left that guard uninstalled while the version read as current.
+
+When the installed version already matches the online one, the hook also compares every managed file with its canonical copy:
+
+- hook scripts by `sha256`, ignoring trailing newlines (the `printf '%s\n'` install writes exactly one, the `git show` install copies the bytes verbatim; neither is drift);
+- `settings.json` as parsed JSON, without the `model` key. The VSCode model picker writes `{"model": …}` into it under relock option (B), and a model choice is a preference, not policy. Every other difference in that file counts, and the notice names the top-level keys that differ.
+
+A missing or changed file turns the session-start message into **FILES OUT OF SYNC**. It names the files, the phrase for step 3 is **"repair my global settings"**, and the unlock, contract and relock steps are the same as for an update. Only the affected files are rewritten; `VERSION` is left alone. On the GitHub path the check costs two extra fetches per session (`settings.json`, then every registered hook in one `curl` call); on the git-fetch path it costs none. A canonical file that could not be fetched is reported as not verified, never as fine.
+
 ### The update contract
 
 Claude reinstalls each file with `chmod 555` (hooks) or `chmod 444` (`settings-version`) because `block-write-commands.sh` permits only those two modes on protected paths — `chmod 644`, `chmod u+w` and `chattr` are all hard-denied to Claude, by design, so it can never widen its own access. The consequence is the one step 1 covers: read-only mode is *sticky* across updates and only you can clear it.
