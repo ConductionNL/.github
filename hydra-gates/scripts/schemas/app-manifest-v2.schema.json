@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.37.0",
+	"version": "2.41.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -848,35 +848,6 @@
 				}
 			}
 		},
-		"savedViewPlaces": {
-			"type": "object",
-			"additionalProperties": false,
-			"description": "A saved view of this page is a place. buildManifestRoutes() emits <route>/<routeBase>/:viewId under the name <pageId>__view, the view's own presentation config decides how it opens, and a pinned view hangs under this page's navigation entry rather than beside it. Index pages only, and only meaningful alongside allowSavedViews: without the dropdown there is no view to be a place. Absent, the page keeps the dropdown and the ?view= query it has today.",
-			"properties": {
-				"enabled": {
-					"type": "boolean",
-					"default": false,
-					"description": "Whether this page's saved views are places. False reads as a page that considered it and declined, and renders exactly as a page that never named the key."
-				},
-				"routeBase": {
-					"type": "string",
-					"pattern": "^[a-z0-9][a-z0-9-]*$",
-					"default": "views",
-					"description": "The path segment between the page's own route and the view id, so 'views' gives /cases/views/42. Lowercase and dash only, because it is a segment of an address a person reads and sends."
-				},
-				"navGroup": {
-					"type": "string",
-					"description": "The id of the navigation entry a pinned view hangs under. Omitted, it hangs under the entry that points at this page. A pinned view never becomes a top-level entry, so an app's navigation budget cannot be spent by a user pinning (ADR-097)."
-				},
-				"pinnedCap": {
-					"type": "integer",
-					"minimum": 1,
-					"maximum": 20,
-					"default": 5,
-					"description": "How many pinned views the navigation renders under that entry. Past the cap the rest stay reachable from the page itself, so a person who pins twenty views gets a navigation that still reads (ADR-097)."
-				}
-			}
-		},
 		"savedViewTree": {
 			"type": "object",
 			"additionalProperties": false,
@@ -1379,6 +1350,11 @@
 					"minimum": 1,
 					"description": "Row span (>= 1)."
 				},
+				"sizeToContent": {
+					"type": ["boolean", "integer"],
+					"minimum": 1,
+					"description": "Opt-in: hand this placement's height to whatever it renders, so a widget that decides AT RUNTIME it has nothing to show costs no row. `true` sizes purely to content; an integer is a row minimum. It makes gridHeight advisory for this widget — right for anything whose height is whatever it turned out to be (a banner whose condition is false, a list that came back empty), wrong for anything with a deliberate size. Maps to CnDashboardGrid's per-item `sizeToContent`."
+				},
 				"props": {
 					"type": "object",
 					"description": "Optional widget-specific props passed at render time. Shape is widget-specific; not constrained here.",
@@ -1400,10 +1376,43 @@
 				"_note": {
 					"type": "string",
 					"description": "Human-readable note. Optional on most widgets. REQUIRED when the containing page has type 'custom' — in that case this field must document why a standard page type was not feasible."
+				},
+				"ncDashboard": {
+					"type": "object",
+					"additionalProperties": false,
+					"description": "Opt-in: also publish this placement as a widget on the native Nextcloud dashboard, alongside the app's own pages. An object rather than a boolean because a Nextcloud panel is a single narrow column with its own title, icon and link, none of which the grid placement carries. Presence of this key REQUIRES an `id` on the same entry (enforced in allOf below), and that id MUST be unique across the WHOLE manifest, not merely within its own page's widgets[] — Nextcloud's widget namespace is per app, so two pages both declaring id 'recent' derive one shared panel. Manifest-wide uniqueness is beyond JSON Schema; validateManifestV2 enforces it post-schema. Omitting the key leaves the widget visible only inside the app.",
+					"properties": {
+						"title": {
+							"type": "string",
+							"description": "Panel title on the Nextcloud dashboard. Falls back to the widget's own title when omitted."
+						},
+						"icon": {
+							"type": "string",
+							"description": "MDI icon name (PascalCase), e.g. ViewDashboardOutline."
+						},
+						"order": {
+							"type": "integer",
+							"description": "Initial ordering hint, passed through as IWidget::getOrder(). It decides where the panel first appears; once a user rearranges their own dashboard their arrangement wins, so this is a hint and never a guarantee."
+						},
+						"link": {
+							"type": "string",
+							"pattern": "^(?![a-zA-Z][a-zA-Z0-9+.-]*:)(?!//)\\S+$",
+							"description": "In-app route the panel header links to, so a reader can open the page where the widget's full context lives. Written the way `pages[].route` is, e.g. '/reporting' — the host resolves it against its own app root with generateUrl() and never renders it bare. A scheme ('https:', and 'javascript:' above all) and a protocol-relative '//host' are both refused: the panel is rendered by Nextcloud's dashboard, outside this app's own pages, so a manifest is not a place to hand it an offsite destination."
+						}
+					}
 				}
 			},
 			"allOf": [
 				{ "$ref": "#/$defs/sentinelGuardedValue" },
+				{
+					"description": "ncDashboard requires a stable id. The host derives a permanent Nextcloud widget id from `id`, and Nextcloud stores each user's chosen widgets by that id in its own namespace, which no migration of this app can reach. A widget identified by array position would move onto a different widget whenever the array is reordered, silently changing what a user sees. `id`'s own pattern already refuses an empty string, so requiring the key is the whole of the rule expressible here; the manifest-wide uniqueness half lives in validateManifestV2.",
+					"if": {
+						"required": ["ncDashboard"]
+					},
+					"then": {
+						"required": ["id"]
+					}
+				},
 				{
 					"description": "sidebar slot: gridWidth MUST equal 1. The sidebar is a fixed-width panel; widgets always span the full width.",
 					"if": {
@@ -2079,7 +2088,7 @@
 				},
 				"handler": {
 					"type": "string",
-					"description": "Registry key for type: 'handler'. Resolved against the customComponents map passed to CnAppRoot. Also the built-in dispatch verb when paired with `route` (handler: 'navigate' → $router.push to `route`)."
+					"description": "Registry key for type: 'handler'. Resolved across both registries passed to CnAppRoot: a v2 `registry` entry of `kind: 'handler'` exposing the function as `.handler` (or `.fn`), a directly function-valued registry entry, or a function-valued entry in the deprecated `customComponents` map. The same resolution serves actions[], bulkActions[] and headerActions[]. Also the built-in dispatch verb when paired with `route` (handler: 'navigate' → $router.push to `route`)."
 				},
 				"route": {
 					"type": "string",
@@ -2367,12 +2376,24 @@
 				},
 				"op": {
 					"type": "string",
-					"enum": ["eq", "neq", "gt", "gte", "lt", "lte"],
+					"enum": ["eq", "neq", "gt", "gte", "lt", "lte", "empty", "notEmpty"],
 					"default": "eq",
-					"description": "Comparison operator (default eq). eq/neq compare loosely-normalised primitives; ordering operators coerce both sides to Number."
+					"description": "Comparison operator (default eq). eq/neq compare loosely-normalised primitives; ordering operators coerce both sides to Number. `empty` / `notEmpty` take no `value` and treat undefined, null, '' and an empty array alike — the one question eq cannot ask, because an unset field arrives in a shape that depends on the store and String(null) is the word 'null' rather than blank."
 				},
 				"value": {
-					"description": "The literal right-hand side of the comparison."
+					"description": "The right-hand side of the comparison, resolved through the shared @-token grammar so `@me` names the signed-in reader rather than a literal only the server knows. Omitted for `empty` / `notEmpty`."
+				},
+				"all": {
+					"type": "array",
+					"minItems": 1,
+					"items": { "$ref": "#/$defs/visibleWhen" },
+					"description": "Every listed condition must hold. Use it where a gate is more than one fact — a Claim button that is both 'not closed' and 'nobody holds it'. Each entry is a full visibleWhen and may compose again."
+				},
+				"any": {
+					"type": "array",
+					"minItems": 1,
+					"items": { "$ref": "#/$defs/visibleWhen" },
+					"description": "At least one listed condition must hold. Ignored when `all` is also present."
 				}
 			}
 		},
@@ -2618,10 +2639,6 @@
 					"$ref": "#/$defs/splitView",
 					"description": "Index pages only. Opens a row beside the list rather than instead of it, at the sibling route <route>/split/:id that buildManifestRoutes() emits. Refused on any other page type."
 				},
-				"savedViewPlaces": {
-					"$ref": "#/$defs/savedViewPlaces",
-					"description": "Index pages only. Makes each saved view of this page a place: its own route, the presentations its view config declares, and an entry under this page's navigation entry once a user pins it. Refused on any other page type."
-				},
 				"board": {
 					"$ref": "#/$defs/boardView",
 					"description": "Index pages only. The board view's configuration, handed to CnIndexPage as the `board` prop. The segment appears only when `viewModes` also lists `board`. Refused on any other page type."
@@ -2632,7 +2649,7 @@
 				},
 				"savedViewTree": {
 					"$ref": "#/$defs/savedViewTree",
-					"description": "Index pages only. Renders this page's saved views as a tree with labels, and declares the views that ship with the app. Refused on any other page type, for the same reason savedViewPlaces is: a page with no saved-view dropdown has nothing to put in a tree."
+					"description": "Index pages only. Renders this page's saved views as a tree with labels, and declares the views that ship with the app. Refused on any other page type: a page with no saved-view dropdown has nothing to put in a tree."
 				},
 				"manualOrder": {
 					"type": "boolean",
@@ -2997,7 +3014,7 @@
 						},
 						"editOpensDetail": {
 							"type": "boolean",
-							"description": "type='index': send the Edit row action to the record's detail page instead of opening the edit modal. Set automatically by CnPageRenderer when a type='detail' page exists for the same register+schema (or config.rowRoute is set); declare it explicitly only to override that. Maps to CnIndexPage `editOpensDetail`."
+							"description": "type='index': send the Edit row action to the record's detail page instead of opening the edit modal. OPT-IN — CnPageRenderer used to set this wherever a type='detail' page or config.rowRoute existed, and it no longer does: @edit-open is bound to the same navigation as a row click, so a routed Edit just repeats the row click (the split pane, or the detail page) and the form is no longer reachable from the list. Declare true per page when the modal cannot express the record. Maps to CnIndexPage `editOpensDetail`."
 						},
 						"showEditAction": {
 							"type": "boolean",
@@ -3014,6 +3031,100 @@
 							"enum": [1, 2],
 							"default": 1,
 							"description": "How many columns the page's built-in Add/Edit form flows its fields into. Pair 2 with formSize 'large', or the two columns are merely two narrow ones. CnFormDialog collapses back to one column below 700px, and a textarea or JSON editor spans both columns regardless. Maps to CnIndexPage / CnDetailPage `formColumns`."
+						},
+						"excludeFields": {
+							"type": "array",
+							"items": { "type": "string" },
+							"description": "Property names kept OUT of the page's built-in Add/Edit form dialog. Maps to CnIndexPage / CnDetailPage `excludeFields`."
+						},
+						"includeFields": {
+							"type": "array",
+							"items": { "type": "string" },
+							"description": "Property names the page's built-in Add/Edit form dialog shows, in this order — a whitelist, so anything absent is hidden regardless of excludeFields. Maps to CnIndexPage / CnDetailPage `includeFields`."
+						},
+						"fieldOverrides": {
+							"type": "object",
+							"additionalProperties": true,
+							"description": "Per-field overrides merged over the schema-derived field descriptors in the page's built-in Add/Edit form dialog (e.g. `{ \"description\": { \"widget\": \"textarea\" } }`). Which widget a field renders as belongs to the surface, not to the schema. Maps to CnIndexPage / CnDetailPage `fieldOverrides`."
+						},
+						"createDefaults": {
+							"type": "object",
+							"additionalProperties": true,
+							"description": "type='index': seed values for the page's built-in create dialog, never applied on edit. Resolves `@me`/`@now`/`@today` at any depth; `@object.*`/`@workspace.*`/`@config.*` need a context the page does not carry and pass through unchanged. Maps to CnIndexPage `createDefaults`."
+						},
+						"createSuccessRoute": {
+							"oneOf": [
+								{ "type": "string" },
+								{
+									"type": "object",
+									"properties": {
+										"name": { "type": "string" },
+										"paramField": { "type": "string" },
+										"objectParam": { "type": "string" }
+									},
+									"required": ["name"],
+									"additionalProperties": false
+								}
+							],
+							"description": "type='index': route opened after a successful create from the page's built-in Add dialog; the created object's id is merged into the params. Maps to CnIndexPage `createSuccessRoute`."
+						},
+						"createSuccessMessage": {
+							"type": "string",
+							"description": "type='index': toast shown after a successful create from the page's built-in Add dialog. Maps to CnIndexPage `createSuccessMessage`."
+						},
+						"savedViewsScope": {
+							"type": "string",
+							"description": "type='index': which pages share this page's saved views. By default a view is shared by every page over the same register and schema and by no other, because a view is filters over one schema's fields. Set this to share views across pages over different sources, or to keep two pages over one source apart. Written into the saved view's `query.scope`; views saved before scoping stay visible everywhere. Maps to CnIndexPage `savedViewsScope`."
+						},
+						"splitCloseButton": {
+							"type": "boolean",
+							"default": true,
+							"description": "type='index': whether the split pane draws its own close link. Set false when a `#split-pane` slot draws one from the slot's `close`. Maps to CnIndexPage `splitCloseButton`."
+						},
+						"splitCloseLabel": {
+							"type": "string",
+							"description": "type='index': accessible name and tooltip for the split pane's close button. Defaults to \"Close\". Maps to CnIndexPage `splitCloseLabel`."
+						},
+						"mapConfig": {
+							"type": "object",
+							"additionalProperties": true,
+							"description": "type='index': how rows are plotted when the Map view mode is available. Non-empty (and not excluded by an explicit viewModes) adds a Map segment to the view toggle. Maps to CnIndexPage `mapConfig`.",
+							"properties": {
+								"latField": {
+									"type": "string",
+									"description": "Object (or `@self`) property path holding the marker's latitude. Dotted paths are supported, e.g. `@self.geo.lat`."
+								},
+								"lngField": {
+									"type": "string",
+									"description": "Object (or `@self`) property path holding the marker's longitude."
+								},
+								"geoField": {
+									"type": "string",
+									"description": "Alternative single property holding a GeoJSON Point geometry (`{ type: 'Point', coordinates: [lng, lat] }`). Takes precedence over latField/lngField when present and resolvable."
+								},
+								"popupField": {
+									"type": "string",
+									"description": "Object property rendered in the marker popup."
+								},
+								"center": {
+									"type": "array",
+									"items": { "type": "number" },
+									"minItems": 2,
+									"maxItems": 2,
+									"description": "Fallback centre `[lat, lng]` when the filtered set has no plottable rows."
+								},
+								"clustering": {
+									"type": "boolean",
+									"default": true,
+									"description": "Whether coincident markers are grouped into a cluster that spiderfies on click. ON by default here — the opposite of CnMapWidget's own default — because an index map plots whatever the filter returns, and several rows at one address is the normal case: unclustered they land on identical pixels, the topmost takes every click and the rest are unreachable with nothing on screen saying they exist. Non-point geometry skips the cluster group, so areas are unaffected. Set false for the old behaviour."
+								}
+							}
+						},
+						"quickFilterMaxVisible": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"description": "type='index', chips mode: how many quickFilters render as pills before the rest move behind one more chip — a `⋯` pill that opens a panel of the hidden lenses, and that wears the label and the active fill of whichever one is on. 0 (the default) renders every lens, which wraps the actions bar onto a second line once a page declares more than a handful. The visible set is the FIRST n entries of quickFilters, so reorder that array to change which lenses stay out. Maps to CnIndexPage `quickFilterMaxVisible`."
 						},
 						"actionToggles": {
 							"type": "object",
@@ -3101,7 +3212,7 @@
 			},
 			"allOf": [
 				{
-					"description": "splitView, manualOrder, savedViewPlaces, savedViewTree, board and dateAxis are index-page mechanics. splitView emits a second route beside an index route and mounts the detail pane inside CnIndexPage; manualOrder holds a per-user row order for a list; savedViewPlaces turns this page's saved views into addressable places. Declared on a detail, dashboard or custom page they would validate and then do nothing, which is the failure this branch refuses out loud (case-page-and-list-as-a-place, saved-view-as-a-place).",
+					"description": "splitView, manualOrder, savedViewTree, board and dateAxis are index-page mechanics. splitView emits a second route beside an index route and mounts the detail pane inside CnIndexPage; manualOrder holds a per-user row order for a list. Declared on a detail, dashboard or custom page they would validate and then do nothing, which is the failure this branch refuses out loud (case-page-and-list-as-a-place).",
 					"if": {
 						"not": {
 							"properties": { "type": { "const": "index" } },
@@ -3113,7 +3224,6 @@
 							"anyOf": [
 								{ "required": ["splitView"] },
 								{ "required": ["manualOrder"] },
-								{ "required": ["savedViewPlaces"] },
 								{ "required": ["savedViewTree"] },
 								{ "required": ["board"] },
 								{ "required": ["dateAxis"] }
