@@ -51,7 +51,13 @@ REPORT_JOB_NAME = "Quality Report"
 # job-id -> reason. Empty on purpose: every job in this workflow renders a
 # verdict, so every job belongs in the gate. An entry here is a claim that a
 # job CANNOT fail meaningfully, and it has to be argued.
-ALLOWLIST: dict[str, str] = {}
+ALLOWLIST: dict[str, str] = {
+    "supersede-watch": (
+        "renders no verdict: it only cancels a superseded push run, and it "
+        "waits for the Quality Report to complete, so the report cannot also "
+        "wait for it."
+    ),
+}
 
 
 def find_report_job(jobs: dict) -> str | None:

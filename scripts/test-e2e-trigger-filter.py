@@ -65,9 +65,20 @@ def census_script():
 
 
 def run_trigger(name, event, base_ref="", head_ref="", ref="",
-                promotion_only="true", expect=None):
+                promotion_only="true", open_pr_bases="", expect=None):
     d = tempfile.mkdtemp()
     try:
+        # A stub `gh` answers the dispatch rule's open-PR lookup: one base
+        # branch per line, or exit 1 for None (the lookup failing). Always
+        # installed, so no case depends on a real gh or token on this machine.
+        bin_d = os.path.join(d, "bin")
+        os.mkdir(bin_d)
+        with open(os.path.join(bin_d, "gh"), "w") as fh:
+            if open_pr_bases is None:
+                fh.write("#!/bin/sh\nexit 1\n")
+            else:
+                fh.write("#!/bin/sh\nprintf '%s' '" + open_pr_bases + "'\n")
+        os.chmod(os.path.join(bin_d, "gh"), 0o755)
         out_f = os.path.join(d, "o")
         sum_f = os.path.join(d, "s")
         open(out_f, "w").close()
@@ -77,6 +88,8 @@ def run_trigger(name, event, base_ref="", head_ref="", ref="",
             "GITHUB_OUTPUT": out_f, "GITHUB_STEP_SUMMARY": sum_f,
             "PROMOTION_ONLY": promotion_only, "EVENT": event,
             "BASE_REF": base_ref, "HEAD_REF": head_ref, "REF": ref,
+            "GITHUB_REPOSITORY": "o/r", "GITHUB_REPOSITORY_OWNER": "o",
+            "PATH": bin_d + os.pathsep + env.get("PATH", ""),
         })
         r = subprocess.run(["bash", "-c", trigger_script()], cwd=d, env=env,
                            capture_output=True, text=True)
@@ -100,7 +113,8 @@ def run_trigger(name, event, base_ref="", head_ref="", ref="",
 
 
 def run_census(name, e2e_trigger, e2e_reason, playwright_result="skipped",
-               path_filter_code="true", expect_rc=None):
+               path_filter_code="true", phpunit_result="success",
+               route_heavy=None, expect_rc=None):
     d = tempfile.mkdtemp()
     try:
         sum_f = os.path.join(d, "s")
@@ -110,7 +124,7 @@ def run_census(name, e2e_trigger, e2e_reason, playwright_result="skipped",
             "GITHUB_STEP_SUMMARY": sum_f,
             "GITHUB_OUTPUT": os.path.join(d, "o"),
             "SECURITY_RESULT": "success",
-            "PHPUNIT_ENABLED": "true", "PHPUNIT_RESULT": "success",
+            "PHPUNIT_ENABLED": "true", "PHPUNIT_RESULT": phpunit_result,
             "NEWMAN_ENABLED": "false", "NEWMAN_RESULT": "skipped",
             "PLAYWRIGHT_ENABLED": "true", "PLAYWRIGHT_RESULT": playwright_result,
             "PATH_FILTER_CODE": path_filter_code,
@@ -122,6 +136,11 @@ def run_census(name, e2e_trigger, e2e_reason, playwright_result="skipped",
             # still the tip" branch — the strict one.
             "GH_TOKEN": "",
         })
+        # None leaves ROUTE_HEAVY unset, the shape of a caller-less run and of
+        # a skipped route job: the census must read it as the full lane.
+        if route_heavy is not None:
+            env["ROUTE_HEAVY"] = route_heavy
+            env["ROUTE_REASON"] = "#1 is a draft."
         r = subprocess.run(["bash", "-c", census_script()], cwd=d, env=env,
                            capture_output=True, text=True)
         ok = (r.returncode == expect_rc)
@@ -160,12 +179,26 @@ results.append(run_trigger("PR release/ -> development (rule 1, predates this)",
                            "pull_request", base_ref="development",
                            head_ref="release/1.2.3", expect="false"))
 
+print("── A MANUAL RUN OF WORK BOUND FOR development IS development TRAFFIC ─")
+results.append(run_trigger("workflow_dispatch, open PR into development",
+                           "workflow_dispatch", ref="refs/heads/feature/x",
+                           open_pr_bases="development\n", expect="false"))
+results.append(run_trigger("workflow_dispatch, PRs into development AND beta",
+                           "workflow_dispatch", ref="refs/heads/feature/x",
+                           open_pr_bases="development\nbeta\n", expect="true"))
+
 print("── FAIL-SAFE: anything not proven ordinary must RUN ───────────────")
 results.append(run_trigger("workflow_dispatch on development", "workflow_dispatch",
                            ref="refs/heads/development", expect="true"))
 results.append(run_trigger("workflow_dispatch on a feature branch",
                            "workflow_dispatch", ref="refs/heads/feat/x",
                            expect="true"))
+results.append(run_trigger("workflow_dispatch, PR lookup fails -> RUN",
+                           "workflow_dispatch", ref="refs/heads/feat/x",
+                           open_pr_bases=None, expect="true"))
+results.append(run_trigger("workflow_dispatch, open PR into beta -> RUN",
+                           "workflow_dispatch", ref="refs/heads/development",
+                           open_pr_bases="beta\n", expect="true"))
 results.append(run_trigger("schedule", "schedule",
                            ref="refs/heads/development", expect="true"))
 results.append(run_trigger("merge_group (event this workflow has not met)",
@@ -194,6 +227,14 @@ results.append(run_census("E2E ran and passed -> green",
                           "true", "", playwright_result="success", expect_rc=0))
 results.append(run_census("path-filter skip, unchanged -> green",
                           "true", "", path_filter_code="false", expect_rc=0))
+
+print("── A DRAFT'S QUICK LANE IS DECLARED, AND ONLY WHEN DECLARED ──────")
+results.append(run_census("quick lane: test tier skipped -> declared, green",
+                          "true", "", phpunit_result="skipped",
+                          route_heavy="false", expect_rc=0))
+results.append(run_census("CONTROL: route output empty, tier skipped -> red",
+                          "true", "", phpunit_result="skipped",
+                          route_heavy="", expect_rc=1))
 
 print()
 passed, total = sum(results), len(results)
