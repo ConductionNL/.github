@@ -723,47 +723,209 @@ concurrency:
   # ephemeral server and database, so nothing is shared to contend over.
   group: quality-${{ github.ref }}-${{ github.event_name }}
 
-  # PUSH RUNS ARE NOT CANCELLED. #526 read this as a cadence problem caused by
-  # the release loop, and at the time it was: an automated cycle pushed
-  # `chore(release):` every 8-12 minutes and a run takes 14-23, so the branch
-  # could never converge. The self-skip guard that landed 2026-08-26 closed
-  # that, and the premise no longer holds.
+  # EVERY SUPERSEDED RUN IS CANCELLED, PUSHES TO `development` INCLUDED.
   #
-  # Re-measured 2026-08-27 over 8 hours, all 21 fleet repos, 109 commits on
-  # `development`:
+  # From 2026-08-27 until this change, pushes were exempt. The argument (#526):
+  # on an integration branch the run being cancelled is the only verdict on
+  # what just landed, and when merges arrive faster than a run finishes the
+  # replacement is cancelled too — openregister had 12 of its last 12
+  # `development` runs cancelled, and learniq shipped an eslint error nothing
+  # reported (learniq#664).
   #
-  #     release-loop churn   0  (0%)
-  #     real work          109  (100%)
+  # That trade was reversed on purpose. When five pull requests are merged
+  # back to back, only the newest head is the current state of `development`,
+  # and it is the one that needs a verdict soonest. An exempt push run keeps
+  # the outdated commit occupying the queue while the one that matters waits
+  # behind it. With cancelling on, the run for the latest merge is the one
+  # that completes, as soon as merging pauses.
   #
-  # Every one is a squash-merged pull request. openregister alone merged ten.
-  # So the traffic that cancels these runs is not noise to be throttled -- it
-  # is the fleet working, and it is not going to slow down.
-  #
-  # "Once commit N+1 exists, verifying N matters less" is true for a queue of
-  # feature-branch pushes. It is false for an integration branch, because the
-  # run being cancelled is the only thing that would have said whether what
-  # just landed is sound, and the replacement gets cancelled too. Measured the
-  # same day, over each repo's last twelve COMPLETED runs: openregister 12 of
-  # 12 cancelled, learniq 10 of 12, pipelinq 10 of 12. Seven of the 21 apps
-  # had no verdict on `development` at all.
-  #
-  # A cancelled run is not a failure, but it is not a pass either -- it is no
-  # verdict, and it renders as "nothing wrong here" in every summary that
-  # counts failures. That is not theoretical: learniq shipped an eslint error
-  # to `development` and nothing reported it, because every run there since
-  # 09:54 was cancelled rather than completed. It surfaced only when a PR cut
-  # after it went red (learniq#664).
-  #
-  # The cost is queue depth, not money -- the fleet is public, so Actions
-  # minutes are free; the constraint is the 60-concurrent-job account ceiling,
-  # which buys latency, and a late verdict beats no verdict.
-  #
-  # `pull_request` keeps cancelling: there, only the latest head commit is
-  # meaningful and superseding really is correct. `workflow_dispatch` keeps
-  # cancelling within its own lane.
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  # A CALLER'S OWN `concurrency:` block is evaluated first, and one that
+  # does not cancel pushes holds the newer run as pending before it ever
+  # reaches this setting. The `supersede-watch` job covers those callers: a
+  # superseded push run cancels itself.
+  cancel-in-progress: true
 
 jobs:
+  # ── STAGE -1 — which lane does this event run? ────────────────────────────
+  #
+  # Decided HERE, for every caller, so no repository has to encode it in its
+  # own `on:` block. Every other job `needs:` this one and reads two
+  # booleans:
+  #
+  #   run    false = run NOTHING. A push to a work branch (anything but main,
+  #                  master, beta, development). A work branch is checked
+  #                  through its pull request — the default `pull_request`
+  #                  types include `synchronize`, so every later push to an
+  #                  open PR runs anyway — and before a PR exists there is
+  #                  nothing to merge and nothing to gate. A caller that
+  #                  also lists `feature/**` under `push` ran every commit on
+  #                  an open PR twice, in two concurrency groups that never
+  #                  cancelled each other; that second run is now a no-op.
+  #
+  #   heavy  false = QUICK LANE. A DRAFT pull request runs everything that
+  #                  finishes in about two minutes (linters, static analysis,
+  #                  unit tests, audits) and skips the jobs that boot a
+  #                  Nextcloud server or a browser: PHPUnit, Newman,
+  #                  Playwright, journeydoc capture, Hydra Gates (and axe),
+  #                  app:check-code. The Quality Report then FAILS on purpose
+  #                  (see its draft gate), so a quick-lane verdict can never
+  #                  be the one a PR merges on.
+  #
+  # The draft state is read LIVE from the API, not from the event payload. A
+  # re-run replays the original payload, so a PR marked ready for review
+  # would otherwise re-run as a draft forever. Reading it live means "Re-run
+  # all jobs" after leaving draft gives the full run. The payload is only the
+  # fallback when the lookup fails.
+  #
+  # FAIL-SAFE TOWARDS RUNNING, like `changes` below: every consumer tests
+  # `!= 'false'`, so a failed or skipped route job (empty outputs) runs
+  # everything, and every event this step does not name falls through to the
+  # full lane.
+  route:
+    runs-on: ubuntu-latest
+    name: "Run lane"
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.lane.outputs.run }}
+      heavy: ${{ steps.lane.outputs.heavy }}
+      reason: ${{ steps.lane.outputs.reason }}
+    steps:
+      - name: Decide which lane this event runs
+        id: lane
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          set -uo pipefail
+
+          lane() {
+            {
+              echo "run=$1"
+              echo "heavy=$2"
+              echo "reason=$3"
+            } >> "$GITHUB_OUTPUT"
+            {
+              echo "### Run lane"
+              echo ""
+              echo "- Lane: **$4**"
+              echo "- Reason: $3"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Lane $4 — $3"
+            exit 0
+          }
+
+          case "$EVENT" in
+            push)
+              case "$REF" in
+                refs/heads/main|refs/heads/master|refs/heads/beta|refs/heads/development|refs/tags/*)
+                  lane true true "a push to \`${REF#refs/*/}\` is a merge landing on an integration branch." full
+                  ;;
+                *)
+                  lane false false "\`${REF#refs/heads/}\` is a work branch. It is checked through its pull request; without one there is nothing to merge and nothing to gate." none
+                  ;;
+              esac
+              ;;
+            pull_request)
+              LIVE="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .draft 2>/dev/null || true)"
+              if [ -z "$LIVE" ]; then
+                echo "::warning::Could not read the live draft state of #${PR_NUMBER}; using the event payload (draft=${PR_DRAFT:-unknown})."
+                LIVE="$PR_DRAFT"
+              fi
+              if [ "$LIVE" = "true" ]; then
+                lane true false "#${PR_NUMBER} is a draft, so it runs the quick checks only. Mark it ready for review, then push or re-run all jobs for the full verdict." quick
+              fi
+              lane true true "#${PR_NUMBER} is ready for review." full
+              ;;
+            *)
+              lane true true "event '${EVENT}' is neither a push nor a pull request, so it runs in full." full
+              ;;
+          esac
+
+  # ── A superseded push run cancels ITSELF ──────────────────────────────────
+  #
+  # The workflow-level `cancel-in-progress` below cannot reach every caller.
+  # A caller's own `concurrency:` block is evaluated first, and most of the
+  # fleet's callers carry `cancel-in-progress: ${{ github.event_name !=
+  # 'push' }}`: the run for the newest merge is held PENDING behind the
+  # running one and never starts, so nothing in it can cancel anything.
+  #
+  # So the cancelling is done from the other end. While a push run is in
+  # progress, this job asks once a minute whether a NEWER run of the same
+  # workflow for the same branch is waiting. If one is, this run is no longer
+  # the current state of the branch: it cancels itself, which frees the
+  # caller's concurrency group, and the newest run starts. Five merges back
+  # to back end with one completed run, for the last one — in every caller,
+  # whatever its own `concurrency:` block says.
+  #
+  # It cancels only when a newer run EXISTS, not merely when the branch tip
+  # moved. A newer commit whose run skips itself (a release commit, a branch
+  # creation) must not cost the branch its only verdict.
+  #
+  # NOT in the Quality Report's `needs:` (allowlisted in
+  # scripts/assert-quality-report-gates-every-leg.py): it waits for the
+  # report to finish, so the report cannot wait for it. It renders no
+  # verdict, and `continue-on-error` keeps its own failure out of the run's.
+  #
+  # `actions: write` is inside every caller's grant already: journeydoc-capture
+  # declares it, and GitHub validates the called workflow's declared
+  # permissions against the caller's ceiling at startup.
+  supersede-watch:
+    needs: [route]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.route.outputs.run != 'false' }}
+    runs-on: ubuntu-latest
+    name: "Supersession watch"
+    # Bounded above the longest run the report waits on (Playwright, 45 min).
+    timeout-minutes: 90
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run once a newer run for the branch is waiting
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -uo pipefail
+          RUN_URL="repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          SELF="$(gh api "$RUN_URL" --jq '"\(.workflow_id) \(.run_number)"' 2>/dev/null || true)"
+          if [ -z "$SELF" ]; then
+            echo "::warning::Could not read this run's workflow id — not watching for supersession."
+            exit 0
+          fi
+          read -r WORKFLOW_ID RUN_NUMBER <<< "$SELF"
+          echo "Watching ${BRANCH} for a newer run than #${RUN_NUMBER} of workflow ${WORKFLOW_ID}."
+
+          while true; do
+            sleep 60
+
+            # The Quality Report is the last job. Once it has completed there
+            # is nothing left to save by cancelling.
+            REPORT="$(gh api --paginate "${RUN_URL}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name | endswith("Quality Report")) | .status' 2>/dev/null | head -1)"
+            if [ "$REPORT" = "completed" ]; then
+              echo "Quality Report has completed — this run was not superseded."
+              exit 0
+            fi
+
+            NEWER="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_ID}/runs?branch=${BRANCH}&event=push&per_page=20" \
+              --jq "[.workflow_runs[] | select(.run_number > ${RUN_NUMBER} and .status != \"completed\")] | map(.run_number) | sort | last // empty" 2>/dev/null || true)"
+            if [ -n "$NEWER" ]; then
+              echo "::notice::Superseded — run #${NEWER} for ${BRANCH} is waiting behind this one (#${RUN_NUMBER}). Cancelling this run so the newest head gets its verdict first."
+              {
+                echo "### ⏭️ Superseded"
+                echo ""
+                echo "Run #${NEWER} for \`${BRANCH}\` was waiting behind this one, so this run cancelled itself."
+              } >> "$GITHUB_STEP_SUMMARY"
+              gh api -X POST "${RUN_URL}/cancel" >/dev/null || echo "::warning::The cancel request failed; this run will complete instead."
+              exit 0
+            fi
+          done
+
   # ── STAGE 0 — what did this diff actually touch? ──────────────────────────
   #
   # Produces ONE boolean, `code`, consumed by the two most expensive job
@@ -783,6 +945,8 @@ jobs:
   # the clone, a git error, an empty file list — resolves to `code=true`. The
   # filter must PROVE the diff is irrelevant; it never assumes it.
   changes:
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     name: "Changed paths"
     timeout-minutes: 5
@@ -923,16 +1087,21 @@ jobs:
       # true, and every consumer tests `!= 'false'`. So every failure mode of
       # this step resolves to running the suite.
       #
-      # FAIL-SAFE BY CONSTRUCTION. Only two events can answer `false`, and both
-      # are named explicitly. Anything else — `workflow_dispatch` (the
-      # deliberate ask), `schedule` (the nightly sweep), `merge_group`, or an
-      # event this workflow has never met — falls through to `true`. The filter
-      # must PROVE the trigger is ordinary development traffic; it never
-      # assumes it.
+      # FAIL-SAFE BY CONSTRUCTION. Only three shapes can answer `false`, and
+      # each is named explicitly: a pull request or a push off the promotion
+      # path, and a `workflow_dispatch` on a branch whose open pull request
+      # targets `development` — a manual run of work bound for `development`
+      # is still `development` traffic, however it was started. Anything else
+      # — a dispatch anywhere else (the deliberate ask), `schedule` (the
+      # nightly sweep), `merge_group`, or an event this workflow has never met
+      # — falls through to `true`, and so does a dispatch whose pull-request
+      # lookup fails. The filter must PROVE the trigger is ordinary
+      # development traffic; it never assumes it.
       - name: Does E2E run on this trigger?
         id: e2e-trigger
         env:
           PROMOTION_ONLY: ${{ inputs.e2e-promotion-only }}
+          GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           HEAD_REF: ${{ github.head_ref }}
@@ -980,7 +1149,7 @@ jobs:
                   emit_e2e true "this pull request targets \`${BASE_REF}\`, which is on the promotion path."
                   ;;
                 *)
-                  emit_e2e false "E2E runs locally and on the promotion path only. This pull request targets \`${BASE_REF:-an unnamed branch}\`, so the suite is asked once per promotion into \`beta\` and \`main\` rather than once per push per open pull request. Run it on any branch from the Actions tab, or locally with npx playwright test."
+                  emit_e2e false "E2E runs locally and on the promotion path only. This pull request targets \`${BASE_REF:-an unnamed branch}\`, so the suite is asked once per promotion into \`beta\` and \`main\` rather than once per push per open pull request. Run it locally with npx playwright test, or from the Actions tab on a branch with no open pull request into \`development\`."
                   ;;
               esac
               ;;
@@ -990,9 +1159,24 @@ jobs:
                   emit_e2e true "this push is to \`${REF#refs/heads/}\`, which is on the promotion path."
                   ;;
                 *)
-                  emit_e2e false "E2E runs locally and on the promotion path only. This is a push to \`${REF#refs/heads/}\`, which is ordinary development traffic, so the suite runs on the promotions into \`beta\` and \`main\`. Run it on any branch from the Actions tab, or locally with npx playwright test."
+                  emit_e2e false "E2E runs locally and on the promotion path only. This is a push to \`${REF#refs/heads/}\`, which is ordinary development traffic, so the suite runs on the promotions into \`beta\` and \`main\`. Run it locally with npx playwright test, or from the Actions tab on a branch with no open pull request into \`development\`."
                   ;;
               esac
+              ;;
+            workflow_dispatch)
+              BRANCH="${REF#refs/heads/}"
+              if ! BASES="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${GITHUB_REPOSITORY_OWNER}:${BRANCH}" --jq '.[].base.ref' 2>/dev/null)"; then
+                echo "::warning::Could not look up the open pull requests for ${BRANCH}; running E2E rather than guessing."
+                emit_e2e true "a manual run, and the open pull requests for \`${BRANCH}\` could not be looked up. Running the suite."
+              fi
+              PROMOTION_BASE="$(printf '%s\n' "$BASES" | grep -xE 'beta|main' | head -1)"
+              if [ -n "$PROMOTION_BASE" ]; then
+                emit_e2e true "a manual run on \`${BRANCH}\`, which has an open pull request into \`${PROMOTION_BASE}\` — the promotion path."
+              fi
+              if printf '%s\n' "$BASES" | grep -qx 'development'; then
+                emit_e2e false "E2E runs locally and on the promotion path only. This manual run is on \`${BRANCH}\`, whose open pull request targets \`development\`, so it is development traffic like the pull request itself. Run it locally with npx playwright test."
+              fi
+              emit_e2e true "a manual run on \`${BRANCH}\`, which has no open pull request into \`development\` — the deliberate ask. Running the suite."
               ;;
             *)
               emit_e2e true "event '${EVENT}' is neither a push nor a pull request, so it is not ordinary development traffic. Running the suite."
@@ -1024,7 +1208,8 @@ jobs:
 
   # ── Group 1: PHP Quality ────────────────────────
   php-quality:
-    if: ${{ inputs.enable-php }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-php }}
     runs-on: ubuntu-latest
     name: "PHP Quality (${{ matrix.tool }})"
     # Observed across 1497 executions fleet-wide: median 0.5 min, p95 1.5 min,
@@ -1373,7 +1558,8 @@ jobs:
   # `check-code-blocking` input flips it to a hard failure per app when that app
   # is ready.
   app-check-code:
-    if: ${{ inputs.enable-php && inputs.enable-check-code }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.heavy != 'false' && inputs.enable-php && inputs.enable-check-code }}
     runs-on: ubuntu-latest
     name: "Nextcloud API check (app:check-code)"
     timeout-minutes: 20
@@ -1466,7 +1652,8 @@ jobs:
   # Non-blocking by default for the same reason as app:check-code — 2 of the 4
   # apps sampled ship a REUSE.toml at all.
   reuse:
-    if: ${{ inputs.enable-reuse }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-reuse }}
     runs-on: ubuntu-latest
     name: "REUSE compliance"
     timeout-minutes: 10
@@ -1516,7 +1703,8 @@ jobs:
   # silently. If the fetch fails the job FAILS — a validator that cannot get its
   # schema has validated nothing, and saying so is the whole point.
   info-xml:
-    if: ${{ inputs.enable-php }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-php }}
     runs-on: ubuntu-latest
     name: "info.xml lint"
     # 🔑 A JOB CAP MUST BE LARGER THAN ITS OWN STEPS' WORST CASE, OR THE
@@ -1664,7 +1852,8 @@ jobs:
 
   # ── Group 2: Vue Quality ────────────────────────
   vue-quality:
-    if: ${{ inputs.enable-frontend }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-frontend }}
     runs-on: ubuntu-latest
     name: "Vue Quality (${{ matrix.tool }})"
     # Observed across 494 executions: median 0.6 min, p95 1.2 min, max 2.1 min
@@ -1832,7 +2021,8 @@ jobs:
   # that gets switched off. Those are reported as inconclusive and never fail,
   # even when blocking is on.
   lockfile-sync:
-    if: ${{ inputs.enable-frontend }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-frontend }}
     runs-on: ubuntu-latest
     name: "Lockfile Sync"
     # Seconds in the normal case. 10 min is a hang-breaker, not a budget.
@@ -1976,7 +2166,8 @@ jobs:
   # spelling of empty now yields a visible skip, and malformed JSON fails the
   # run loudly in the `if:` instead of silently voiding the job.
   frontend-checks:
-    if: ${{ inputs.enable-frontend && join(fromJSON(inputs.frontend-checks), ',') != '' }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-frontend && join(fromJSON(inputs.frontend-checks), ',') != '' }}
     runs-on: ubuntu-latest
     name: "Frontend Check (${{ matrix.script }})"
     # Observed across 102 executions: median 0.6 min, p95 1.4 min, max 2.1 min
@@ -2072,7 +2263,8 @@ jobs:
   # full fallback, never a replacement, so a bad hand-off costs time, not a
   # verdict.
   frontend-build:
-    if: ${{ inputs.enable-frontend }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-frontend }}
     runs-on: ubuntu-latest
     name: "Frontend Build"
     # UNMEASURED as a standalone job — it has never existed. The best proxy is
@@ -2258,7 +2450,8 @@ jobs:
   # exits 0 with no output when it finds no matching config, which is how
   # doriath's "passing" unit gate was running nothing at all.
   frontend-tests:
-    if: ${{ inputs.enable-frontend }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-frontend }}
     runs-on: ubuntu-latest
     name: "Frontend Tests (unit)"
     # Observed across 232 executions: median 0.6 min, p95 1.5 min, max 2.0 min
@@ -2418,6 +2611,8 @@ jobs:
   #
   # ══════════════════════════════════════════════════════════════════════════
   security:
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     name: "Security (${{ matrix.ecosystem }})"
     # Observed across 505 executions: median 0.4 min, p95 1.0 min, max 5.7 min
@@ -2718,7 +2913,8 @@ jobs:
   #   5. Fails the workflow if any dependency has a disallowed license
   # ────────────────────────────────────────────────
   license:
-    if: ${{ inputs.enable-license-check }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-license-check }}
     runs-on: ubuntu-latest
     name: "License (${{ matrix.ecosystem }})"
     # Observed across 497 executions: median 0.7 min, p95 1.4 min, max 1.9 min
@@ -3090,6 +3286,8 @@ jobs:
   # resolved set, computed and printed, and for the derived path it is the
   # action's own `branches-max` output rather than anything this file infers.
   nextcloud-matrix:
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     name: "Nextcloud test matrix"
     # No `if:` and no `needs:`. Every consumer below is a different combination
@@ -3494,7 +3692,7 @@ jobs:
     # repos and read as unremarkable. `'' != 'false'` runs the tests instead.
     # The cost of the filter being broken is runner minutes; the cost of it
     # being trusted while broken is a verdict nobody notices is missing.
-    if: ${{ inputs.enable-php && inputs.enable-phpunit && needs.changes.outputs.code != 'false' && !cancelled() }}
+    if: ${{ !cancelled() && needs.route.outputs.heavy != 'false' && inputs.enable-php && inputs.enable-phpunit && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }})"
     # `nextcloud-matrix` is a REAL edge, unlike `security`: this job's matrix
@@ -3502,7 +3700,7 @@ jobs:
     # `!cancelled()` in the `if:` above still suppresses the implicit success(),
     # so a failed resolve does not delete these legs — the resolve step publishes
     # a valid array before it exits non-zero, precisely so this stays true.
-    needs: [security, nextcloud-matrix, changes]
+    needs: [route, security, nextcloud-matrix, changes]
     # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
     # max 18.9 min (shillinq, green). The spread is huge because each leg
     # installs a full Nextcloud server before the suite runs, so a tight bound
@@ -4269,11 +4467,11 @@ jobs:
     # reads no result from it) and only delayed the start; security resolves in
     # seconds, so keeping it costs no measurable time. No step here reads
     # `needs.*`.
-    if: ${{ inputs.enable-newman && !cancelled() }}
+    if: ${{ !cancelled() && needs.route.outputs.heavy != 'false' && inputs.enable-newman }}
     runs-on: ubuntu-latest
     name: "Integration Tests (Newman)"
     # `nextcloud-matrix` supplies the server this job checks out. Real edge.
-    needs: [security, nextcloud-matrix]
+    needs: [route, security, nextcloud-matrix]
     # Observed across 39 executions: median 1.9 min, max 7.5 min (launchpad).
     # Also installs a full Nextcloud server first, so 30 min — 4x the worst run.
     timeout-minutes: 30
@@ -4773,10 +4971,10 @@ jobs:
     # nowhere, because a `development` push run is usually CANCELLED BEFORE
     # ANY JOB STARTS.
     #
-    # That is not the `cancel-in-progress` expression below, which already
-    # exempts pushes. GitHub's concurrency queue holds at most ONE pending run
-    # per group, so with cancelling off a third arrival cancels the pending
-    # second. Merges land every few minutes and a run takes 14-23, so pending
+    # That was measured while the workflow-level `cancel-in-progress` still
+    # exempted pushes (it no longer does — see the `concurrency:` block).
+    # GitHub's concurrency queue holds at most ONE pending run per group, so
+    # even with cancelling off a third arrival cancels the pending second. Merges land every few minutes and a run takes 14-23, so pending
     # runs are cancelled in turn. Measured on dossiq's last 20 `development`
     # push runs, 2026-09-08: 14 cancelled, and each cancelled one carries ZERO
     # jobs with an `updated_at` equal to the next push's `created_at`. It never
@@ -4816,7 +5014,7 @@ jobs:
     # `!= 'false'` for the same reason as `code` above: a `changes` job that
     # fails, is cancelled or is deleted publishes the EMPTY STRING, and the
     # suite must run rather than vanish.
-    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && needs.changes.outputs.e2e != 'false' && !cancelled() }}
+    if: ${{ !cancelled() && needs.route.outputs.heavy != 'false' && inputs.enable-playwright && needs.changes.outputs.code != 'false' && needs.changes.outputs.e2e != 'false' }}
     runs-on: ubuntu-latest
     # The name carries a matrix expression on purpose. A matrix job whose name
     # does not mention `matrix` gets its values appended by GitHub, and the
@@ -4892,7 +5090,7 @@ jobs:
     # job run and simply rebuild the bundle itself.
     #
     # `nextcloud-matrix` supplies the server this job checks out. Real edge.
-    needs: [security, frontend-build, nextcloud-matrix, changes]
+    needs: [route, security, frontend-build, nextcloud-matrix, changes]
     # No job in this file declared a timeout, so a hung suite ran to GitHub's
     # 6-hour default. Observed durations once the suite is healthy: 4-10 min
     # (planix 0.8, doriath 4.2, zaakafhandelapp 5.3, softwarecatalog 6.1,
@@ -6574,11 +6772,11 @@ jobs:
     # result from it) and security resolves in seconds, so it costs no
     # measurable time. Unlike php-quality on the phpunit/newman/playwright jobs,
     # there was nothing here worth removing.
-    if: ${{ inputs.enable-journeydoc-capture && !cancelled() }}
+    if: ${{ !cancelled() && needs.route.outputs.heavy != 'false' && inputs.enable-journeydoc-capture }}
     runs-on: ubuntu-latest
     name: "Journeydoc Capture (screenshots)"
     # `nextcloud-matrix` supplies the server this job checks out. Real edge.
-    needs: [security, nextcloud-matrix]
+    needs: [route, security, nextcloud-matrix]
     # UNMEASURED: no caller in the fleet currently sets
     # `enable-journeydoc-capture: true`, so this job has never executed (312
     # skipped records, 0 executions, across 15 repos). Its step list is a
@@ -7126,7 +7324,8 @@ jobs:
   # ╚══════════════════════════════════════════════╝
 
   baseline-protection:
-    if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-coverage-guard && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     name: "Coverage Baseline Protection"
     # Observed across 8 executions: median 0.3 min, max 1.0 min (procest).
@@ -7275,7 +7474,8 @@ jobs:
     # skipped, gates RAN each time) now belongs to `hydra-gates-axe` below,
     # which is the job that still carries the Playwright edge; the note lives
     # there.
-    if: ${{ inputs.enable-hydra-gates && !cancelled() }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.heavy != 'false' && inputs.enable-hydra-gates }}
     runs-on: ubuntu-latest
     name: "Hydra Gates"
     # ── NO `needs:`, AND THAT IS THE POINT ─────────────────────────────────
@@ -7891,13 +8091,13 @@ jobs:
     # Do not "simplify" this to a bare `inputs.enable-axe`: that restores the
     # implicit `success()` and deletes the job with no red, no skip and no
     # trace whenever Playwright does not succeed.
-    if: ${{ inputs.enable-hydra-gates && inputs.enable-axe && !cancelled() }}
+    if: ${{ !cancelled() && needs.route.outputs.heavy != 'false' && inputs.enable-hydra-gates && inputs.enable-axe }}
     runs-on: ubuntu-latest
     name: "Hydra Gates (axe)"
     # `changes` is here for its `e2e` output ONLY — the producer probe below
     # reads it. It is not a gate: `!cancelled()` above already suppresses the
     # implicit `success()` this `needs:` would otherwise impose.
-    needs: [playwright, changes]
+    needs: [route, playwright, changes]
     timeout-minutes: 10
 
     steps:
@@ -8228,8 +8428,8 @@ jobs:
     # which is exactly why this has to be gated separately: a green PHPUnit
     # matrix measured on versions the app never claimed is the failure this
     # whole change exists to remove, and it looks identical to a pass.
-    needs: [php-quality, vue-quality, lockfile-sync, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, hydra-gates-axe, app-check-code, info-xml, reuse, changes]
-    if: always()
+    needs: [route, php-quality, vue-quality, lockfile-sync, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, hydra-gates-axe, app-check-code, info-xml, reuse, changes]
+    if: ${{ always() && needs.route.outputs.run != 'false' }}
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
     # mirror. That stall is currently intermittent-but-live fleet-wide
@@ -8743,8 +8943,22 @@ jobs:
           E2E_TRIGGER_REASON: ${{ needs.changes.outputs.e2e_reason }}
           JOURNEYDOC_ENABLED: ${{ inputs.enable-journeydoc-capture }}
           JOURNEYDOC_RESULT: ${{ needs['journeydoc-capture'].result }}
+          # The quick lane of a draft PR skips the whole test tier by design.
+          # Those skips are DECLARED here so the census does not report them
+          # as "NO VERDICT EXISTS"; the draft gate below is what fails the
+          # report, with a message that says why.
+          ROUTE_HEAVY: ${{ needs.route.outputs.heavy }}
+          ROUTE_REASON: ${{ needs.route.outputs.reason }}
         run: |
           set -uo pipefail
+
+          # Unset or empty (route job skipped or failed) is NOT the quick lane:
+          # only a declared `false` downgrades the census, like every other
+          # `!= 'false'` consumer of the route job.
+          QUICK_LANE_REASON=""
+          if [ "${ROUTE_HEAVY:-}" = "false" ]; then
+            QUICK_LANE_REASON="quick lane — ${ROUTE_REASON:-draft pull request}"
+          fi
 
           MISSING=""
           RAN=""
@@ -8791,19 +9005,20 @@ jobs:
           }
 
           echo "Test-tier verdict census:"
-          classify "PHPUnit"            "$PHPUNIT_ENABLED"    "$PHPUNIT_RESULT"    true
-          classify "Newman"             "$NEWMAN_ENABLED"     "$NEWMAN_RESULT"
-          E2E_REASON=""
-          if [ "$E2E_TRIGGER" = "false" ]; then
+          classify "PHPUnit"            "$PHPUNIT_ENABLED"    "$PHPUNIT_RESULT"    true "$QUICK_LANE_REASON"
+          classify "Newman"             "$NEWMAN_ENABLED"     "$NEWMAN_RESULT"     false "$QUICK_LANE_REASON"
+          E2E_REASON="$QUICK_LANE_REASON"
+          if [ -z "$E2E_REASON" ] && [ "$E2E_TRIGGER" = "false" ]; then
             E2E_REASON="$E2E_TRIGGER_REASON"
           fi
           classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true "$E2E_REASON"
-          classify "Journeydoc capture" "$JOURNEYDOC_ENABLED" "$JOURNEYDOC_RESULT"
+          classify "Journeydoc capture" "$JOURNEYDOC_ENABLED" "$JOURNEYDOC_RESULT" false "$QUICK_LANE_REASON"
 
           # A filtered run is a pass ABOUT THE DIFF IT EXAMINED, and it must not
           # be readable as a pass about the code. Say which families did not
-          # run, in the report body, every time.
-          if [ -n "$FILTERED" ]; then
+          # run, in the report body, every time. (A quick-lane run is reported
+          # by the draft gate instead, which also fails it.)
+          if [ -n "$FILTERED" ] && [ -z "$QUICK_LANE_REASON" ]; then
             {
               echo ""
               echo "### ⚠️ Partial run — the heavy test tier did not execute"
@@ -8859,6 +9074,36 @@ jobs:
               echo "test tier is missing, something else deleted it. Investigate the"
               echo "skipped job's \`if:\` condition."
             fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      # ══ Gate 3 — a draft's quick lane is never a mergeable verdict ═════════
+      #
+      # A draft runs the quick checks only (see the `route` job). Leaving draft
+      # does NOT start a new run in a caller whose `pull_request` types are
+      # GitHub's default — `ready_for_review` is not among them — so without
+      # this gate the draft run's green report would still be the PR's
+      # required check after "Ready for review", and the PR could merge with
+      # no PHPUnit, Newman, Playwright or Hydra verdict at all.
+      #
+      # Every check above still runs and still reports; only the aggregate is
+      # red, and it says why.
+      - name: Gate — a draft pull request ran the quick lane only
+        if: ${{ !cancelled() && needs.route.outputs.heavy == 'false' }}
+        env:
+          ROUTE_REASON: ${{ needs.route.outputs.reason }}
+        run: |
+          echo "::error::Quick lane only — ${ROUTE_REASON} The individual checks above are real results; this report is red because a draft run is not a verdict a PR may merge on."
+          {
+            echo ""
+            echo "## 📝 Draft — quick lane only"
+            echo ""
+            echo "$ROUTE_REASON"
+            echo ""
+            echo "Linters, static analysis, unit tests and audits ran above and"
+            echo "their results are real. PHPUnit, Newman, Playwright, journeydoc"
+            echo "capture, Hydra Gates and app:check-code did **not** run, so this"
+            echo "report is red on purpose."
           } >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
@@ -8962,10 +9207,10 @@ jobs:
   # ╚══════════════════════════════════════════════╝
 
   sbom:
-    if: ${{ inputs.enable-php && inputs.enable-sbom && !cancelled() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/development') }}
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-php && inputs.enable-sbom && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/development') }}
     runs-on: ubuntu-latest
     name: "SBOM"
-    needs: [security]
+    needs: [route, security]
     # Observed across 54 executions: median 1.1 min, max 1.9 min
     # (nextcloud-app-template). Does composer install + npm install + a Grype
     # download + a CVE scan, all network-bound, so 30 min rather than 10.
@@ -9219,7 +9464,8 @@ jobs:
   # keeps the PR diff clean (no bot commits on top of the human's work) and
   # forces the author to regenerate locally so they see the change.
   features-check:
-    if: ${{ inputs.enable-features-extract && !cancelled() && github.event_name == 'pull_request' }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-features-extract && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     name: "Features Check"
     # Observed across 174 executions: median 0.2 min, max 3.1 min
@@ -9259,7 +9505,8 @@ jobs:
   # (see CONVENTIONS.md § features.json is generated at commit time); CI
   # only verifies and hands back the regenerated file as an artifact.
   features-extract:
-    if: ${{ inputs.enable-features-extract && !cancelled() && github.event_name != 'pull_request' }}
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.run != 'false' && inputs.enable-features-extract && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     name: "Features Extract"
     # Observed across 76 executions: median 0.2 min, max 2.5 min
