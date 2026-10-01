@@ -8,7 +8,7 @@ All apps that depend on OpenRegister (everything except `nldesign` and `launchpa
 
 ### `CnAppRoot` does it
 
-The app shell is `CnAppRoot` from `@conduction/nextcloud-vue`. Its `requiresApps` prop defaults to `['openregister']`. On mount it checks each listed app once (`OC.appswebroots` first, `getCapabilities()` from `@nextcloud/capabilities` as the fallback, because OpenRegister registers no capability) and, when any listed app is missing, renders an `NcEmptyContent` instead of the app:
+The app shell is `CnAppRoot` from `@conduction/nextcloud-vue`. Its `requiresApps` prop defaults to `['openregister']`. On mount it checks each listed app once (`OC.appswebroots`, which lists every app enabled for the current user, first; `getCapabilities()` from `@nextcloud/capabilities` as the fallback) and, when any listed app is missing, renders an `NcEmptyContent` instead of the app:
 
 - **Admins** get a button that installs/enables the missing app in place: first via the NC34+ OCS endpoint `apps/appstore/api/v1/apps/enable`, then via the classic `settings/apps/enable` on NC33 and earlier. If that fails, the app-store link remains as a fallback.
 - **Non-admins** get "ask your administrator" copy.
