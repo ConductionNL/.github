@@ -8,9 +8,9 @@ All apps that depend on OpenRegister (everything except `nldesign` and `launchpa
 
 ### `CnAppRoot` does it
 
-The app shell is `CnAppRoot` from `@conduction/nextcloud-vue`. Its `requiresApps` prop defaults to `['openregister']`. On mount it reads the Nextcloud capabilities API (`getCapabilities()` from `@nextcloud/capabilities`) once and, when any listed app is missing, renders an `NcEmptyContent` instead of the app:
+The app shell is `CnAppRoot` from `@conduction/nextcloud-vue`. Its `requiresApps` prop defaults to `['openregister']`. On mount it checks each listed app once (`OC.appswebroots` first, `getCapabilities()` from `@nextcloud/capabilities` as the fallback, because OpenRegister registers no capability) and, when any listed app is missing, renders an `NcEmptyContent` instead of the app:
 
-- **Admins** get a button that installs/enables the missing app in place via Nextcloud's `settings/apps/enable` endpoint, with the app-store link as a fallback.
+- **Admins** get a button that installs/enables the missing app in place: first via the NC34+ OCS endpoint `apps/appstore/api/v1/apps/enable`, then via the classic `settings/apps/enable` on NC33 and earlier. If that fails, the app-store link remains as a fallback.
 - **Non-admins** get "ask your administrator" copy.
 
 So the default needs nothing from the app — mount `CnAppRoot` without a `requiresApps` prop:
@@ -28,7 +28,7 @@ Rules:
 - **Do not pass `:requiresApps="[]"` in an app that needs OpenRegister.** The empty array switches the guard off, and nothing else in the app replaces it. The opt-out is for apps that genuinely run without OpenRegister (OpenRegister itself, the styleguide, utility apps).
 - **An app that needs a second app lists both**: `:requiresApps="['openregister', 'openconnector']"`.
 - **A custom missing-app screen** goes in the `#or-missing` slot (receives `{ missingApps }`), not in a hand-rolled three-state `App.vue`.
-- A failing capabilities call falls through to the app rather than blocking it; the data layer then surfaces the real error.
+- A lookup that errors counts as missing: `useAppStatus` logs a warning and reports the app as not installed, so the empty state shows instead of a half-working app.
 
 This replaces the older hand-built pattern (`openRegisters` / `isAdmin` in the `SettingsController` response, a Pinia `hasOpenRegisters` getter, a three-state `App.vue` with an `open-register-missing` class). Do not add that pattern to new code; leftovers of it in existing apps are dead code once the app mounts `CnAppRoot` with the guard on.
 
