@@ -188,6 +188,16 @@ rm ~/.claude/user-hooks.json
 
 The dispatcher never blocks Claude regardless of state — a broken personal hook exits with a warning to stderr and Claude keeps going.
 
+### Optional: personal hooks you can borrow
+
+[`hooks/` in ConductionNL/readonly-mirror-wilco-claude-plans](https://github.com/ConductionNL/readonly-mirror-wilco-claude-plans/tree/main/hooks) holds one developer's personal hooks, run through this dispatcher. They add to the guards here and are not part of the global settings: nothing in this directory depends on them, and you can take any of them or none. The repo is a private, read-only mirror; Conduction developers can read it and fork it.
+
+- `tool-context.sh` (`PreToolUse`, `PostToolUse`, `Stop`, `PreCompact`) refuses the first write to certain files until the matching guide in [`docs/claude/`](../docs/claude/) has been read in that session. The files and guides are: a hydra skill → `writing-skills.md`, `lib/Controller/*.php` → `writing-controllers.md`, an openspec `spec.md` → `writing-specs.md`, `evals.json` → `skill-evals.md`, an ADR → `writing-adrs.md`, and `src/**/*.vue` → `frontend-standards.md`. It also re-runs `update-skill-overview.sh` after hydra skill edits, and gates hotfix tags and releases behind a playbook.
+- `plan-context.sh` (`UserPromptSubmit`) points Claude at those guides, and at notes in that repo, when your prompt is about such work.
+- `read-markers.sh` is the read log both scripts share. It records which parts of a file were read, so a guide that was only partly read does not count as read.
+
+[`hooks/README.md`](https://github.com/ConductionNL/readonly-mirror-wilco-claude-plans/blob/main/hooks/README.md) describes every rule and the `user-hooks.json` entries. The scripts are written for that developer's own setup. The paths, the plans tree and the role lines in the messages are theirs, so adapt them before you register a copy (see [Enabling per-user hooks](#enabling-per-user-hooks)). The production read-only guard started there and has been part of `block-write-commands.sh` since v2.6.0.
+
 ## Not part of the global settings: your own `~/.claude/CLAUDE.md`
 
 The global settings decide what Claude is *allowed* to do. How Claude should *work* for you — scope, handover format, commit language, when to ask first — goes in your personal `~/.claude/CLAUDE.md`, which Claude Code loads in every session. That file is deliberately not shipped from this directory: it is not versioned, not `chattr +i`-locked, and an update never touches it.

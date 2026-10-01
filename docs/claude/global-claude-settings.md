@@ -306,6 +306,8 @@ Restart Claude Code or run `/hooks`. From then on your hooks fire alongside the 
 
 **Disabling:** empty the arrays, or delete the file. The dispatcher exits 0 in both cases.
 
+**Ready-made personal hooks** that add doc-gates for the `docs/claude/` guides are described in [global-settings/README.md → Optional: personal hooks you can borrow](../../global-settings/README.md#optional-personal-hooks-you-can-borrow). They are optional and not part of the global settings.
+
 ### 9. MCP servers — not configured here
 
 `settings.json` does not read an `mcpServers` key ([Claude Code docs](https://code.claude.com/docs/en/debug-your-config#check-common-causes)), so MCP servers are **not** part of the global settings. Versions up to 2.4.0 shipped a dead `mcpServers` block with 7 Playwright browsers; it never loaded anything and was removed in 2.4.1. Configure MCP servers at one of the two supported scopes instead:
