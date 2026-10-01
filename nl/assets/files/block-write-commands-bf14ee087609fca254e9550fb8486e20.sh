@@ -63,6 +63,58 @@ git_push_authorized() {
 
 PUSH_DENY_MSG="Blocked: git push requires explicit authorization. Include one of these phrases in your message: 'push for me', 'commit and push', 'please git push', or 'push my changes'."
 
+# data_free_cmd — $cmd with the text that is only DATA taken out, for the
+# checks that ask "does this command RUN x?" (git push, production writes).
+# Without it a commit message or PR body that merely mentions `git push` was
+# hard-denied as a push.
+#
+# Removed, and nothing else:
+#   - the body of a heredoc fed to a data sink (cat, tee, git, gh, jq, wc,
+#     sort, head, tail, grep, less, more) on a line with no pipe and no
+#     command substitution. A heredoc fed to bash/sh/python/ssh/eval/… is
+#     code and stays, as does `cat <<EOF | bash`.
+#   - the quoted value of -m/--message/-b/--body/-t/--title/--notes on a
+#     git commit/tag/notes or gh pr/issue/release line. Single-quoted always
+#     (never expands); double-quoted only without $( or a backtick.
+# The config guard above deliberately keeps scanning the full $cmd: there a
+# false deny is cheaper than a gap (see README → Security model).
+data_free_cmd() {
+    printf '%s\n' "$cmd" | awk '
+        BEGIN {
+            split("cat tee git gh jq wc sort head tail grep less more", s, " ")
+            for (i in s) sink[s[i]] = 1
+        }
+        hd != "" {
+            t = $0; sub(/^\t+/, "", t)
+            if (t == hd) { hd = ""; print; next }
+            if (!strip) print
+            next
+        }
+        {
+            line = $0
+            if (match(line, /<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_]*["\047]?/) && substr(line, RSTART, 3) != "<<<") {
+                word = substr(line, RSTART, RLENGTH); gsub(/<<-?[ \t]*|["\047]/, "", word)
+                pre = substr(line, 1, RSTART - 1)
+                n = split(pre, seg, /;|&&|\|\|/); cmdpart = seg[n]
+                sub(/^[ \t({]*/, "", cmdpart)
+                while (match(cmdpart, /^([A-Za-z_][A-Za-z0-9_]*=[^ \t]*|sudo|env|time|command)[ \t]+/))
+                    cmdpart = substr(cmdpart, RLENGTH + 1)
+                split(cmdpart, w, /[ \t]+/)
+                hd = word
+                strip = (w[1] in sink) && line !~ /\|/ && line !~ /\$\(/ && line !~ /`/
+            }
+            if (line ~ /(^|[;&| \t(])(git[ \t]+(commit|tag|notes)|gh[ \t]+(pr|issue|release))([ \t]|$)/) {
+                gsub(/(-m|--message|-b|--body|-t|--title|--notes)(=|[ \t]+)\047[^\047]*\047/, "-m DATA", line)
+                while (match(line, /(-m|--message|-b|--body|-t|--title|--notes)(=|[ \t]+)"[^"]*"/)) {
+                    v = substr(line, RSTART, RLENGTH)
+                    if (v ~ /\$\(|`/) break
+                    line = substr(line, 1, RSTART - 1) "-m DATA" substr(line, RSTART + RLENGTH)
+                }
+            }
+            print line
+        }'
+}
+
 # ── Claude config guard (HARD BLOCK) ─────────────────────────────────────────
 # Prevent writes to protected ~/.claude/ config files.
 # Canonical update source: github.com/ConductionNL/.github — origin/main only.
@@ -234,6 +286,48 @@ if $_is_config_write; then
     fi
 fi
 
+# ── Production is read-only (HARD BLOCK) ──────────────────────────────────────
+# kubectl / oc with a mutating verb, or helm install/upgrade/uninstall/delete/
+# rollback, in a command segment that names a *-prod namespace or context →
+# denied. Claude hands the command to the user, who runs it; there is no
+# phrase that unlocks it. Reads (get, describe, logs, top, rollout status /
+# history) pass. Placed before every `ask` guard: an ask exits the hook, so a
+# production write chained after, say, `gh pr create` would otherwise get
+# through on one approval of the gh prompt.
+# The binary may sit anywhere in a segment (`bash -c "kubectl …"` counts);
+# only DATA text is ignored (data_free_cmd). Added in v2.6.0; it started
+# life as a personal user-hook.
+_KUBE_WRITE='^(apply|create|delete|edit|patch|replace|scale|set|label|annotate|exec|cp|drain|cordon|uncordon|taint|run|expose|autoscale|debug|attach|rollout)$'
+_HELM_WRITE='^(install|upgrade|uninstall|delete|rollback)$'
+while IFS= read -r _seg; do
+    [[ "$_seg" =~ (^|[[:space:]\"\'\(])(kubectl|oc|helm)[[:space:]]+(.*)$ ]] || continue
+    _bin="${BASH_REMATCH[2]}"; _rest="${BASH_REMATCH[3]}"
+    _prod=$(printf '%s' "$_seg" | grep -oE '(^|[^A-Za-z0-9-])[A-Za-z0-9]+(-[A-Za-z0-9]+)*-prod([^A-Za-z0-9-]|$)' \
+              | head -1 | tr -cd 'A-Za-z0-9-')
+    [ -n "$_prod" ] || continue
+    _verb=""; _next=""; _skip=0
+    read -ra _words <<< "$_rest"
+    for ((_i = 0; _i < ${#_words[@]}; _i++)); do
+        _w="${_words[$_i]}"
+        if [ "$_skip" -eq 1 ]; then _skip=0; continue; fi
+        case "$_w" in
+            -n|--namespace|--context|--kubeconfig|--cluster|--user|-s|--server|--kube-context) _skip=1; continue ;;
+            -*) continue ;;
+        esac
+        _verb="${_w//[\"\']/}"; _next="${_words[$((_i + 1))]:-}"; break
+    done
+    _blocked=0
+    if [ "$_bin" = "helm" ]; then
+        [[ "$_verb" =~ $_HELM_WRITE ]] && _blocked=1
+    elif [[ "$_verb" =~ $_KUBE_WRITE ]]; then
+        _blocked=1
+        [ "$_verb" = "rollout" ] && [[ "$_next" =~ ^(status|history)$ ]] && _blocked=0
+    fi
+    if [ "$_blocked" -eq 1 ]; then
+        hard_deny "BLOCKED: \`$_bin $_verb\` against production ($_prod). Production is read-only for Claude: give the user the filled-in command as a fenced block, with what it does and how to undo it, and let them run it. Reads (get, describe, logs, top, rollout status) are not blocked."
+    fi
+done < <(data_free_cmd | sed -E 's/(\|\||&&|;|\|)/\n/g')
+
 # ── curl ──────────────────────────────────────────────────────────────────────
 if echo "$cmd" | grep -qE '(^|[;&|]\s*)curl\b'; then
     # Unambiguous write flags — check the full command string so that piped curl
@@ -362,7 +456,10 @@ fi
 # ── git push (all forms: direct, chained with &&/;, etc.) ────────────────────
 # Uses \b word boundary (not ^ anchor) so it also catches "cd /path && git push".
 # git -C ... push is handled above; this catches everything else.
-if echo "$cmd" | grep -qE '\bgit\s+push\b'; then
+# Matched on data_free_cmd: a commit message or PR body that mentions
+# `git push` is data, not a push. A push inside bash -c, eval or a heredoc
+# fed to a shell is still seen.
+if data_free_cmd | grep -qE '\bgit\s+push\b'; then
     if git_push_authorized; then
         : # authorized by user message — allow
     else
