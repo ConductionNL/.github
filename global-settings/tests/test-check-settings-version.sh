@@ -14,8 +14,9 @@
 #   - a matching install is reported up to date, with every file verified
 #   - a missing or changed hook, or a changed settings.json, is reported
 #     FILES OUT OF SYNC with repair blocks for those files only
-#   - a settings.json that only gained `model` (the VSCode picker's write under
-#     relock option B) and a trailing-newline difference are not drift
+#   - a settings.json that only gained `model`, `modelSettings` or another
+#     model-choice key (the picker's and /effort's writes under relock
+#     option B) and a trailing-newline difference are not drift
 #
 # Usage:
 #   ./tests/test-check-settings-version.sh            # run all
@@ -209,6 +210,25 @@ jq '.model = "opus"' "$CANON_GS/settings.json" > "$CLAUDE_DIR/settings.json"   #
 run_hook
 lacks 'OUT OF SYNC'; check "model: settings.json with only model added is not drift" $?
 has 'Settings are up to date'; check "model: reported up to date" $?
+
+# ── 7b. the effort and other model-choice keys are not drift either ─────────
+install_all
+jq '.model = "claude-opus-5-5[1m]"
+    | .modelSettings = {"claude-opus-5-5": {"effortLevel": "low"}}
+    | .effortLevel = "high" | .fastMode = true
+    | .advisorModel = "opus" | .switchModelsOnFlag = false' \
+    "$CANON_GS/settings.json" > "$CLAUDE_DIR/settings.json"
+run_hook
+lacks 'OUT OF SYNC'; check "effort: model-choice keys are not drift" $?
+has 'Settings are up to date'; check "effort: reported up to date" $?
+
+# ── 7c. a model-choice key next to a policy change still reports the policy ─
+install_all
+jq '.modelSettings = {"claude-opus-5-5": {"effortLevel": "low"}}
+    | .permissions.allow += ["Bash(rm -rf /)"]' \
+    "$CANON_GS/settings.json" > "$CLAUDE_DIR/settings.json"
+run_hook
+has 'changed : settings.json (top-level keys: permissions)'; check "effort: only the policy key is named" $?
 
 # ── 8. settings.json with a permission change is drift, and names the key ────
 install_all
