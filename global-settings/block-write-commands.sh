@@ -74,7 +74,8 @@ PUSH_DENY_MSG="Blocked: git push requires explicit authorization. Include one of
 #     command substitution. A heredoc fed to bash/sh/python/ssh/eval/… is
 #     code and stays, as does `cat <<EOF | bash`.
 #   - the quoted value of -m/--message/-b/--body/-t/--title/--notes on a
-#     git commit/tag/notes or gh pr/issue/release line. Single-quoted always
+#     git commit/tag/notes (global options such as -C <path> allowed in
+#     between) or gh pr/issue/release line. Single-quoted always
 #     (never expands); double-quoted only without $( or a backtick.
 # The config guard above deliberately keeps scanning the full $cmd: there a
 # false deny is cheaper than a gap (see README → Security model).
@@ -83,6 +84,10 @@ data_free_cmd() {
         BEGIN {
             split("cat tee git gh jq wc sort head tail grep less more", s, " ")
             for (i in s) sink[s[i]] = 1
+            # `git [global options] commit|tag|notes` or `gh pr|issue|release`
+            val = "([^ \t;&|\"\047]|\"[^\"]*\"|\047[^\047]*\047)+"
+            gopts = "([ \t]+(-[Cc]|--(git-dir|work-tree|namespace|config-env|super-prefix|attr-source))[ \t]+" val "|[ \t]+--[a-z][a-z-]*(=" val ")?|[ \t]+-[pP])*"
+            msgline = "(^|[;&| \t(])(git" gopts "[ \t]+(commit|tag|notes)|gh[ \t]+(pr|issue|release))([ \t]|$)"
         }
         hd != "" {
             t = $0; sub(/^\t+/, "", t)
@@ -103,7 +108,7 @@ data_free_cmd() {
                 hd = word
                 strip = (w[1] in sink) && line !~ /\|/ && line !~ /\$\(/ && line !~ /`/
             }
-            if (line ~ /(^|[;&| \t(])(git[ \t]+(commit|tag|notes)|gh[ \t]+(pr|issue|release))([ \t]|$)/) {
+            if (line ~ msgline) {
                 gsub(/(-m|--message|-b|--body|-t|--title|--notes)(=|[ \t]+)\047[^\047]*\047/, "-m DATA", line)
                 while (match(line, /(-m|--message|-b|--body|-t|--title|--notes)(=|[ \t]+)"[^"]*"/)) {
                     v = substr(line, RSTART, RLENGTH)
@@ -328,6 +333,28 @@ while IFS= read -r _seg; do
     fi
 done < <(data_free_cmd | sed -E 's/(\|\||&&|;|\|)/\n/g')
 
+# ── git push (HARD BLOCK without the auth phrase) ────────────────────────────
+# Every form: direct, chained (`cd x && git push`, `git -C r commit … && git
+# push`), and with git's global options before the subcommand (`git -C <path>
+# push`, `git -c k=v push`, `git --no-pager push`, `git --work-tree <path>
+# push`). Placed before every `ask` guard: an ask exits the hook, so a push
+# chained after, say, `git -C r commit` or `gh pr create` would otherwise run
+# on one approval of that prompt, without the phrase.
+# Matched on data_free_cmd: a commit message or PR body that mentions
+# `git push` is data, not a push. A push inside bash -c, eval or a heredoc
+# fed to a shell is still seen.
+_GIT_VAL='([^[:space:];&|"'\'']|"[^"]*"|'\''[^'\'']*'\'')+'
+# git's own options that take a separate value; any other --option is a flag
+# or --option=value.
+_GIT_GOPTS='([[:space:]]+(-[Cc]|--(git-dir|work-tree|namespace|config-env|super-prefix|attr-source))[[:space:]]+'"$_GIT_VAL"'|[[:space:]]+--[a-z][a-z-]*(='"$_GIT_VAL"')?|[[:space:]]+-[pP])*'
+if data_free_cmd | grep -qE '\bgit'"$_GIT_GOPTS"'[[:space:]]+push\b'; then
+    if git_push_authorized; then
+        : # authorized by user message — allow
+    else
+        hard_deny "$PUSH_DENY_MSG"
+    fi
+fi
+
 # ── curl ──────────────────────────────────────────────────────────────────────
 if echo "$cmd" | grep -qE '(^|[;&|]\s*)curl\b'; then
     # Unambiguous write flags — check the full command string so that piped curl
@@ -428,11 +455,7 @@ if echo "$cmd" | grep -qE '(^|[;&|]\s*)git\b' && echo "$cmd" | grep -qE '\s-C\s'
             fi
             ;;
         push)
-            if git_push_authorized; then
-                : # authorized by user message — allow
-            else
-                hard_deny "$PUSH_DENY_MSG"
-            fi
+            : # reached only when authorized — the git push guard above denies otherwise
             ;;
         branch)
             if echo "$cmd" | grep -qE '\bbranch\b.*-[a-zA-Z]*[dDmMcC]'; then
@@ -451,20 +474,6 @@ if echo "$cmd" | grep -qE '(^|[;&|]\s*)git\b' && echo "$cmd" | grep -qE '\s-C\s'
             ask "git -C '$subcmd' is not in the read-only allowlist — approve to proceed."
             ;;
     esac
-fi
-
-# ── git push (all forms: direct, chained with &&/;, etc.) ────────────────────
-# Uses \b word boundary (not ^ anchor) so it also catches "cd /path && git push".
-# git -C ... push is handled above; this catches everything else.
-# Matched on data_free_cmd: a commit message or PR body that mentions
-# `git push` is data, not a push. A push inside bash -c, eval or a heredoc
-# fed to a shell is still seen.
-if data_free_cmd | grep -qE '\bgit\s+push\b'; then
-    if git_push_authorized; then
-        : # authorized by user message — allow
-    else
-        hard_deny "$PUSH_DENY_MSG"
-    fi
 fi
 
 # ── git branch (prompt for write flags, bare — without -C) ───────────────────

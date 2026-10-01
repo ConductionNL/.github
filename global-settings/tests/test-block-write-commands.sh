@@ -540,6 +540,38 @@ add_deny  "push: backticks in -m"               "git commit -m \"\`git push\`\""
 add_deny  "push: bash -c"                       "bash -c 'git push'"
 add_deny  "push: after the heredoc ends"        $'git commit -F - <<\'EOF\'\nmsg\nEOF\ngit push origin main'
 
+# ── v2.7.2 git push: every form, checked before any ask ───────────────────────
+# An ask exits the hook. Before v2.7.2 the push check came after the git -C,
+# gh, curl and docker asks, so one approval of that prompt also ran a chained
+# push without the phrase. git's global options before `push` were not
+# recognised at all. No auth phrase in these fixtures → every push is denied.
+add_deny  "push v2.7.2: after git -C commit"      "git -C repo commit -m x && git push"
+add_deny  "push v2.7.2: after git -C add, -C push" "git -C repo add . && git -C repo push origin main"
+add_deny  "push v2.7.2: git -C push alone"        "git -C /home/u/repo push"
+add_deny  "push v2.7.2: after gh pr create"       "gh pr create --title t --body b && git push"
+add_deny  "push v2.7.2: after gh api POST"        "gh api -X POST repos/o/r/issues -f title=t; git push"
+add_deny  "push v2.7.2: after curl POST"          "curl -X POST https://example.test && git push"
+add_deny  "push v2.7.2: after docker compose up"  "docker compose up -d; git push"
+add_deny  "push v2.7.2: after git branch -D"      "git branch -D old && git push origin --delete old"
+add_deny  "push v2.7.2: after rm"                 "rm build.log && git push"
+add_deny  "push v2.7.2: after npm install"        "npm install && git push"
+add_deny  "push v2.7.2: -c key=value"             "git -c user.name=x push"
+add_deny  "push v2.7.2: -c quoted value"          "git -c user.name=\"A B\" push origin main"
+add_deny  "push v2.7.2: -c single-quoted value"   "git -c 'core.sshCommand=ssh -i k' push"
+add_deny  "push v2.7.2: --no-pager"               "git --no-pager push"
+add_deny  "push v2.7.2: -P"                       "git -P push --force"
+add_deny  "push v2.7.2: --git-dir=path"           "git --git-dir=/r/.git push"
+add_deny  "push v2.7.2: --git-dir path"           "git --git-dir /r/.git push"
+add_deny  "push v2.7.2: --work-tree path"         "git --work-tree /x push"
+add_deny  "push v2.7.2: -C quoted path"           "git -C \"/a b\" push"
+add_deny  "push v2.7.2: -C and -c stacked"        "git -C repo -c a=b --no-pager push"
+add_deny  "push v2.7.2: message stripped, push kept" "git -C r --no-pager commit -m \"a git push b\" && git push"
+add_ask   "push v2.7.2: -C commit, message mentions push" "git -C repo commit -m \"explain git push\""
+add_ask   "push v2.7.2: -C tag, annotation mentions push" "git -C repo tag -a v1 -m 'then git push --tags'"
+add_allow "push v2.7.2: dir named push"           "git -C push status"
+add_allow "push v2.7.2: --no-pager log --author push" "git --no-pager log --author push"
+add_allow "push v2.7.2: -C log --grep push"       "git -C repo log --grep push"
+
 # ── runner ────────────────────────────────────────────────────────────────────
 pass=0; fail=0; fail_details=()
 for t in "${TESTS_ALLOW[@]}"; do
@@ -794,7 +826,47 @@ for t in "${TESTS_PUSH_DENY[@]}"; do
         [[ $VERBOSE -eq 1 ]] && echo "FAIL: push deny → $label"
     fi
 done
-push_total=$(( ${#TESTS_PUSH_ALLOW[@]} + ${#TESTS_PUSH_DENY[@]} ))
+# v2.7.2: with the phrase, a push chained after a command that prompts no
+# longer short-circuits that prompt — the hook still asks for the other part.
+# Without the phrase, the same command is denied (not asked).
+declare -a TESTS_PUSH_AUTH_ASK=(
+    "git -C repo commit -m x && git push"
+    "gh pr create --title t --body b && git push"
+    "git -C repo add . && git -C repo push origin main"
+)
+run_cmd_with_transcript() { # args: cmd transcript → prints hook output, returns hook exit code
+    jq -c -n --arg cmd "$1" --arg tp "$2" '{tool_input:{command:$cmd}, transcript_path:$tp}' \
+        | bash "$HOOK" 2>/dev/null
+}
+push_extra=0
+for c in "${TESTS_PUSH_AUTH_ASK[@]}"; do
+    out=$(run_cmd_with_transcript "$c" "$PUSH_TMP/b.jsonl"); ec=$?
+    if [[ $ec -eq 0 ]] && grep -q '"permissionDecision":"ask"' <<<"$out"; then
+        push_pass=$((push_pass+1)); [[ $VERBOSE -eq 1 ]] && echo "PASS: push auth+ask → $c"
+    else
+        push_fail=$((push_fail+1)); fail_details+=("[PUSH AUTH ASK expected, got ec=$ec] $c")
+        [[ $VERBOSE -eq 1 ]] && echo "FAIL: push auth+ask → $c"
+    fi
+    run_cmd_with_transcript "$c" "$PUSH_TMP/f.jsonl" >/dev/null; ec=$?
+    if [[ $ec -eq 2 ]]; then
+        push_pass=$((push_pass+1)); [[ $VERBOSE -eq 1 ]] && echo "PASS: push no-auth deny → $c"
+    else
+        push_fail=$((push_fail+1)); fail_details+=("[PUSH DENY expected, got ec=$ec] no phrase: $c")
+        [[ $VERBOSE -eq 1 ]] && echo "FAIL: push no-auth deny → $c"
+    fi
+    push_extra=$((push_extra+2))
+done
+for c in "git -c user.name=x push" "git --no-pager push origin main"; do
+    run_cmd_with_transcript "$c" "$PUSH_TMP/b.jsonl" >/dev/null; ec=$?
+    if [[ $ec -ne 2 ]]; then
+        push_pass=$((push_pass+1)); [[ $VERBOSE -eq 1 ]] && echo "PASS: push auth allow → $c"
+    else
+        push_fail=$((push_fail+1)); fail_details+=("[PUSH ALLOW expected, DENIED] phrase given: $c")
+        [[ $VERBOSE -eq 1 ]] && echo "FAIL: push auth allow → $c"
+    fi
+    push_extra=$((push_extra+1))
+done
+push_total=$(( ${#TESTS_PUSH_ALLOW[@]} + ${#TESTS_PUSH_DENY[@]} + push_extra ))
 
 total=$((allow_total + deny_total + ask_total + push_total))
 total_pass=$((allow_pass + deny_pass + ask_pass + push_pass))
