@@ -311,16 +311,29 @@ norm_sha() {
     fi
 }
 
+# Top-level keys Claude Code itself writes into ~/.claude/settings.json when the
+# user picks a model or an effort level, which is exactly what relock option (B)
+# allows. They are preferences, not policy (README → Updating, step 4):
+#   model               the model picker and /model
+#   modelSettings       /effort and the effort picker, saved per model as
+#                       modelSettings.<model>.effortLevel
+#   effortLevel         the same choice when it cannot be keyed by model
+#   fastMode            /fast
+#   advisorModel        /advisor
+#   switchModelsOnFlag  the VSCode toggle that switches model when a safeguard
+#                       flags a message
+# Everything else in that file is policy.
+CLIENT_MODEL_KEYS='["model","modelSettings","effortLevel","fastMode","advisorModel","switchModelsOnFlag"]'
+
 # settings_diff <installed> <canonical> — empty when both settings.json files are
 # the same document, otherwise the top-level keys that differ. Compared as parsed
-# JSON (formatting is not drift) and without `model`: the VSCode extension
-# writes {"model": …} into ~/.claude/settings.json on every model switch, which
-# is exactly what relock option (B) allows, and a model choice is a preference,
-# not policy (README → Updating, step 4). Everything else in that file is.
+# JSON (formatting is not drift) and without CLIENT_MODEL_KEYS.
 settings_diff() {
     local a b keys
-    a=$(jq -S 'del(.model)' "$1" 2>/dev/null) || { echo "not valid JSON"; return; }
-    b=$(jq -S 'del(.model)' "$2" 2>/dev/null) || { echo "canonical copy not valid JSON"; return; }
+    a=$(jq -S --argjson k "$CLIENT_MODEL_KEYS" 'delpaths($k | map([.]))' "$1" 2>/dev/null) \
+        || { echo "not valid JSON"; return; }
+    b=$(jq -S --argjson k "$CLIENT_MODEL_KEYS" 'delpaths($k | map([.]))' "$2" 2>/dev/null) \
+        || { echo "canonical copy not valid JSON"; return; }
     [ "$a" = "$b" ] && return
     keys=$(jq -n -r --argjson a "$a" --argjson b "$b" \
         '[($a | keys[]), ($b | keys[])] | unique | map(select($a[.] != $b[.])) | join(", ")' 2>/dev/null)
