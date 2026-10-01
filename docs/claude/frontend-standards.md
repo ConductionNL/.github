@@ -34,10 +34,10 @@ This replaces the older hand-built pattern (`openRegisters` / `isAdmin` in the `
 
 ### Backend: the route table must load without OpenRegister
 
-The empty state only renders if the app's own routes still load when OpenRegister is absent. Apps build their route table with `\OCA\OpenRegister\AppHost\Routes::standard($extra)` (see [Routing History Mode](#routing-history-mode)). Two forms are in use:
+The empty state only renders if the app's own routes still load when OpenRegister is absent. Apps build their route table with `\OCA\OpenRegister\AppHost\Routes::standard($extra)` (see [Routing History Mode](#routing-history-mode)). Two forms are in use, and only the guarded one is safe:
 
-- **Guarded** (`decidesk`, `docudesk`, `larpingapp`, `procest`): `class_exists('OCA\OpenRegister\AppHost\Routes')` first, with a local copy of the canonical routes plus the SPA catch-all as the fallback. Reference: `docudesk/appinfo/routes.php`.
-- **Direct** (`return \OCA\OpenRegister\AppHost\Routes::standard([...])`): relies on `Routes::standard()` being a pure array builder that is safe to require when OpenRegister is disabled.
+- **Guarded** (`decidesk`, `docudesk`, `larpingapp`, `procest`), **required**: `class_exists('OCA\OpenRegister\AppHost\Routes')` first, with a local copy of the canonical routes plus the SPA catch-all as the fallback. Reference: `docudesk/appinfo/routes.php`.
+- **Direct** (`return \OCA\OpenRegister\AppHost\Routes::standard([...])`, on `development` in `keepiq`, `openbuild`, `planix`, `shillinq`): **not safe.** Nextcloud registers an app's autoloader only while that app is enabled, so with OpenRegister disabled or absent this line throws `Class "OCA\OpenRegister\AppHost\Routes" not found` and the app's routes never load. Convert these to the guarded form.
 
 ## CSS Scoping
 
@@ -69,7 +69,7 @@ All `<style>` blocks in `.vue` files **must** use the `scoped` attribute. Global
 
 ### Two sanctioned ways to get the catch-all
 
-1. **`\OCA\OpenRegister\AppHost\Routes::standard($extra)`** — the shared route-table builder. Call it from `appinfo/routes.php` and it appends a `/{path}` catch-all (excluding `/api/*`) after whatever app-specific routes you pass as `$extra`. This is the preferred mechanism for any app that depends on OpenRegister. Reference: `docudesk/appinfo/routes.php`.
+1. **`\OCA\OpenRegister\AppHost\Routes::standard($extra)`** — the shared route-table builder. Call it from `appinfo/routes.php`, behind the `class_exists` guard from [Backend: the route table must load without OpenRegister](#backend-the-route-table-must-load-without-openregister), and it appends a `/{path}` catch-all (excluding `/api/*`) after whatever app-specific routes you pass as `$extra`. This is the preferred mechanism for any app that depends on OpenRegister. Reference: `docudesk/appinfo/routes.php`.
 2. **A hand-rolled catch-all route** in `appinfo/routes.php` that matches `/{path}` (or equivalent) and excludes `/api/*`, dispatching to a controller action that just renders the SPA shell. Reference: `openconnector/appinfo/routes.php`'s `ui#dashboard` route (`'requirements' => ['path' => '(?!api(/|$)).*']`).
 
 Either way, `main.js`'s `createWebHistory(...)` call needs no other change — the catch-all is purely a backend routing concern.
