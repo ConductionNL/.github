@@ -250,7 +250,18 @@ The file blocks in the notice are not a hand-maintained list. `check-settings-ve
 When the installed version already matches the online one, the hook also compares every managed file with its canonical copy:
 
 - hook scripts by `sha256`, ignoring trailing newlines (the `printf '%s\n'` install writes exactly one, the `git show` install copies the bytes verbatim; neither is drift);
-- `settings.json` as parsed JSON, without the `model` key. The VSCode model picker writes `{"model": …}` into it under relock option (B), and a model choice is a preference, not policy. Every other difference in that file counts, and the notice names the top-level keys that differ.
+- `settings.json` as parsed JSON, without the top-level keys Claude Code itself writes there when you pick a model or an effort level (v2.7.1; v2.7.0 skipped only `model`). Under relock option (B) these writes land in the file, and a model choice is a preference, not policy:
+
+  | Key | Written by |
+  | --- | --- |
+  | `model` | the VSCode model picker and `/model` |
+  | `modelSettings` | `/effort` and the effort picker, saved per model as `modelSettings.<model>.effortLevel` |
+  | `effortLevel` | the same choice when it cannot be keyed by model |
+  | `fastMode` | `/fast` |
+  | `advisorModel` | `/advisor` |
+  | `switchModelsOnFlag` | the VSCode toggle that switches model when a safeguard flags a message |
+
+  Every other difference in that file counts, and the notice names the top-level keys that differ.
 
 A missing or changed file turns the session-start message into **FILES OUT OF SYNC**. It names the files, the phrase for step 3 is **"repair my global settings"**, and the unlock, contract and relock steps are the same as for an update. Only the affected files are rewritten; `VERSION` is left alone. On the GitHub path the check costs two extra fetches per session (`settings.json`, then every registered hook in one `curl` call); on the git-fetch path it costs none. A canonical file that could not be fetched is reported as not verified, never as fine.
 
