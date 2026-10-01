@@ -1,64 +1,43 @@
 # Frontend Standards
 
-Standards that apply to all Conduction Nextcloud apps. These are enforced via ESLint rules and code review.
+Standards that apply to all Conduction Nextcloud apps. Each section says how it is checked: by a Hydra gate, by ESLint, or only by code review.
 
 ## OpenRegister Dependency Check
 
 All apps that depend on OpenRegister (everything except `nldesign` and `launchpad`) must show an empty state when OpenRegister is not installed, instead of a broken UI.
 
-### Backend (SettingsController)
+### `CnAppRoot` does it
 
-The settings endpoint must return `openRegisters` and `isAdmin` fields:
+The app shell is `CnAppRoot` from `@conduction/nextcloud-vue`. Its `requiresApps` prop defaults to `['openregister']`. On mount it checks each listed app once (`OC.appswebroots`, which lists every app enabled for the current user, first; `getCapabilities()` from `@nextcloud/capabilities` as the fallback) and, when any listed app is missing, renders an `NcEmptyContent` instead of the app:
 
-```php
-use OCP\App\IAppManager;
-use OCP\IGroupManager;
-use OCP\IUserSession;
+- **Admins** get a button that installs/enables the missing app in place: first via the NC34+ OCS endpoint `apps/appstore/api/v1/apps/enable`, then via the classic `settings/apps/enable` on NC33 and earlier. If that fails, the app-store link remains as a fallback.
+- **Non-admins** get "ask your administrator" copy.
 
-// In constructor: inject IAppManager, IGroupManager, IUserSession
+So the default needs nothing from the app — mount `CnAppRoot` without a `requiresApps` prop:
 
-// In the index() / settings GET endpoint:
-$user    = $this->userSession->getUser();
-$isAdmin = $user !== null && $this->groupManager->isAdmin($user->getUID());
-
-return new JSONResponse([
-    'openRegisters' => in_array(needle: 'openregister', haystack: $this->appManager->getInstalledApps()),
-    'isAdmin'       => $isAdmin,
-    'config'        => $this->settingsService->getSettings(),
-]);
+```vue
+<CnAppRoot
+	:manifest="manifest"
+	:registry="registry"
+	appId="myapp"
+	:translate="translateForApp" />
 ```
 
-The controller should also have the standardized `getObjectService()` and `getConfigurationService()` methods for lazy-loading OpenRegister services (see softwarecatalog/opencatalogi for reference).
+Rules:
 
-### Frontend Store (Pinia)
+- **Do not pass `:requiresApps="[]"` in an app that needs OpenRegister.** The empty array switches the guard off, and nothing else in the app replaces it. The opt-out is for apps that genuinely run without OpenRegister (OpenRegister itself, the styleguide, utility apps).
+- **An app that needs a second app lists both**: `:requiresApps="['openregister', 'openconnector']"`.
+- **A custom missing-app screen** goes in the `#or-missing` slot (receives `{ missingApps }`), not in a hand-rolled three-state `App.vue`.
+- A lookup that errors counts as missing: `useAppStatus` logs a warning and reports the app as not installed, so the empty state shows instead of a half-working app.
 
-The settings store must expose:
+This replaces the older hand-built pattern (`openRegisters` / `isAdmin` in the `SettingsController` response, a Pinia `hasOpenRegisters` getter, a three-state `App.vue` with an `open-register-missing` class). Do not add that pattern to new code; leftovers of it in existing apps are dead code once the app mounts `CnAppRoot` with the guard on.
 
-- `openRegisters: false` in state
-- `isAdmin: false` in state
-- `hasOpenRegisters` getter
-- `getIsAdmin` getter
-- Read both from the API response in `fetchSettings()`
+### Backend: the route table must load without OpenRegister
 
-### Frontend App.vue
+The empty state only renders if the app's own routes still load when OpenRegister is absent. Apps build their route table with `\OCA\OpenRegister\AppHost\Routes::standard($extra)` (see [Routing History Mode](#routing-history-mode)). Two forms are in use, and only the guarded one is safe:
 
-Three-state conditional in the template:
-
-1. **OpenRegister missing** (`storesReady && !hasOpenRegisters`): `NcEmptyContent` inside `NcAppContent` with class `open-register-missing` — no sidebar, no navigation
-2. **Normal** (`storesReady && hasOpenRegisters`): full app with menu, content, sidebar
-3. **Loading** (else): centered `NcLoadingIcon`
-
-The empty state uses:
-
-- `NcEmptyContent` with `:name` and `:description` props
-- `#icon` slot with the app's own icon (`imagePath('<appname>', 'app-dark.svg')`)
-- `#action` slot with `NcButton` linking to app store (admin) or text hint (non-admin)
-- Admin detection comes from the backend (`settingsStore.getIsAdmin`), NOT from `OC.isAdmin` (which doesn't exist)
-- App store URL: `generateUrl('/settings/apps/integration/openregister')`
-
-### Centering
-
-The `NcAppContent` wrapper needs `.open-register-missing` class with flex centering. This goes in `src/assets/app.css` (not in a Vue `<style>` block).
+- **Guarded** (`decidesk`, `docudesk`, `larpingapp`, `procest`), **required**: `class_exists('OCA\OpenRegister\AppHost\Routes')` first, with a local copy of the canonical routes plus the SPA catch-all as the fallback. Reference: `docudesk/appinfo/routes.php`.
+- **Direct** (`return \OCA\OpenRegister\AppHost\Routes::standard([...])`, on `development` in `keepiq`, `openbuild`, `planix`, `shillinq`): **not safe.** Nextcloud registers an app's autoloader only while that app is enabled, so with OpenRegister disabled or absent this line throws `Class "OCA\OpenRegister\AppHost\Routes" not found` and the app's routes never load. Convert these to the guarded form.
 
 ## CSS Scoping
 
@@ -66,9 +45,9 @@ The `NcAppContent` wrapper needs `.open-register-missing` class with flex center
 
 All `<style>` blocks in `.vue` files **must** use the `scoped` attribute. Global styles go in `src/assets/app.css` and are imported in `main.js`.
 
-**Why**: Unscoped styles leak into other components and cause hard-to-debug styling issues. The `scoped` attribute ensures styles only affect the component they belong to.
+**Why**: Unscoped styles leak into other components and cause hard-to-debug styling issues. The `scoped` attribute ensures styles only affect the component they belong to. To reach into a child or library component from a scoped block, use `:deep(...)`.
 
-**Enforced by**: ESLint rule `vue/enforce-style-attribute`:
+**Checked by**: code review only. The fleet's ESLint config (`@nextcloud/eslint-config` 9, see `eslint.config.mjs`) does not enable `vue/enforce-style-attribute`, and no Hydra gate checks for unscoped blocks. An app that wants it machine-enforced adds this to the app-specific block of its `eslint.config.mjs`:
 
 ```js
 'vue/enforce-style-attribute': ['error', { allow: ['scoped'] }]
@@ -76,28 +55,32 @@ All `<style>` blocks in `.vue` files **must** use the `scoped` attribute. Global
 
 ### Where global styles go
 
-- `src/assets/app.css` — app-wide overrides (e.g., library component fixes, empty state centering)
+- `src/assets/app.css` — app-wide overrides that must be unscoped (e.g., library component fixes, helpers that must reach `router-view` children)
 - `css/` directory — styles loaded by Nextcloud outside of webpack (e.g., dashboard widget icons)
 - Import in `main.js`: `import './assets/app.css'`
 
 ## Routing History Mode
 
-**Path-based Vue Router history (`createWebHistory`) is the fleet convention.** Hash-based (`createWebHashHistory`, `#/…` URLs) is the thing being migrated away from, not a valid alternative for new apps.
+**Path-based Vue Router history (`createWebHistory`) is the fleet convention.** Hash-based (`createWebHashHistory`, `#/…` URLs) is not a valid choice for new apps.
 
 **Why path, not hash**: hash routing needs zero server-side work (everything after `#` never reaches the server) at the cost of permanently ugly URLs and broken `#`-based deep links whenever an app also wants to use the fragment for something else (e.g. anchors). Path routing gives real, shareable, refresh-safe URLs, but the trade is real: it needs a server-side catch-all, or a direct hit on a deep client route (e.g. a bookmark, a page refresh) 404s.
 
-**A path-history app with no working catch-all is not ahead of the convention — it is broken**, and worse than staying on hash. Do not flip `createWebHashHistory` → `createWebHistory` in `main.js` without first confirming (and, ideally, live-testing a hard reload of a deep route against) one of the two sanctioned catch-all mechanisms below.
+**A path-history app with no working catch-all is broken.** Never ship `createWebHistory(...)` in `main.js` without one of the two sanctioned catch-all mechanisms below, and live-test a hard reload of a deep route.
 
 ### Two sanctioned ways to get the catch-all
 
-1. **`\OCA\OpenRegister\AppHost\Routes::standard($extra)`** — the shared route-table builder. Call it from `appinfo/routes.php` and it appends a `/{path}` catch-all (excluding `/api/*`) to whatever app-specific routes you pass as `$extra`. This is the preferred mechanism for any app that already depends on OpenRegister. Reference: `docudesk/appinfo/routes.php`.
-2. **A hand-rolled catch-all route** in `appinfo/routes.php` that matches `/{path}` (or equivalent) and excludes `/api/*`, dispatching to a controller action that just renders the SPA shell (e.g. `dashboard#catchAll`, `ui#dashboard`). Reference: `openconnector/appinfo/routes.php`'s `ui#dashboard` route — pre-existing from an earlier, unfinished migration, verified working and now wired up to the frontend.
+1. **`\OCA\OpenRegister\AppHost\Routes::standard($extra)`** — the shared route-table builder. Call it from `appinfo/routes.php`, behind the `class_exists` guard from [Backend: the route table must load without OpenRegister](#backend-the-route-table-must-load-without-openregister), and it appends a `/{path}` catch-all (excluding `/api/*`) after whatever app-specific routes you pass as `$extra`. This is the preferred mechanism for any app that depends on OpenRegister. Reference: `docudesk/appinfo/routes.php`.
+2. **A hand-rolled catch-all route** in `appinfo/routes.php` that matches `/{path}` (or equivalent) and excludes `/api/*`, dispatching to a controller action that just renders the SPA shell. Reference: `openconnector/appinfo/routes.php`'s `ui#dashboard` route (`'requirements' => ['path' => '(?!api(/|$)).*']`).
 
 Either way, `main.js`'s `createWebHistory(...)` call needs no other change — the catch-all is purely a backend routing concern.
 
+### Links from the hash era
+
+Links built under hash routing (`/apps/<app>/#/…`) may still be in the wild — in emails, bookmarks, links handed to people outside the app. Under path routing the fragment is never read, so those links land on the app root. Where old links matter, rewrite them in place before the router is created (`history.replaceState`, no reload). Reference: `keepiq/src/bootstrap/hash-route-handoff.js`, which also shows how to keep a secret that lived in the fragment out of the query string.
+
 ### Gate: `lint-router-history-mode.sh`
 
-`.github/hydra-gates/scripts/lint-router-history-mode.sh` checks both halves of this convention per app: router mode in `src/main.js`, and (for apps already on path history) catch-all presence in `appinfo/routes.php`. A missing catch-all on a path-history app is an unconditional failure regardless of gate mode — it is a real bug, not an in-progress migration state.
+`.github/hydra-gates/scripts/lint-router-history-mode.sh` checks both halves of this convention per app: router mode in `src/main.js`, and (for apps on path history) catch-all presence in `appinfo/routes.php`. A missing catch-all on a path-history app is an unconditional failure regardless of gate mode.
 
 ```bash
 # Single app, from that app's repo root:
@@ -107,52 +90,22 @@ bash ../.github/hydra-gates/scripts/lint-router-history-mode.sh
 bash .github/hydra-gates/scripts/lint-router-history-mode.sh --fleet
 ```
 
-As of 2026-08-15 (19 apps checked, `--fleet`): `openconnector` is on path history with a verified catch-all; `decidesk`, `docudesk`, `hermiq`, `hrmq`, `openbuild`, `portaliq`, `procest`, `scholiq`, `shillinq` were already on path history; `doriath`, `larpingapp`, `opencatalogi`, `openregister`, `pipelinq`, `softwarecatalog`, `zaakafhandelapp` remain on hash history, not yet converted. The gate runs in `WARN` mode (`HYDRA_ROUTER_HISTORY_GATE_MODE=WARN`, the default) — it reports hash-history apps without failing CI — until every remaining app has a verified catch-all and is converted; flip to `BLOCK` only after that.
+As of 2026-09-30 (`--fleet` against each app's `development` branch, 21 apps with a `src/main.js`): every app is on path history with a catch-all present — 0 still on hash, 0 broken. A hash-history app is reported as a warning only while the gate runs in `WARN` mode (`HYDRA_ROUTER_HISTORY_GATE_MODE=WARN`, the default).
 
 ## Admin Detection
 
-Never use `OC.isAdmin` — it doesn't exist in Nextcloud's frontend JavaScript API. Instead:
+Never use the `OC.isAdmin` / `OC.isUserAdmin()` globals. In the frontend, read `getCurrentUser()?.isAdmin` from `@nextcloud/auth` — this is what `CnAppRoot` does, and it passes the result down (e.g. to `CnAppNav` to show the Admin-settings link).
 
-- Pass `isAdmin` from the backend via the settings endpoint using `IGroupManager::isAdmin()`
-- Store it in the Pinia settings store
-- Access via computed property in components
+The frontend flag is **presentation only**. The access boundary is always the backend: `IGroupManager::isAdmin()` in the controller, or Nextcloud's settings framework, which refuses admin pages server-side for non-admins.
 
 ## Reference Implementation
 
-Pipelinq is the reference implementation for all these patterns:
+- **App shell**: `docudesk/src/App.vue` — `CnAppRoot` with the default OpenRegister guard.
+- **Route table**: `docudesk/appinfo/routes.php` — guarded `Routes::standard($extra)` with a local fallback.
+- **ESLint**: `pipelinq/eslint.config.mjs` — the fleet's canonical shape (eslint 10 + `@nextcloud/eslint-config` 9). Copy it verbatim; only the last two blocks (app-specific globals and file-scoped exemptions) differ per app.
+- **Global CSS**: `pipelinq/src/assets/app.css`, imported in `pipelinq/src/main.js`.
 
-- Backend: `pipelinq/lib/Controller/SettingsController.php`
-- Store: `pipelinq/src/store/modules/settings.js`
-- App.vue: `pipelinq/src/App.vue`
-- CSS: `pipelinq/src/assets/app.css`
-- ESLint: `pipelinq/eslint.config.js`
-
-## Gotchas that trip mechanical gates
-
-A few surface patterns have empirically caused review round-trips because they interact badly with either the Hydra gate regexes or the NC framework. Avoid them.
-
-### Avoid arrow functions inside Vue attribute values
-
-Vue templates like `<NcSelect :reduce="(o) => o">` contain a `>` character *inside* an attribute value. Some downstream tooling — including `hydra-gate-nc-input-labels` on Hydra `main` — assumes attribute values do not contain `>` and truncates the tag prematurely. A tag whose `:input-label` prop lives on a line AFTER `:reduce` will falsely trip the gate.
-
-Two workable patterns:
-
-```vue
-<!-- Preferred: order matters — labels first, complex bindings last -->
-<NcSelect
-    :options="opts"
-    :input-label="t('app', 'Level')"
-    :reduce="(o) => o"
-    :clearable="false" />
-
-<!-- Alternative: named function, no arrow -->
-<NcSelect
-    :options="opts"
-    :reduce="function (o) { return o }"
-    :input-label="t('app', 'Level')" />
-```
-
-Reference case: opencatalogi PR #79 round-3.
+## Gotchas that trip review or the framework
 
 ### Cascade error handling — one key, not four
 
@@ -168,10 +121,10 @@ If the backend is drifting, fix the backend to align with ADR-050 rather than la
 
 ### CSRF on raw `fetch()` calls
 
-Raw `fetch()` to a Nextcloud AppFramework route (`/apps/{appid}/api/...`) does NOT auto-send `requesttoken`. Options, in order of preference:
+Raw `fetch()` to a Nextcloud AppFramework route (`/apps/{appid}/api/...`) does NOT auto-send `requesttoken`. Nextcloud core does wrap `window.fetch`, but for Nextcloud URLs it only adds `X-Requested-With` — not the token. Options, in order of preference:
 
 1. Use `@nextcloud/axios` (auto-injects `requesttoken` via its interceptor).
 2. Add `OCS-APIRequest: true` to headers — satisfies NC's CSRF bypass (`Request::passesCSRFCheck()`).
 3. Manually set `requesttoken` via `getRequestToken()` from `@nextcloud/auth`.
 
-Reference case: opencatalogi PR #79 F8 — delete-modal fetch had none of these, and the moment the backend dropped `@NoCSRFRequired` the call would have started 412ing.
+A route marked `#[NoCSRFRequired]` works without any of these, which is why a missing token often goes unnoticed until someone removes that attribute. Reference case: opencatalogi PR #79 F8 — delete-modal fetch had none of these, and the moment the backend dropped `@NoCSRFRequired` the call would have started 412ing.
