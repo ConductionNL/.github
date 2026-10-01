@@ -71,6 +71,15 @@ The source name is included so a stale mirror is visible at a glance: `GitHub` f
 
 The relock step always offers both options, each with its own command, and says why (B) is there. It is the same choice described under [Troubleshooting → keep `settings.json` unlocked](#model-or-the-model-picker-fails-with-eperm-operation-not-permitted-open-claudesettingsjson). Since v2.5.2 it is part of the update message itself, not a note in the docs.
 
+**Files out of sync** (prominently displayed, since v2.7.0):
+
+> NEW SESSION — GLOBAL CLAUDE SETTINGS: FILES OUT OF SYNC
+> Installed: v2.7.0 (matches origin/main), but 1 of 7 installed files does not match the canonical copies
+> missing: block-polling.sh
+> Say "repair my global settings" to reinstall the listed files.
+
+The version matched, but a file the canonical `settings.json` registers is missing or differs from its canonical copy. The notice carries the same unlock, contract and relock steps as an update and a command block for each affected file only. See [Which files the notice installs, and what "up to date" means](../../global-settings/README.md#which-files-the-notice-installs-and-what-up-to-date-means-v270) for what is compared and what is deliberately not counted as drift.
+
 **Configuration error** (prominently displayed):
 
 > NEW SESSION — GLOBAL CLAUDE SETTINGS: CONFIGURATION ERROR
@@ -353,7 +362,9 @@ The phrase must be in the last message the human typed — plain text, text sent
 - **Git fetch (fallback):** If the GitHub method is not configured or fails, and `~/.claude/settings-repo-path` points to a valid local clone, fetches via `git fetch origin <ref> --depth=1` and reads the `VERSION` file from that ref.
 - Reads the local branch version from `$REPO_DIR/global-settings/VERSION` (if a local repo is configured).
 - Compares all versions using semver and prints a colored status panel to stderr (visible in the terminal/CLI).
-- Always injects a session-start message into Claude's context via stdout — "up to date", "update required", or "configuration error" — which Claude relays at the top of its first response.
+- **Derives the managed file list** (since v2.7.0) from the hook scripts the canonical `settings.json` registers, fetched from the same source as `VERSION`; the update notice emits one command block per registered hook, plus `settings.json` first and `VERSION` last. Hook names are validated before they are placed in a command. If the canonical `settings.json` cannot be fetched, the list falls back to the installed one and a warning says so.
+- **Verifies the installed files** (since v2.7.0) when the versions match: every registered hook against its canonical copy (`sha256`, trailing newlines ignored) and `settings.json` as parsed JSON without `model`. A missing or changed file produces the "files out of sync" notice with repair blocks for those files only; a canonical copy that could not be fetched is reported as not verified. The panel gains a `Files` line (`7/7 verified ✓`, or the missing/changed counts).
+- Always injects a session-start message into Claude's context via stdout — "up to date", "update required", "files out of sync", or "configuration error" — which Claude relays at the top of its first response.
 - Never silently skips: configuration issues (missing config files, unreachable remote, `curl` not installed) are shown in the panel and forwarded to Claude.
 
 ## Optional: notification sounds (opt-in)
