@@ -1311,6 +1311,67 @@ def _docblock_spec_status(lines: list[str], decl_idx: int) -> tuple[str, str | N
     return ("none", None)
 
 
+# A MULTI-LINE ATTRIBUTE IS ONE THING TO STEP OVER (keepiq#212)
+# ------------------------------------------------------------
+# The walk below skipped lines that START with `#[` or `]`, which covers a
+# one-line attribute and nothing else. A multi-line attribute
+#
+#     /** @spec openspec/... */
+#     #[VaultKeyProofRequired(
+#         binds: ['suiteId'],
+#     )]
+#     public function compromiseRecovery(...)
+#
+# ends on `)]`, so the walk stopped there, never reached the docblock, and a
+# correctly documented method was reported as missing @spec. Measured on keepiq
+# 2 Oct: the last 3 full-scope gate-16 findings, all of this shape.
+#
+# The repair steps over the WHOLE attribute: from a line that ends in `]`, find
+# the nearest `#[` line above and accept the span only when that `#[`'s
+# bracket, counted outside string literals, closes exactly at the end of the
+# line we started on. Anything else (a JS array close, a stray `]`) is not an
+# attribute and the walk stops as before.
+_ATTRIBUTE_LOOKBACK = 60
+
+
+def _attribute_start(lines: list[str], end: int) -> int | None:
+    """Index of the `#[` line opening a multi-line attribute that closes at the
+    end of ``lines[end]``, or None when ``lines[end]`` closes no attribute."""
+    if not lines[end].rstrip().endswith("]"):
+        return None
+    for k in range(end - 1, max(-1, end - _ATTRIBUTE_LOOKBACK), -1):
+        if not lines[k].lstrip().startswith("#["):
+            continue
+        text = "\n".join(lines[k:end + 1])
+        start = text.index("#[") + 1
+        depth = 0
+        quote = ""
+        j = start
+        close_at = -1
+        while j < len(text):
+            c = text[j]
+            if quote:
+                if c == "\\":
+                    j += 2
+                    continue
+                if c == quote:
+                    quote = ""
+            elif c in "'\"":
+                quote = c
+            elif c in "([{":
+                depth += 1
+            elif c in ")]}":
+                depth -= 1
+                if depth == 0:
+                    close_at = j
+                    break
+            j += 1
+        if close_at >= 0 and text[close_at + 1:].strip() == "":
+            return k
+        return None
+    return None
+
+
 def _docblock_block(lines: list[str], decl_idx: int) -> list[str]:
     """Return the lines of the ``/** ... */`` block immediately preceding the
     declaration on ``decl_idx`` (skipping PHP attributes + blank lines), or
@@ -1326,6 +1387,10 @@ def _docblock_block(lines: list[str], decl_idx: int) -> list[str]:
         stripped = lines[i].strip()
         if stripped == "" or stripped.startswith("#[") or stripped.startswith("]"):
             i -= 1
+            continue
+        attr = _attribute_start(lines, i)
+        if attr is not None:
+            i = attr - 1
             continue
         if stripped.startswith("//"):
             i -= 1
