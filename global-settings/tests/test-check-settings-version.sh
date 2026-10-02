@@ -14,7 +14,8 @@
 #   - the update notice shows the CHANGELOG.md sentence of every pending
 #     version, newest first and capped at five, says when one is missing or
 #     the file cannot be fetched, and gives Claude the commit/PR lookup; and
-#     CHANGELOG.md has an entry for the current VERSION
+#     CHANGELOG.md has an entry for the current VERSION, and every entry
+#     heading carries a date, newest first
 #   - a matching install is reported up to date, with every file verified
 #   - a missing or changed hook, or a changed settings.json, is reported
 #     FILES OUT OF SYNC with repair blocks for those files only
@@ -163,6 +164,22 @@ CUR=$(cat "$SRC_DIR/VERSION")
 has_entry() { [[ -n "$(summary_of "$1")" ]]; }
 has_entry "$CUR"; check "changelog: CHANGELOG.md has a one-sentence entry for VERSION $CUR" $?
 eq "$(changelog_versions | head -1)" "$CUR"; check "changelog: the newest CHANGELOG.md entry is the current VERSION" $?
+# heading_problems <file> — every "## " heading that is not "## X.Y.Z — YYYY-MM-DD"
+# with a month 01-12 and a day 01-31, or whose date is later than the one above
+# it. The "### " headings of never-released numbers are not checked.
+heading_problems() {
+    awk '/^## / {
+        if ($0 !~ /^## [0-9]+\.[0-9]+\.[0-9]+ — [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) { print "format: " $0; next }
+        d = $4; m = substr(d, 6, 2) + 0; dd = substr(d, 9, 2) + 0
+        if (m < 1 || m > 12 || dd < 1 || dd > 31) { print "date: " $0; next }
+        if (prev != "" && d > prev) print "order: " $0
+        prev = d
+    }' "$1"
+}
+eq "$(heading_problems "$CANON_GS/CHANGELOG.md")" ""; check "changelog: every entry heading is dated, newest first" $?
+printf '## 9.9.9\n\nx\n\n## 9.9.8 — 2026-13-01\n\nx\n\n## 9.9.7 — 2020-01-01\n\nx\n\n## 9.9.6 — 2021-01-01\n\nx\n' > "$TMP/CHANGELOG.bad.md"
+eq "$(heading_problems "$TMP/CHANGELOG.bad.md" | cut -d: -f1 | tr '\n' ' ')" "format date order "
+check "changelog: the date check catches a missing date, an impossible month and a date out of order" $?
 mapfile -t CL_VERSIONS < <(changelog_versions)
 has 'What this update adds:'; check "changes: block present in the update notice" $?
 has "v${CUR} — $(summary_of "$CUR")"; check "changes: the latest version's sentence is shown" $?
