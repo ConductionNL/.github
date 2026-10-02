@@ -418,6 +418,14 @@ test('FixtureView', async ({ page }) => {
 	await expect(page).toHaveScreenshot('FixtureView.png')
 })
 JS
+# gate-26 credits tests/e2e/visual only when the CI config runs it (keepiq#198).
+cat > "${FIX}/tests/e2e/playwright.config.ts" <<'TS'
+import { defineConfig } from '@playwright/test'
+export default defineConfig({
+	testDir: __dirname,
+	projects: [{ name: 'visual', testMatch: /visual\/.*\.spec\.js/ }],
+})
+TS
 git -C "${FIX}" add -A >/dev/null 2>&1
 git -C "${FIX}" commit -qm "fixture: register an integration leaf" >/dev/null 2>&1
 OUT_STRUCT="$("${BIN}" --app-dir "${FIX}" --base "${BASE_SHA}" --require-full-coverage 2>&1)"; RC_STRUCT=$?

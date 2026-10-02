@@ -202,7 +202,7 @@ echo "== clean/ — the SAME gates must not fire (no widening) =="
 # ===========================================================================
 if _run "${FIXTURES}/clean"; then
     _expect 23 "PASS" "gate-23 clean on an app that consumes the OR abstraction"
-    _expect 26 "PASS" "gate-26 clean when the page has a visual baseline"
+    _expect 26 "PASS" "gate-26 clean when the page has a visual baseline that CI runs"
     _expect 27 "PASS" "gate-27 clean on the ADR-041 event recipe"
     _expect 30 "PASS" "gate-30 clean when both scrape targets declare #[PublicPage]"
     _expect 31 "PASS" "gate-31 clean when every <img> carries alt"

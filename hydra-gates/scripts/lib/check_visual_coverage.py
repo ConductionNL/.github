@@ -83,7 +83,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
-from source_scope import js_comment_mask  # noqa: E402
+from source_scope import js_code_mask, js_comment_mask, js_comments_only_mask  # noqa: E402
 
 GATE_NUM = 26
 
@@ -415,11 +415,14 @@ def _visual_exclude_status(vue_text: str) -> tuple[bool, str | None]:
     return (True, reason if is_reason_bearing(reason) else None)
 
 
-def _e2e_corpus(app_dir: Path, visual_only: bool) -> str:
+def _e2e_corpus(app_dir: Path, visual_only: bool, include_visual: bool = True) -> str:
     """Concatenated EXECUTABLE text of e2e test files.
 
     visual_only=True → only tests/e2e/visual/**.
     visual_only=False → all of tests/e2e/**.
+    include_visual=False → tests/e2e/visual/** contributes NOTHING, in either
+    mode. The caller passes it when CI never runs that directory; see
+    ``visual_suite_runs_in_ci``.
 
     A COMMENT IS NOT A BASELINE (.github#358)
     -----------------------------------------
@@ -454,12 +457,17 @@ def _e2e_corpus(app_dir: Path, visual_only: bool) -> str:
     alone.
     """
     root = app_dir / "tests" / "e2e"
+    visual_root = root / "visual"
     if visual_only:
-        root = root / "visual"
+        if not include_visual:
+            return ""
+        root = visual_root
     if not root.is_dir():
         return ""
     buf: list[str] = []
     for p in root.rglob("*"):
+        if not include_visual and (p == visual_root or visual_root in p.parents):
+            continue
         if p.is_file() and p.suffix in (".ts", ".js", ".png", ".txt", ".json"):
             # Binary PNG baselines: we only need their FILENAME to match, so
             # record the name rather than the bytes.
@@ -470,6 +478,167 @@ def _e2e_corpus(app_dir: Path, visual_only: bool) -> str:
             else:
                 buf.append(_read(p))
     return "\n".join(buf)
+
+
+# ---------------------------------------------------------------------------
+# A BASELINE CI NEVER RUNS IS NOT A PROOF (keepiq#198)
+# ---------------------------------------------------------------------------
+# `tests/e2e/visual/**` used to be credited unconditionally, and FIRST. But the
+# fleet's CI Playwright configs (keepiq, pipelinq, ...) put `'**/visual/**'` in
+# their only project's `testIgnore`, because the PNGs are generated on a
+# developer machine and would diff on the runner. So a new page whose only
+# proof was a baseline passed this gate while CI never opened it.
+#
+# The credit now follows what CI EXECUTES. The CI job runs
+# `npx playwright test --config=<playwright-test-path>/playwright.config.ts`
+# (falling back to ./playwright.config.ts) with no `--project`, so every
+# declared project runs. The visual directory is credited only when
+#
+#   * some entry of `projects: [...]` would collect it: its effective
+#     `testIgnore` (its own, which REPLACES the top-level one in Playwright,
+#     else the top-level one) does not name `visual`, its effective `testDir`
+#     (its own, else the top-level one, else the config's directory) contains
+#     or is inside tests/e2e/visual, and its `testMatch`, when it has one,
+#     names `visual` or matches any directory (`**/...`).
+#
+# Anything else, including no config at all, withholds the credit. Executed
+# e2e tests outside tests/e2e/visual and `@visual exclude <reason>` still count.
+# ---------------------------------------------------------------------------
+_TEST_PATH_RE = re.compile(r"^\s*playwright-test-path\s*:\s*['\"]?([^'\"#\s]+)", re.MULTILINE)
+_DEFAULT_TEST_PATH = "tests/e2e"
+
+
+def _playwright_test_path(app_dir: Path) -> str:
+    """The `playwright-test-path` the app's CI passes, else the default.
+
+    `PLAYWRIGHT_TEST_PATH` in the environment wins (the quality workflow sets
+    it from the input); otherwise the app's own caller workflow is read.
+    """
+    env = os.environ.get("PLAYWRIGHT_TEST_PATH", "").strip()
+    if env:
+        return env.rstrip("/")
+    wf_dir = app_dir / ".github" / "workflows"
+    if wf_dir.is_dir():
+        for wf in sorted(wf_dir.glob("*.y*ml")):
+            m = _TEST_PATH_RE.search(_read(wf))
+            if m and "${{" not in m.group(1):
+                return m.group(1).rstrip("/")
+    return _DEFAULT_TEST_PATH
+
+
+def _ci_playwright_config(app_dir: Path) -> Path | None:
+    cand = app_dir / _playwright_test_path(app_dir) / "playwright.config.ts"
+    if cand.is_file():
+        return cand
+    root = app_dir / "playwright.config.ts"
+    return root if root.is_file() else None
+
+
+def _match_close(code: str, i: int) -> int:
+    """Index just past the bracket that closes the one at *i* (on a code mask)."""
+    pairs = {"[": "]", "{": "}", "(": ")"}
+    stack = [pairs[code[i]]]
+    j = i + 1
+    while j < len(code) and stack:
+        c = code[j]
+        if c in pairs:
+            stack.append(pairs[c])
+        elif stack and c == stack[-1]:
+            stack.pop()
+        j += 1
+    return j
+
+
+def _top_level_keys(code: str, a: int, b: int) -> dict[str, tuple[int, int]]:
+    """{key: (value_start, value_end)} for the keys at depth 0 of code[a:b]."""
+    out: dict[str, tuple[int, int]] = {}
+    key_re = re.compile(r"([A-Za-z_$][\w$]*)\s*:")
+    i = a
+    while i < b:
+        c = code[i]
+        if c in "[{(":
+            i = _match_close(code, i)
+            continue
+        m = key_re.match(code, i)
+        if m and (i == a or not (code[i - 1].isalnum() or code[i - 1] in "_$")):
+            vs = m.end()
+            j = vs
+            while j < b and code[j] != ",":
+                if code[j] in "[{(":
+                    j = _match_close(code, j)
+                    continue
+                j += 1
+            out.setdefault(m.group(1), (vs, j))
+            i = j + 1
+            continue
+        i += 1
+    return out
+
+
+def _resolve_test_dir(raw: str, config_dir: Path) -> Path:
+    """Best-effort value of a `testDir:` expression. Unknown shapes mean the
+    config's own directory, which is Playwright's default."""
+    # `__dirname`, `'./x'`, `path.join(__dirname, 'x')` and
+    # `path.resolve(__dirname, '..', 'x')` all reduce to the config directory
+    # joined with the string literals in order.
+    parts = re.findall(r"""['"]([^'"]*)['"]""", raw)
+    path = config_dir
+    for part in parts:
+        path = path / part
+    return path.resolve()
+
+
+def _names_visual(raw: str) -> bool:
+    return "visual" in raw
+
+
+def visual_suite_runs_in_ci(app_dir: Path) -> tuple[bool, str]:
+    """(runs, why). True only when the CI Playwright config collects
+    tests/e2e/visual/**. See the block comment above."""
+    visual_dir = (app_dir / "tests" / "e2e" / "visual").resolve()
+    config = _ci_playwright_config(app_dir)
+    if config is None:
+        return (False, f"no CI Playwright config at {_playwright_test_path(app_dir)}/playwright.config.ts")
+    text = js_comments_only_mask(_read(config))
+    code = js_code_mask(_read(config))
+    rel_cfg = str(config.relative_to(app_dir))
+    m = re.search(r"defineConfig\s*\(\s*\{", code) or re.search(r"export\s+default\s*\{", code)
+    if not m:
+        return (False, f"{rel_cfg}: no defineConfig({{...}}) / export default {{...}} object found")
+    obj_a = m.end() - 1
+    obj_b = _match_close(code, obj_a)
+    top = _top_level_keys(code, obj_a + 1, obj_b - 1)
+    top_ignore = text[slice(*top["testIgnore"])] if "testIgnore" in top else None
+    if "projects" not in top:
+        return (False, f"{rel_cfg}: declares no projects, so none runs visual/")
+    top_dir = _resolve_test_dir(text[slice(*top["testDir"])], config.parent) if "testDir" in top else config.parent.resolve()
+    top_match = text[slice(*top["testMatch"])] if "testMatch" in top else None
+    pa, pb = top["projects"]
+    arr = code.find("[", pa, pb)
+    if arr < 0:
+        return (False, f"{rel_cfg}: projects is not an array literal")
+    arr_end = _match_close(code, arr)
+    i = arr + 1
+    while i < arr_end - 1:
+        if code[i] == "{":
+            end = _match_close(code, i)
+            keys = _top_level_keys(code, i + 1, end - 1)
+            name_raw = text[slice(*keys["name"])].strip() if "name" in keys else "?"
+            i = end
+            # A project's own testIgnore REPLACES the top-level one in
+            # Playwright; it does not add to it.
+            ignore = text[slice(*keys["testIgnore"])] if "testIgnore" in keys else top_ignore
+            if ignore is not None and _names_visual(ignore):
+                continue
+            tdir = _resolve_test_dir(text[slice(*keys["testDir"])], config.parent) if "testDir" in keys else top_dir
+            if not (tdir == visual_dir or tdir in visual_dir.parents or visual_dir in tdir.parents):
+                continue
+            match = text[slice(*keys["testMatch"])] if "testMatch" in keys else top_match
+            if match is not None and not (_names_visual(match) or "**/" in match):
+                continue
+            return (True, f"{rel_cfg}: project {name_raw} runs tests/e2e/visual")
+        i += 1
+    return (False, f"{rel_cfg}: no project collects tests/e2e/visual (ignored or outside its testDir)")
 
 
 def is_covered(page: dict, visual_corpus: str, e2e_corpus: str) -> bool:
@@ -540,8 +709,14 @@ def run_gate(app_dir: Path) -> int:
             f"manifest \"type\":\"page\" entry resolving to a .vue)"
         )
         return EXIT_EMPTY_SCOPE
-    visual_corpus = _e2e_corpus(app_dir, visual_only=True)
-    e2e_corpus = _e2e_corpus(app_dir, visual_only=False)
+    visual_runs, visual_why = visual_suite_runs_in_ci(app_dir)
+    if not visual_runs and (app_dir / "tests" / "e2e" / "visual").is_dir():
+        print(
+            f"[gate-{GATE_NUM}] tests/e2e/visual/** is NOT credited: {visual_why}. "
+            f"Only executed e2e tests and @visual exclude count."
+        )
+    visual_corpus = _e2e_corpus(app_dir, visual_only=True, include_visual=visual_runs)
+    e2e_corpus = _e2e_corpus(app_dir, visual_only=False, include_visual=visual_runs)
     findings: list[str] = []
     for page in pages:
         excluded, reason = _visual_exclude_status(_read(app_dir / page["path"]))
@@ -553,7 +728,7 @@ def run_gate(app_dir: Path) -> int:
         if not is_covered(page, visual_corpus, e2e_corpus):
             findings.append(
                 f"{page['path']} — new page component missing visual-regression "
-                f"baseline (tests/e2e/visual/**) / e2e test / @visual exclude"
+                f"baseline that CI runs (tests/e2e/visual/**) / e2e test / @visual exclude"
             )
     for line in sorted(set(findings)):
         print(line)
@@ -577,8 +752,9 @@ def run_gate(app_dir: Path) -> int:
 def run_report(app_dir: Path) -> int:
     base_ref = os.environ.get("HYDRA_GATE_BASE_REF") or None
     pages = _collect(app_dir, base_ref)
-    visual_corpus = _e2e_corpus(app_dir, visual_only=True)
-    e2e_corpus = _e2e_corpus(app_dir, visual_only=False)
+    visual_runs, visual_why = visual_suite_runs_in_ci(app_dir)
+    visual_corpus = _e2e_corpus(app_dir, visual_only=True, include_visual=visual_runs)
+    e2e_corpus = _e2e_corpus(app_dir, visual_only=False, include_visual=visual_runs)
     covered = uncovered = excluded = 0
     rows = []
     for page in pages:
@@ -604,6 +780,8 @@ def run_report(app_dir: Path) -> int:
             "uncovered": uncovered,
         },
         "pages": rows,
+        "visual_suite_credited": visual_runs,
+        "visual_suite_reason": visual_why,
     }
     print(json.dumps(out, indent=2))
     return 0
