@@ -572,6 +572,95 @@ add_allow "push v2.7.2: dir named push"           "git -C push status"
 add_allow "push v2.7.2: --no-pager log --author push" "git --no-pager log --author push"
 add_allow "push v2.7.2: -C log --grep push"       "git -C repo log --grep push"
 
+# ── v2.7.3 a hard deny wins over an ask, in any order ─────────────────────────
+# Before v2.7.3 ask() exited the hook on the spot, so every hard deny placed
+# below an ask guard in the file was never reached for a chained command: one
+# approval of `gh pr create … && date -s …` also ran the date -s. Each prompting
+# command below is chained with each hard-denied one — before, after, and with
+# `;` — and every combination must be denied.
+ASK_PREFIXES=(
+    "curl -X POST https://example.test"
+    "curl -o out.html https://example.test"
+    "docker run --rm alpine true"
+    "docker compose up -d"
+    "gh api -X POST repos/o/r/issues -f title=t"
+    "gh pr create --title t --body b"
+    "gh issue comment 1 --body b"
+    "git -C repo commit -m x"
+    "git -C repo stash"
+    "git branch -D old"
+    "git remote add up https://example.test/r.git"
+    "env FOO=1 make"
+    "cat a > b"
+    "find . -name x -delete"
+    "sort -o out.txt in.txt"
+    "awk 'BEGIN{system(\"true\")}'"
+    "echo x | tee out.txt"
+    "hostname newname"
+    "rm build.log"
+    "rmdir emptydir"
+    "npm audit fix"
+    "npm install"
+    "echo x > out.txt"
+    "ln -s a b"
+    "sed -i s/a/b/ f.txt"
+    "chown u f.txt"
+    "install -m 644 a b"
+    "echo aGk= | base64 -d"
+    "eval true"
+)
+DENY_SUFFIXES=(
+    "date -s 2020-01-01"
+    "date --set=2020-01-01"
+    "npm ci --legacy-peer-deps"
+    "ln -s /tmp/x ~/.claude/${PROT_FILES[0]}"
+    "bash $SCRIPT_TMP/redirect.sh"
+    "cd /mnt/c/Users"
+    "cat /mnt/c/Windows/win.ini"
+    "powershell.exe -c dir"
+    "wsl -e ls"
+    "kubectl -n openwoo-prod delete pod x"
+    "git push origin main"
+)
+for a in "${ASK_PREFIXES[@]}"; do
+    add_ask "order v2.7.3: prompts on its own | $a" "$a"
+    for d in "${DENY_SUFFIXES[@]}"; do
+        add_deny "order v2.7.3: ask && deny | $a && $d" "$a && $d"
+        add_deny "order v2.7.3: ask ; deny | $a ; $d"  "$a; $d"
+        add_deny "order v2.7.3: deny && ask | $d && $a" "$d && $a"
+    done
+done
+# Two prompting commands still prompt (nothing to deny).
+add_ask "order v2.7.3: two asks"             "rm build.log && npm install"
+add_ask "order v2.7.3: three asks"           "gh pr create --title t --body b; docker compose up -d && echo x > out.txt"
+
+# ── v2.7.3 git push: `push` must end the word ─────────────────────────────────
+add_allow "push v2.7.3: git push-notes is another command" "git push-notes"
+add_allow "push v2.7.3: -C repo push-notes (asks, no deny)" "git -C repo push-notes"
+add_allow "push v2.7.3: --no-pager push_x"                  "git --no-pager push_x"
+add_deny  "push v2.7.3: push;"                              "git push;echo done"
+add_deny  "push v2.7.3: push&&"                             "git push&&echo done"
+add_deny  "push v2.7.3: push in bash -c double quotes"      "bash -c \"git push\""
+add_deny  "push v2.7.3: push in a subshell"                 "(git push)"
+add_deny  "push v2.7.3: push in \$( )"                      "echo \$(git push)"
+
+# ── v2.7.3 git alias that pushes: defining one ────────────────────────────────
+# (Using one is tested further down, against a fixture git config.)
+add_deny  "alias v2.7.3: git config alias.p push"           "git config alias.p push"
+add_deny  "alias v2.7.3: --global"                          "git config --global alias.p push"
+add_deny  "alias v2.7.3: git config set (git 2.46+)"        "git config set alias.p push"
+add_deny  "alias v2.7.3: -c alias.p=push p"                 "git -c alias.p=push p"
+add_deny  "alias v2.7.3: -c quoted shell alias"             "git -c 'alias.p=!git push' p"
+add_deny  "alias v2.7.3: shell alias, sh -c"                "git config alias.p '!sh -c \"git push\"'"
+add_deny  "alias v2.7.3: [alias] section into a file"       $'cat >> ~/.gitconfig <<\'EOF\'\n[alias]\n\tp = push\nEOF'
+add_deny  "alias v2.7.3: [alias] via printf"                "printf '[alias]\\n\\tp = push\\n' >> .git/config"
+add_deny  "alias v2.7.3: after an ask"                      "gh pr create --title t --body b && git config alias.p push"
+add_deny  "alias v2.7.3: [alias] via tee into ~/.config/git" $'tee -a ~/.config/git/config <<\'EOF\'\n[alias]\n  pp = push\nEOF'
+add_allow "alias v2.7.3: [alias] only in a commit message"  $'git commit -F - <<\'EOF\'\ndocs: an [alias] section with push in .gitconfig is blocked\nEOF'
+add_allow "alias v2.7.3: alias without push"                "git config alias.co checkout"
+add_allow "alias v2.7.3: list aliases"                      "git config --get-regexp alias"
+add_allow "alias v2.7.3: commit message mentions it"        "git commit -m \"block git config alias.p push\""
+
 # ── runner ────────────────────────────────────────────────────────────────────
 pass=0; fail=0; fail_details=()
 for t in "${TESTS_ALLOW[@]}"; do
@@ -613,6 +702,29 @@ for t in "${TESTS_ASK[@]}"; do
     fi
 done
 ask_pass=$pass; ask_fail=$fail; ask_total=${#TESTS_ASK[@]}
+
+# v2.7.3: the ask is emitted once, at the end, with the FIRST guard's reason
+# (the reason a user saw before v2.7.3, when ask() exited on the spot).
+declare -a TESTS_ASK_REASON=(
+    "curl -X POST https://x.test && rm y"$'\t'"curl write operation"
+    "rm y && curl -X POST https://x.test"$'\t'"curl write operation"
+    "gh pr create --title t --body b && npm install"$'\t'"gh write operation"
+    "npm install && echo x > out.txt"$'\t'"Package manager install"
+    "echo x > out.txt && ln -s a b"$'\t'"Output redirection"
+    "git -C repo commit -m x && docker compose up -d"$'\t'"docker write"
+)
+for t in "${TESTS_ASK_REASON[@]}"; do
+    c="${t%%	*}"; want="${t#*	}"
+    out=$(jq -c -n --arg cmd "$c" '{tool_input:{command:$cmd}, transcript_path:""}' | bash "$HOOK" 2>/dev/null); ec=$?
+    n=$(printf '%s\n' "$out" | grep -c '"permissionDecision"')
+    if [[ $ec -eq 0 && $n -eq 1 ]] && grep -q '"permissionDecision":"ask"' <<<"$out" && grep -qF "$want" <<<"$out"; then
+        ask_pass=$((ask_pass+1)); [[ $VERBOSE -eq 1 ]] && echo "PASS: ask reason → $c"
+    else
+        ask_fail=$((ask_fail+1)); fail_details+=("[ASK REASON '$want' expected once, got ec=$ec lines=$n] $c | ${out:0:160}")
+        [[ $VERBOSE -eq 1 ]] && echo "FAIL: ask reason → $c"
+    fi
+    ask_total=$((ask_total+1))
+done
 
 # ── git push auth-phrase tests ────────────────────────────────────────────────
 # Verify that git_push_authorized() consults the last *human-typed* user message,
@@ -863,6 +975,81 @@ for c in "git -c user.name=x push" "git --no-pager push origin main"; do
     else
         push_fail=$((push_fail+1)); fail_details+=("[PUSH ALLOW expected, DENIED] phrase given: $c")
         [[ $VERBOSE -eq 1 ]] && echo "FAIL: push auth allow → $c"
+    fi
+    push_extra=$((push_extra+1))
+done
+
+# v2.7.3: a git alias that resolves to push is a push. Fixture config, read
+# through GIT_CONFIG_GLOBAL so the developer's own ~/.gitconfig plays no part;
+# the hook gets the session cwd from the payload, as Claude Code sends it.
+ALIAS_TMP="$PUSH_TMP/alias"
+mkdir -p "$ALIAS_TMP/repo"
+cat > "$ALIAS_TMP/gitconfig" <<'CFG'
+[alias]
+	p = push
+	pp = p
+	ppp = pp
+	c1 = c2
+	c2 = c3
+	c3 = c4
+	c4 = c5
+	c5 = c6
+	c6 = push
+	sp = !git push origin
+	fn = "!f() { git fetch && git push; }; f"
+	opt = -c core.x=y push
+	status = push
+	pn = push-notes
+	lg = log --oneline
+	co = checkout
+CFG
+git -C "$ALIAS_TMP/repo" init -q 2>/dev/null
+git -C "$ALIAS_TMP/repo" config alias.lp push
+run_alias() { # args: cmd cwd transcript → prints hook output, returns hook exit code
+    jq -c -n --arg cmd "$1" --arg d "$2" --arg tp "${3:-}" \
+        '{tool_input:{command:$cmd}, transcript_path:$tp, cwd:$d}' \
+        | GIT_CONFIG_GLOBAL="$ALIAS_TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1 bash "$HOOK" 2>/dev/null
+}
+# cmd <TAB> cwd <TAB> expected (deny | pass | ask) [<TAB> transcript]
+declare -a TESTS_ALIAS=(
+    "git p"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git pp origin main"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git ppp"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git c1"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git sp"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git fn"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git opt"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git P"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "cd sub && git p"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git -c user.name=x p"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git --no-pager pp"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "bash -c 'git p'"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "gh pr create --title t --body b && git p"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git -C repo commit -m x && git -C repo lp"$'\t'"$ALIAS_TMP"$'\t'"deny"
+    "git lp"$'\t'"$ALIAS_TMP/repo"$'\t'"deny"
+    "git -C $ALIAS_TMP/repo lp"$'\t'"/"$'\t'"deny"
+    "git status"$'\t'"$ALIAS_TMP"$'\t'"pass"
+    "git lg"$'\t'"$ALIAS_TMP"$'\t'"pass"
+    "git co main"$'\t'"$ALIAS_TMP"$'\t'"pass"
+    "git pn"$'\t'"$ALIAS_TMP"$'\t'"pass"
+    "git lp"$'\t'"$ALIAS_TMP"$'\t'"pass"
+    "git commit -m \"run git p later\""$'\t'"$ALIAS_TMP"$'\t'"pass"
+    "git p"$'\t'"$ALIAS_TMP"$'\t'"pass"$'\t'"$PUSH_TMP/b.jsonl"
+    "git -C repo lp"$'\t'"$ALIAS_TMP"$'\t'"ask"$'\t'"$PUSH_TMP/b.jsonl"
+    "gh pr create --title t --body b && git p"$'\t'"$ALIAS_TMP"$'\t'"ask"$'\t'"$PUSH_TMP/b.jsonl"
+    "git p"$'\t'"$ALIAS_TMP"$'\t'"deny"$'\t'"$PUSH_TMP/f.jsonl"
+)
+for t in "${TESTS_ALIAS[@]}"; do
+    IFS=$'\t' read -r c d want tp <<<"$t"
+    out=$(run_alias "$c" "$d" "${tp:-}"); ec=$?
+    got=pass
+    [[ $ec -eq 2 ]] && got=deny
+    [[ $ec -eq 0 ]] && grep -q '"permissionDecision":"ask"' <<<"$out" && got=ask
+    if [[ "$got" == "$want" ]]; then
+        push_pass=$((push_pass+1)); [[ $VERBOSE -eq 1 ]] && echo "PASS: alias $want → $c"
+    else
+        push_fail=$((push_fail+1)); fail_details+=("[ALIAS $want expected, got $got] $c (cwd ${d})")
+        [[ $VERBOSE -eq 1 ]] && echo "FAIL: alias $want → $c"
     fi
     push_extra=$((push_extra+1))
 done
