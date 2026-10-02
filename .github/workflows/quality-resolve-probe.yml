@@ -292,6 +292,27 @@ jobs:
       - name: "Exercise every 'Seed test data' step in quality.yml"
         run: python3 scripts/assert-seed-step-fails-loudly.py .github/workflows/quality.yml
 
+  sibling-jobs-read-only-token:
+    name: "Jobs that run sibling apps hold a read-only token"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # keepiq#881. phpunit, newman, playwright and journeydoc-capture clone
+      # the caller's `additional-apps` at a branch and run their code. They
+      # must not inherit the caller's write token, and no checkout in them may
+      # leave a token in .git/config.
+      #
+      # POSITIVE CONTROL FIRST: each known-bad mutation (drop permissions,
+      # grant write, persist credentials, token in a job-level env, detector
+      # finds no jobs) must be caught.
+      - name: "Positive control, every known-bad mutation must be caught"
+        run: python3 scripts/assert-sibling-jobs-read-only-token.py --positive-control .github/workflows/quality.yml
+
+      - name: "Assert read-only tokens on every job that runs sibling apps"
+        run: python3 scripts/assert-sibling-jobs-read-only-token.py .github/workflows/quality.yml
+
   matrix-derivation:
     name: "The test matrix tracks info.xml"
     runs-on: ubuntu-latest
@@ -563,7 +584,7 @@ jobs:
   guard:
     name: "Shared-workflow guard"
     runs-on: ubuntu-latest
-    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, probe, changed-path-filter, e2e-trigger-filter, consolidated-tool-legs, e2e-shard-partition]
+    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, probe, changed-path-filter, e2e-trigger-filter, consolidated-tool-legs, e2e-shard-partition, sibling-jobs-read-only-token]
     if: ${{ !cancelled() }}
     steps:
       - name: Assert both guards reached a verdict
@@ -578,12 +599,13 @@ jobs:
           LEGS_CONSOLIDATED: ${{ needs['consolidated-tool-legs'].result }}
           SHARD_PARTITION: ${{ needs['e2e-shard-partition'].result }}
           E2E_TRIGGER: ${{ needs['e2e-trigger-filter'].result }}
+          SIBLING_TOKEN: ${{ needs['sibling-jobs-read-only-token'].result }}
         run: |
           set -eu
-          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} probe=${PROBE} changed-path-filter=${FILTER} e2e-trigger-filter=${E2E_TRIGGER} consolidated-tool-legs=${LEGS_CONSOLIDATED} e2e-shard-partition=${SHARD_PARTITION}"
+          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} probe=${PROBE} changed-path-filter=${FILTER} e2e-trigger-filter=${E2E_TRIGGER} consolidated-tool-legs=${LEGS_CONSOLIDATED} e2e-shard-partition=${SHARD_PARTITION} sibling-jobs-read-only-token=${SIBLING_TOKEN}"
           # `skipped` is failed here on purpose. A guard that did not run is
           # not a guard that passed.
-          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "probe:${PROBE}" "changed-path-filter:${FILTER}" "e2e-trigger-filter:${E2E_TRIGGER}" "consolidated-tool-legs:${LEGS_CONSOLIDATED}" "e2e-shard-partition:${SHARD_PARTITION}"; do
+          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "probe:${PROBE}" "changed-path-filter:${FILTER}" "e2e-trigger-filter:${E2E_TRIGGER}" "consolidated-tool-legs:${LEGS_CONSOLIDATED}" "e2e-shard-partition:${SHARD_PARTITION}" "sibling-jobs-read-only-token:${SIBLING_TOKEN}"; do
             name="${pair%%:*}"; result="${pair##*:}"
             [ "${result}" = "success" ] || {
               echo "::error::${name} did not succeed (result=${result}). A guard that \
