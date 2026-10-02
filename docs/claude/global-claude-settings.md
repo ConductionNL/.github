@@ -66,8 +66,12 @@ The source name is included so a stale mirror is visible at a glance: `GitHub` f
 
 > NEW SESSION — GLOBAL CLAUDE SETTINGS: UPDATE REQUIRED
 > Installed: v0.1.0 (outdated) | Latest: v1.0.0 (on origin/main)
+> What this update adds: v1.0.0 — one sentence from `global-settings/CHANGELOG.md`
+> Want to know more? Ask Claude for the details of these changes.
 > Say "update my global settings to 1.0.0" to apply the update.
 > Afterwards, relock with (A) full lock, or (B) lock without settings.json (keeps the VSCode model picker working, but the main file loses the kernel lock and is then guarded only by the regex hooks).
+
+Since v2.8.0 the notice says in one sentence per pending version what the update adds. Ask for more and Claude looks up the commits and pull requests behind each version and links them. See [What the update adds](../../global-settings/README.md#what-the-update-adds-v280).
 
 The relock step always offers both options, each with its own command, and says why (B) is there. It is the same choice described under [Troubleshooting → keep `settings.json` unlocked](#model-or-the-model-picker-fails-with-eperm-operation-not-permitted-open-claudesettingsjson). Since v2.5.2 it is part of the update message itself, not a note in the docs.
 

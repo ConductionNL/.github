@@ -379,6 +379,66 @@ needs_repair() {
     return 1
 }
 
+# ── What the update adds: one sentence per version from CHANGELOG.md ─────────
+# Only for an outdated install. CHANGELOG.md is fetched from the same source as
+# VERSION; it is not installed. Each "## X.Y.Z" heading is followed by one
+# sentence, and the notice shows that sentence for every version after the
+# installed one up to the online one, newest first. An install whose version is
+# unreadable gets the online version's entry only. A version without an entry
+# says so instead of being skipped, so the list never reads as complete when it
+# is not.
+CHANGES_MAX=5
+changes_lines=()
+changes_fetched=false
+changes_more=0
+
+# changelog_summary <CHANGELOG.md> <version> — the first non-empty line under
+# "## <version>", control characters removed and capped at 300 characters.
+changelog_summary() {
+    awk -v v="$2" '
+        /^## / { if (found) exit; found = ($2 == v); next }
+        found && NF { print; exit }
+    ' "$1" 2>/dev/null | tr -d '\000-\037\177' | cut -c1-300
+}
+
+if $online_fetch_ok && [ -n "$canon_dir" ] && semver_gt "$online_version" "$installed_version"; then
+    fetch_canonical "$canon_dir" CHANGELOG.md
+    _versions=("$online_version")
+    if [ -s "$canon_dir/CHANGELOG.md" ]; then
+        changes_fetched=true
+        if $installed_ok; then
+            _versions=()
+            while IFS= read -r _v; do
+                validate_semver "$_v" || continue
+                semver_gt "$_v" "$installed_version" || continue
+                semver_gt "$_v" "$online_version" && continue
+                _versions+=("$_v")
+            done < <(awk '/^## / { print $2 }' "$canon_dir/CHANGELOG.md" | sort -t. -k1,1nr -k2,2nr -k3,3nr -u)
+            # The online version always leads, with or without an entry.
+            [ "${_versions[0]:-}" = "$online_version" ] || _versions=("$online_version" "${_versions[@]}")
+        fi
+    fi
+    for _v in "${_versions[@]}"; do
+        if [ ${#changes_lines[@]} -ge "$CHANGES_MAX" ]; then
+            changes_more=$((changes_more + 1))
+            continue
+        fi
+        _s=""
+        $changes_fetched && _s=$(changelog_summary "$canon_dir/CHANGELOG.md" "$_v")
+        changes_lines+=("v${_v} — ${_s:-(no summary in CHANGELOG.md for this version)}")
+    done
+fi
+
+# The repository the details are looked up in: the GitHub slug the version came
+# from, or the GitHub origin of the local clone on the git-fetch path.
+changes_slug="$online_repo_slug"
+if [ -z "$changes_slug" ] && [ -n "$git_root" ]; then
+    changes_slug=$(git -C "$git_root" remote get-url origin 2>/dev/null \
+        | sed -nE 's#^(https://|git@|ssh://git@)github\.com[:/]([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$#\2#p' \
+        | sed 's#\.git$##')
+    validate_repo_slug "$changes_slug" || changes_slug=""
+fi
+
 # ── Color: installed ──────────────────────────────────────────────────────────
 if ! $installed_ok; then
     ic="${RED}" ii="✗"
@@ -607,6 +667,46 @@ emit_claude_instruction() {   # $1 = "the update" | "the repair"
     echo "from the blocks above — do not introduce loops, variables for the repo slug or GitHub URL, or chmod 644/chattr."
 }
 
+# emit_changes — the "What this update adds" lines, under the version lines.
+emit_changes() {
+    echo "  What this update adds:"
+    if ! $changes_fetched; then
+        echo "    (CHANGELOG.md could not be fetched from origin/${tracking_ref} — ask Claude for the details)"
+    fi
+    local l
+    for l in "${changes_lines[@]}"; do echo "    ${l}"; done
+    [ "$changes_more" -gt 0 ] && echo "    … and ${changes_more} earlier version(s), listed in global-settings/CHANGELOG.md"
+    echo "  Want to know more? Ask Claude for the details of these changes."
+}
+
+# emit_changes_instruction — how Claude relays the summary and, on request,
+# digs into the commits and pull requests behind it.
+emit_changes_instruction() {
+    echo "WHAT THIS UPDATE ADDS: Show the 'What this update adds' lines from the notice word for word,"
+    echo "directly under the Installed/Latest lines of your warning block, followed by one line telling"
+    echo "the user they can ask you for more details about these changes. Do not look anything up yet."
+    echo "If the user asks for more details, look deeper before answering — never expand on the summary"
+    echo "sentence from memory. For each listed version, find the commit that set global-settings/VERSION"
+    echo "to it (its subject ends in '(vX.Y.Z)'), read its full message and changed files, and find the"
+    echo "pull request that merged it:"
+    if [ -n "$changes_slug" ]; then
+        echo "    gh api 'repos/${changes_slug}/commits?path=global-settings/VERSION&sha=${tracking_ref}&per_page=20' --jq '.[] | .sha[0:8] + \" \" + (.commit.message | split(\"\\n\")[0])'"
+        echo "    gh api 'repos/${changes_slug}/commits/<sha>' --jq '.commit.message, (.files[] | .filename)'"
+        echo "    gh api 'repos/${changes_slug}/commits/<sha>/pulls' --jq '.[] | .html_url + \" \" + .title'"
+    fi
+    if [ -n "$REPO_DIR" ]; then
+        echo "    git -C '${REPO_DIR}' log 'origin/${tracking_ref}' --format='%h %s' -- '${rel_base}/VERSION'"
+        echo "    git -C '${REPO_DIR}' show --stat <sha>"
+    fi
+    echo "Then explain per version what changed, why, and what it means for the user's daily work, and"
+    if [ -n "$changes_slug" ]; then
+        echo "link each pull request (https://github.com/${changes_slug}/pull/<n>), or the commit"
+        echo "(https://github.com/${changes_slug}/commit/<sha>) when no pull request merged it."
+    else
+        echo "name each commit (short sha and subject); no GitHub repository is known to link to."
+    fi
+}
+
 # ── Stdout context injected into Claude's prompt ──────────────────────────────
 
 # Config problems — must be very prominent in chat
@@ -638,6 +738,8 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
     echo "  Installed : v${installed_version}  ❌ (outdated)"
     echo "  Latest    : v${online_version}  ✅ (on origin/${tracking_ref})"
     echo ""
+    emit_changes
+    echo ""
     emit_unlock_steps "the update" "update my global settings to ${online_version}"
     echo ""
     emit_contract
@@ -645,6 +747,7 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
     emit_file_blocks settings.json "${managed_hooks[@]}" VERSION
     echo ""
     emit_claude_instruction "the update"
+    emit_changes_instruction
     echo "=========================================="
     echo ""
 

@@ -11,6 +11,10 @@
 #   - the update notice lists every hook the canonical settings.json registers,
 #     derived rather than hand-maintained: a hook registered only in
 #     settings.json appears without any change to the hook script itself
+#   - the update notice shows the CHANGELOG.md sentence of every pending
+#     version, newest first and capped at five, says when one is missing or
+#     the file cannot be fetched, and gives Claude the commit/PR lookup; and
+#     CHANGELOG.md has an entry for the current VERSION
 #   - a matching install is reported up to date, with every file verified
 #   - a missing or changed hook, or a changed settings.json, is reported
 #     FILES OUT OF SYNC with repair blocks for those files only
@@ -150,6 +154,36 @@ has 'sudo chattr +i'; check "update: relock steps present" $?
 has 'mkdir -p ~/.claude/hooks'; check "update: hooks directory is created before the first hook" $?
 lacks 'OUT OF SYNC'; check "update: no OUT OF SYNC notice alongside UPDATE REQUIRED" $?
 
+# ── 1b. what the update adds: one sentence per version from CHANGELOG.md ─────
+# changelog_versions — the version headings of the canonical CHANGELOG.md,
+# newest first; summary_of <v> — the sentence under one of them.
+changelog_versions() { awk '/^## / { print $2 }' "$CANON_GS/CHANGELOG.md" | sort -t. -k1,1nr -k2,2nr -k3,3nr; }
+summary_of() { awk -v v="$1" '/^## / { if (f) exit; f = ($2 == v); next } f && NF { print; exit }' "$CANON_GS/CHANGELOG.md"; }
+CUR=$(cat "$SRC_DIR/VERSION")
+[[ -n "$(summary_of "$CUR")" ]]; check "changelog: CHANGELOG.md has a one-sentence entry for VERSION $CUR" $?
+eq "$(changelog_versions | head -1)" "$CUR"; check "changelog: the newest CHANGELOG.md entry is the current VERSION" $?
+mapfile -t CL_VERSIONS < <(changelog_versions)
+has 'What this update adds:'; check "changes: block present in the update notice" $?
+has "v${CUR} — $(summary_of "$CUR")"; check "changes: the latest version's sentence is shown" $?
+has 'Ask Claude for the details of these changes'; check "changes: the user is told they can ask for more" $?
+has 'WHAT THIS UPDATE ADDS:'; check "changes: Claude is told how to relay and dig deeper" $?
+has "log 'origin/main' --format='%h %s' -- 'global-settings/VERSION'"; check "changes: git-fetch path gives the local log command" $?
+if [[ ${#CL_VERSIONS[@]} -gt 5 ]]; then
+    has "… and $(( ${#CL_VERSIONS[@]} - 5 )) earlier version(s)"; check "changes: more than five versions are counted, not listed" $?
+    lacks "v${CL_VERSIONS[5]} — "; check "changes: the sixth version is not listed" $?
+fi
+_order=$(grep -n -e "^    v${CL_VERSIONS[0]} — " -e "^    v${CL_VERSIONS[1]} — " <<<"$OUT" | cut -d: -f1 | tr '\n' ' ')
+[[ "$_order" =~ ^([0-9]+)\ ([0-9]+)\ $ ]] && (( BASH_REMATCH[1] < BASH_REMATCH[2] ))
+check "changes: newest version first" $?
+
+# installed = third-newest entry: the two newer versions are shown, it is not
+echo "${CL_VERSIONS[2]}" > "$CLAUDE_DIR/settings-version"
+run_hook
+has "v${CL_VERSIONS[0]} — "; check "changes: newest pending version listed" $?
+has "v${CL_VERSIONS[1]} — "; check "changes: second pending version listed" $?
+lacks "v${CL_VERSIONS[2]} — "; check "changes: the installed version is not listed" $?
+lacks 'earlier version(s)'; check "changes: no overflow line for two versions" $?
+
 # ── 2. the list follows settings.json: register a new hook upstream ──────────
 printf '#!/bin/bash\nexit 0\n' > "$CANON_GS/extra-guard.sh"
 jq '.hooks.PreToolUse += [{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/extra-guard.sh"}]}]' \
@@ -161,6 +195,8 @@ git -C "$CANON" commit -q -m "register extra-guard.sh"
 run_hook
 has 'UPDATE REQUIRED'; check "derived: a bumped canonical VERSION triggers the update notice" $?
 block_for extra-guard.sh; check "derived: a hook registered only in settings.json appears in the update list" $?
+has 'v9.9.9 — (no summary in CHANGELOG.md for this version)'; check "changes: a version without an entry is listed as such" $?
+has "v${CUR} — $(summary_of "$CUR")"; check "changes: older entries still shown when the latest has none" $?
 git -C "$CANON" revert --no-edit HEAD >/dev/null
 fixture_restored; check "derived: canonical repo restored for the remaining scenarios (fixture sanity)" $?
 
@@ -171,6 +207,7 @@ has 'Settings are up to date'; check "clean: reported up to date" $?
 has 'installed files match the canonical copies'; check "clean: files reported as verified" $?
 lacks 'OUT OF SYNC'; check "clean: no OUT OF SYNC notice" $?
 lacks 'UPDATE REQUIRED'; check "clean: no UPDATE REQUIRED notice" $?
+lacks 'What this update adds'; check "clean: no changes block" $?
 grep -q 'verified ✓' <<<"$ERR"; check "clean: panel shows files verified" $?
 
 # ── 4. a registered hook is missing ──────────────────────────────────────────
@@ -288,6 +325,19 @@ done
 block_for VERSION; check "raw update: block for VERSION" $?
 eq "$(last_fetched)" VERSION; check "raw update: VERSION block is emitted last" $?
 has "printf '%s\\n' \"\$content\" >"; check "raw update: content is written with printf, not curl -o" $?
+has "v${CUR} — $(summary_of "$CUR")"; check "raw changes: the latest version's sentence is shown" $?
+has "gh api 'repos/ConductionNL/.github/commits?path=global-settings/VERSION&sha=main"; check "raw changes: Claude gets the commit lookup for the repo" $?
+has 'https://github.com/ConductionNL/.github/pull/<n>'; check "raw changes: Claude is told to link the pull request" $?
+lacks 'CHANGELOG.md could not be fetched'; check "raw changes: no fetch warning when it was fetched" $?
+
+# R1b. CHANGELOG.md unreachable: the update still works and the block says so
+rm "$TMP/shimroot/CHANGELOG.md"
+run_hook
+has 'UPDATE REQUIRED'; check "raw no-changelog: update notice still present" $?
+block_for VERSION; check "raw no-changelog: VERSION block still emitted" $?
+has 'CHANGELOG.md could not be fetched'; check "raw no-changelog: the block says the summary is missing" $?
+has "v${CUR} — (no summary in CHANGELOG.md for this version)"; check "raw no-changelog: the latest version is still named" $?
+cp "$CANON_GS/CHANGELOG.md" "$TMP/shimroot/CHANGELOG.md"
 
 # R2. matching install: up to date via GitHub, every file verified
 install_all
