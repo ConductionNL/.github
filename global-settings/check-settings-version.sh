@@ -718,7 +718,7 @@ emit_changes_instruction() {
     echo "the commit that set global-settings/VERSION to it (its subject usually names the version),"
     echo "read its full message and changed files, and find the pull request that merged it:"
     if [ -n "$changes_slug" ]; then
-        echo "    gh api 'repos/${changes_slug}/commits?path=global-settings/VERSION&sha=${tracking_ref}&per_page=20' --jq '.[] | .sha[0:8] + \" \" + (.commit.message | split(\"\\n\")[0])'"
+        printf '%s\n' "    gh api 'repos/${changes_slug}/commits?path=global-settings/VERSION&sha=${tracking_ref}&per_page=20' --jq '.[] | .sha[0:8] + \" \" + (.commit.message | split(\"\\n\")[0])'"
         echo "    gh api 'repos/${changes_slug}/commits/<sha>' --jq '.commit.message, (.files[] | .filename)'"
         echo "    gh api 'repos/${changes_slug}/commits/<sha>/pulls' --jq '.[] | .html_url + \" \" + .title'"
     fi

@@ -160,7 +160,8 @@ lacks 'OUT OF SYNC'; check "update: no OUT OF SYNC notice alongside UPDATE REQUI
 changelog_versions() { awk '/^## / { print $2 }' "$CANON_GS/CHANGELOG.md" | sort -t. -k1,1nr -k2,2nr -k3,3nr; }
 summary_of() { awk -v v="$1" '/^## / { if (f) exit; f = ($2 == v); next } f && NF { print; exit }' "$CANON_GS/CHANGELOG.md"; }
 CUR=$(cat "$SRC_DIR/VERSION")
-[[ -n "$(summary_of "$CUR")" ]]; check "changelog: CHANGELOG.md has a one-sentence entry for VERSION $CUR" $?
+has_entry() { [[ -n "$(summary_of "$1")" ]]; }
+has_entry "$CUR"; check "changelog: CHANGELOG.md has a one-sentence entry for VERSION $CUR" $?
 eq "$(changelog_versions | head -1)" "$CUR"; check "changelog: the newest CHANGELOG.md entry is the current VERSION" $?
 mapfile -t CL_VERSIONS < <(changelog_versions)
 has 'What this update adds:'; check "changes: block present in the update notice" $?
