@@ -67,6 +67,19 @@ export default {{ name: 'P{n}' }}
 """
 
 
+# keepiq#198: tests/e2e/visual/** is credited only when the app's CI Playwright
+# config runs it. Every fixture below that proves coverage THROUGH the visual
+# directory therefore ships this config, which declares a project collecting it.
+_CI_CONFIG_RUNS_VISUAL = """import { defineConfig, devices } from '@playwright/test'
+export default defineConfig({
+	testDir: __dirname,
+	projects: [
+		{ name: 'chromium', testIgnore: ['**/visual/**'], use: { ...devices['Desktop Chrome'] } },
+		{ name: 'visual', testMatch: /visual\\/.*\\.spec\\.(ts|js)/, use: { ...devices['Desktop Chrome'] } },
+	],
+})
+"""
+
 def _git(args: list[str], cwd: Path) -> None:
     subprocess.run(
         ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
@@ -91,6 +104,7 @@ def _repo(n_pages: int, *, covered: bool = False) -> tempfile.TemporaryDirectory
     if covered:
         vis = root / "tests" / "e2e" / "visual"
         vis.mkdir(parents=True)
+        (root / "tests" / "e2e" / "playwright.config.ts").write_text(_CI_CONFIG_RUNS_VISUAL)
         for i in range(1, n_pages + 1):
             (vis / f"p{i}.spec.js").write_text(
                 f"test('P{i}', async () => {{ await expect(page)"
@@ -410,7 +424,8 @@ test('something else entirely', async ({ page }) => {
 })
 """
 
-with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_COMMENT_ONLY}) as t:
+with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_COMMENT_ONLY,
+                         "tests/e2e/playwright.config.ts": _CI_CONFIG_RUNS_VISUAL}) as t:
     rc, out = _run(Path(t), None)
     check(
         "a comment saying a page still OWES a baseline is not coverage",
@@ -418,7 +433,8 @@ with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_COMMENT_ONLY}) as 
         f"rc={rc} out={out.strip()[-220:]}",
     )
 
-with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_REAL}) as t:
+with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_REAL,
+                         "tests/e2e/playwright.config.ts": _CI_CONFIG_RUNS_VISUAL}) as t:
     rc, out = _run(Path(t), None)
     check(
         "a spec that navigates to the page and screenshots it still counts",
@@ -434,7 +450,8 @@ test('baseline', async ({ page }) => {
 \tawait expect(page).toHaveScreenshot('FlowDetailPage.png')
 })
 """
-with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_STRING_ONLY}) as t:
+with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_STRING_ONLY,
+                         "tests/e2e/playwright.config.ts": _CI_CONFIG_RUNS_VISUAL}) as t:
     rc, out = _run(Path(t), None)
     check(
         "a reference that exists only as a STRING literal still counts",
@@ -444,7 +461,7 @@ with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_STRING_ONLY}) as t
 
 # A .png baseline named after the component is the canonical proof and must be
 # untouched by the corpus change — its filename is the whole reference.
-with _repo_mixed() as t:
+with _repo_mixed(extra={"tests/e2e/playwright.config.ts": _CI_CONFIG_RUNS_VISUAL}) as t:
     _b = Path(t) / "tests" / "e2e" / "visual"
     _b.mkdir(parents=True)
     (_b / "FlowDetailPage.png").write_bytes(b"\x89PNG\r\n")
@@ -453,6 +470,167 @@ with _repo_mixed() as t:
         "a .png baseline named after the component still counts",
         rc == EXIT_PASS,
         f"rc={rc} out={out.strip()[-220:]}",
+    )
+
+# ---------------------------------------------------------------------------
+# keepiq#198: A BASELINE CI NEVER RUNS IS NOT A PROOF
+# ---------------------------------------------------------------------------
+# The fleet's CI Playwright configs (keepiq, pipelinq) give their only project
+# `testIgnore: ['**/visual/**']`, because the PNG baselines are made on a
+# developer machine. tests/e2e/visual/** was still credited, so a page whose
+# only proof was a baseline passed while CI never opened it. Every arm that
+# withholds credit is paired with one that keeps it, so "never credit visual"
+# would not pass this block either.
+print()
+print("== gate-26: tests/e2e/visual counts only when CI runs it (keepiq#198) ==")
+
+# The keepiq shape, verbatim in the part that matters: one project, with
+# '**/visual/**' in its own testIgnore, and a COMMENT naming visual that must
+# not be read as configuration.
+_CI_CONFIG_IGNORES_VISUAL = """import { defineConfig, devices } from '@playwright/test'
+export default defineConfig({
+\ttestDir: __dirname,
+\t// the visual project runs locally only: `npx playwright test --project visual`
+\tprojects: [
+\t\t{
+\t\t\tname: 'chromium',
+\t\t\ttestIgnore: [
+\t\t\t\t'**/node_modules/**',
+\t\t\t\t'**/visual/**',
+\t\t\t],
+\t\t\tuse: { ...devices['Desktop Chrome'] },
+\t\t},
+\t],
+})
+"""
+
+_BASELINE_ONLY = {"tests/e2e/visual/x.spec.ts": _VISUAL_REAL}
+
+with _repo_mixed(extra={**_BASELINE_ONLY,
+                        "tests/e2e/playwright.config.ts": _CI_CONFIG_IGNORES_VISUAL}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "#198 RED-BEFORE: a baseline the CI config ignores does NOT cover the page",
+        rc == EXIT_FAIL and "FlowDetailPage.vue" in out,
+        f"rc={rc} out={out.strip()[-260:]}",
+    )
+    check(
+        "#198: the run says WHY the visual directory earned no credit",
+        "is NOT credited" in out and "no project collects" in out,
+        out.strip()[-260:],
+    )
+
+with _repo_mixed(extra=dict(_BASELINE_ONLY)) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "#198: no CI Playwright config at all -> a baseline earns no credit",
+        rc == EXIT_FAIL and "no CI Playwright config" in out,
+        f"rc={rc} out={out.strip()[-260:]}",
+    )
+
+with _repo_mixed(extra={**_BASELINE_ONLY,
+                        "tests/e2e/playwright.config.ts": _CI_CONFIG_RUNS_VISUAL}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "#198 control: a config with a project that runs visual/ keeps the credit",
+        rc == EXIT_PASS,
+        f"rc={rc} out={out.strip()[-260:]}",
+    )
+
+# Executed e2e tests outside visual/ still count when visual/ is ignored.
+_EXECUTED = """import { test, expect } from '@playwright/test'
+test('flow detail opens', async ({ page }) => {
+\tawait page.goto('/index.php/apps/fx/#/flow-detail')
+\tawait expect(page.getByTestId('FlowDetailPage')).toBeVisible()
+})
+"""
+with _repo_mixed(extra={**_BASELINE_ONLY,
+                        "tests/e2e/workflows/flow.spec.ts": _EXECUTED,
+                        "tests/e2e/playwright.config.ts": _CI_CONFIG_IGNORES_VISUAL}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "#198: an EXECUTED e2e test still covers the page when visual/ is ignored",
+        rc == EXIT_PASS,
+        f"rc={rc} out={out.strip()[-260:]}",
+    )
+
+with _repo_mixed(extra={**_BASELINE_ONLY,
+                        "tests/e2e/playwright.config.ts": _CI_CONFIG_IGNORES_VISUAL}) as t:
+    pg = Path(t) / "src" / "views" / "FlowDetailPage.vue"
+    pg.write_text("<!-- @visual exclude rendered by the settings framework, not the SPA -->\n"
+                  + pg.read_text())
+    rc, out = _run(Path(t), None)
+    check(
+        "#198: @visual exclude <reason> still counts when visual/ is ignored",
+        rc == EXIT_PASS,
+        f"rc={rc} out={out.strip()[-260:]}",
+    )
+
+# Playwright semantics: a project's own testIgnore REPLACES the top-level one.
+_CI_CONFIG_TOP_IGNORE_OVERRIDDEN = """import { defineConfig } from '@playwright/test'
+export default defineConfig({
+\ttestIgnore: ['**/visual/**'],
+\tprojects: [
+\t\t{ name: 'chromium' },
+\t\t{ name: 'visual', testIgnore: ['**/node_modules/**'] },
+\t],
+})
+"""
+with _repo_mixed(extra={**_BASELINE_ONLY,
+                        "tests/e2e/playwright.config.ts": _CI_CONFIG_TOP_IGNORE_OVERRIDDEN}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "#198: a project whose own testIgnore replaces a top-level visual ignore runs it",
+        rc == EXIT_PASS,
+        f"rc={rc} out={out.strip()[-260:]}",
+    )
+
+_CI_CONFIG_TOP_IGNORE_ONLY = _CI_CONFIG_TOP_IGNORE_OVERRIDDEN.replace(
+    "{ name: 'visual', testIgnore: ['**/node_modules/**'] }", "{ name: 'firefox' }")
+with _repo_mixed(extra={**_BASELINE_ONLY,
+                        "tests/e2e/playwright.config.ts": _CI_CONFIG_TOP_IGNORE_ONLY}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "#198: a top-level visual ignore that every project inherits withholds credit",
+        rc == EXIT_FAIL,
+        f"rc={rc} out={out.strip()[-260:]}",
+    )
+
+# The CI config is found through the app's `playwright-test-path`, read from
+# its caller workflow. openregister uses tests/e2e/ci, whose testDir does not
+# reach tests/e2e/visual unless it says so.
+_CALLER = """jobs:
+  quality:
+    uses: ConductionNL/.github/.github/workflows/quality.yml@main
+    with:
+      playwright-test-path: tests/e2e/ci
+"""
+_CI_SUBDIR_CONFIG = """import { defineConfig } from '@playwright/test'
+export default defineConfig({
+\ttestDir: __dirname,
+\tprojects: [{ name: 'chromium' }],
+})
+"""
+with _repo_mixed(extra={**_BASELINE_ONLY,
+                        ".github/workflows/code-quality.yml": _CALLER,
+                        "tests/e2e/ci/playwright.config.ts": _CI_SUBDIR_CONFIG}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "#198: a CI config whose testDir does not reach tests/e2e/visual withholds credit",
+        rc == EXIT_FAIL,
+        f"rc={rc} out={out.strip()[-260:]}",
+    )
+
+with _repo_mixed(extra={**_BASELINE_ONLY,
+                        ".github/workflows/code-quality.yml": _CALLER,
+                        "tests/e2e/ci/playwright.config.ts":
+                            _CI_SUBDIR_CONFIG.replace("testDir: __dirname",
+                                                      "testDir: path.join(__dirname, '..')")}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "#198: the same config with testDir reaching tests/e2e keeps the credit",
+        rc == EXIT_PASS,
+        f"rc={rc} out={out.strip()[-260:]}",
     )
 
 print()

@@ -212,7 +212,7 @@ def _regex_can_start(prev_char: str, prev_word: str) -> bool:
     return True
 
 
-def js_mask(text: str, *, blank_strings: bool = True) -> str:
+def js_mask(text: str, *, blank_strings: bool = True, blank_regex: bool = True) -> str:
     """A same-length copy of *text* with the non-code regions blanked.
 
     Comments and regex literals always go. String / template CONTENTS go only
@@ -280,7 +280,8 @@ def js_mask(text: str, *, blank_strings: bool = True) -> str:
         if c == "/" and _regex_can_start(prev_char, prev_word):
             j = _skip_regex(text, i)
             if j > 0:
-                blank(i, j)
+                if blank_regex:
+                    blank(i, j)
                 prev_char, prev_word = ")", ""   # a regex literal is a value
                 i = j
                 continue
@@ -310,6 +311,16 @@ def js_comment_mask(text: str) -> str:
     `window['confirm']`, gate-58's `'networkidle'`).
     """
     return js_mask(text, blank_strings=False)
+
+
+def js_comments_only_mask(text: str) -> str:
+    r"""Comments blanked; string AND regex literals left intact.
+
+    For reading configuration whose values are patterns: gate-26 reads a
+    Playwright `testMatch: /visual\/.*\.spec\.ts/` or `testIgnore:
+    ['**/visual/**']`, and a regex is exactly the evidence there.
+    """
+    return js_mask(text, blank_strings=False, blank_regex=False)
 
 
 # ---------------------------------------------------------------------------
