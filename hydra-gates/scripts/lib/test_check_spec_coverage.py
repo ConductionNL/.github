@@ -1133,5 +1133,106 @@ class TagPositionTest(unittest.TestCase):
             "     */\n")), [])
 
 
+
+class MultiLineAttributeTest(unittest.TestCase):
+    """keepiq#212: a docblock above a MULTI-LINE PHP attribute was never read.
+
+    The walk up from a declaration skipped lines starting with `#[` or `]`,
+    but a multi-line attribute ends on `)]` and carries argument lines, so the
+    walk stopped there. On keepiq this was the last 3 full-scope findings
+    (`EncryptionSuiteController::compromiseRecovery`, `::updatePrivateKey`,
+    `MigrationController::complete`), each with a correct `@spec` docblock.
+    """
+
+    @staticmethod
+    def _findings(attribute: str, docblock: str) -> list[str]:
+        text = (
+            "<?php\n"
+            "class EncryptionSuiteController {\n"
+            + docblock
+            + attribute
+            + "    public function compromiseRecovery(string $id): string\n"
+            "    {\n"
+            "        return $id;\n"
+            "    }\n"
+            "}\n"
+        )
+        findings: list[str] = []
+        csc.check_php_file("lib/Controller/EncryptionSuiteController.php", text, _all_lines(text), findings)
+        return findings
+
+    _SPEC_DOC = (
+        "    /**\n"
+        "     * Recover a compromised suite.\n"
+        "     *\n"
+        "     * @spec openspec/specs/crypto/spec.md#recovery\n"
+        "     */\n"
+    )
+    _KEEPIQ_ATTR = (
+        "    #[NoAdminRequired]\n"
+        "    #[VaultKeyProofRequired(\n"
+        "        binds: ['suiteId', 'newPublicKey'],\n"
+        "        purpose: 'compromise-recovery',\n"
+        "    )]\n"
+    )
+
+    def test_docblock_above_a_multi_line_attribute_is_read(self):
+        """RED before the fix: reported `missing @spec`."""
+        self.assertEqual(self._findings(self._KEEPIQ_ATTR, self._SPEC_DOC), [])
+
+    def test_multi_line_attribute_last_and_first(self):
+        attr = (
+            "    #[VaultKeyProofRequired(\n"
+            "        binds: ['suiteId'],\n"
+            "    )]\n"
+            "    #[NoAdminRequired]\n"
+        )
+        self.assertEqual(self._findings(attr, self._SPEC_DOC), [])
+
+    def test_bracket_inside_a_string_argument_does_not_end_the_attribute(self):
+        attr = (
+            "    #[Route(\n"
+            "        path: '/odd)]/path',\n"
+            "        verb: \"POST\",\n"
+            "    )]\n"
+        )
+        self.assertEqual(self._findings(attr, self._SPEC_DOC), [])
+
+    def test_exclude_reason_above_a_multi_line_attribute_counts(self):
+        doc = (
+            "    /**\n"
+            "     * @spec exclude migration endpoint removed after the 2.0 cut-over\n"
+            "     */\n"
+        )
+        self.assertEqual(self._findings(self._KEEPIQ_ATTR, doc), [])
+
+    def test_CONTROL_a_docblock_without_spec_is_still_flagged(self):
+        """No widening: stepping over the attribute must not invent coverage."""
+        doc = (
+            "    /**\n"
+            "     * Recover a compromised suite.\n"
+            "     */\n"
+        )
+        out = self._findings(self._KEEPIQ_ATTR, doc)
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("missing @spec", out[0])
+
+    def test_CONTROL_no_docblock_at_all_is_still_flagged(self):
+        out = self._findings(self._KEEPIQ_ATTR, "")
+        self.assertEqual(len(out), 1, out)
+
+    def test_CONTROL_a_closing_bracket_that_is_not_an_attribute_stops_the_walk(self):
+        """A `]` line whose nearest `#[` does not close on it is not an
+        attribute; the walk must not jump to a docblock further up."""
+        lines = [
+            "    /** @spec openspec/specs/x/spec.md */",
+            "    #[Single]",
+            "    const ITEMS = [",
+            "        'a',",
+            "    ]",
+            "    public function f() {}",
+        ]
+        self.assertEqual(csc._docblock_block(lines, 5), [])
+
 if __name__ == "__main__":
     unittest.main()
