@@ -165,8 +165,13 @@ eq "$(changelog_versions | head -1)" "$CUR"; check "changelog: the newest CHANGE
 mapfile -t CL_VERSIONS < <(changelog_versions)
 has 'What this update adds:'; check "changes: block present in the update notice" $?
 has "v${CUR} — $(summary_of "$CUR")"; check "changes: the latest version's sentence is shown" $?
-has 'Ask Claude for the details of these changes'; check "changes: the user is told they can ask for more" $?
-has 'WHAT THIS UPDATE ADDS:'; check "changes: Claude is told how to relay and dig deeper" $?
+has 'Ask Claude how to update, or for the details of these changes'; check "changes: the user is told they can ask for more" $?
+has 'MORE DETAILS ABOUT THE CHANGES:'; check "changes: Claude is told how to dig deeper on request" $?
+has 'show the SHORT form of this'; check "short: the update notice is shown short at session start" $?
+has 'ask you how to update for the full steps'; check "short: the short form offers the full steps on request" $?
+has 'FULL FORM: when the user asks how to update'; check "short: the full form is shown when asked" $?
+has 'AFTER THE UPDATE'; check "short: the relock step is shown after the update" $?
+has 'Show BOTH relock options from step 4'; check "short: the relock rules still travel with the notice" $?
 has "log 'origin/main' --format='%h %s' -- 'global-settings/VERSION'"; check "changes: git-fetch path gives the local log command" $?
 if [[ ${#CL_VERSIONS[@]} -gt 5 ]]; then
     has "… and $(( ${#CL_VERSIONS[@]} - 5 )) earlier version(s)"; check "changes: more than five versions are counted, not listed" $?
@@ -221,6 +226,7 @@ lacks "origin/main:global-settings/sound-notify.sh"; check "missing: no block fo
 lacks "origin/main:global-settings/settings.json"; check "missing: no block for an intact settings.json" $?
 lacks "origin/main:global-settings/VERSION"; check "missing: VERSION is not rewritten" $?
 has 'Then say: "repair my global settings"'; check "missing: repair phrase present" $?
+lacks 'SHORT form'; check "missing: the repair notice keeps its full form" $?
 has 'sudo chattr -i'; check "missing: unlock steps present" $?
 lacks 'Settings are up to date'; check "missing: not reported up to date" $?
 grep -q '1 missing, 0 changed' <<<"$ERR"; check "missing: panel counts it" $?

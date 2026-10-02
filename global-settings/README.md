@@ -276,13 +276,15 @@ When the installed version already matches the online one, the hook also compare
 
 A missing or changed file turns the session-start message into **FILES OUT OF SYNC**. It names the files, the phrase for step 3 is **"repair my global settings"**, and the unlock, contract and relock steps are the same as for an update. Only the affected files are rewritten; `VERSION` is left alone. On the GitHub path the check costs two extra fetches per session (`settings.json`, then every registered hook in one `curl` call); on the git-fetch path it costs none. A canonical file that could not be fetched is reported as not verified, never as fine.
 
-### What the update adds (v2.8.0)
+### A short notice, and what the update adds (v2.8.0)
+
+The update notice comes back in every new session until you update, so Claude shows it **short** at session start: the header, the installed and latest version, what the update adds, a reminder that unlocking takes two commands (`sudo chattr -i` and `chmod u+w`) and relocking one (`sudo chattr +i`), and that you can ask for more. Ask Claude how to update and you get the full steps 1 to 4 above, with every command in its own block and both relock options. After the update Claude always shows the relock step, whether or not you asked for the full steps. The FILES OUT OF SYNC notice is still shown in full.
 
 The UPDATE REQUIRED notice has a **What this update adds** block under the version lines: one sentence per version after the installed one, up to the latest, newest first, taken from [`CHANGELOG.md`](CHANGELOG.md). It shows at most five versions and counts the rest. A version without an entry is listed as such, not left out. If `CHANGELOG.md` cannot be fetched, the block says so, and the update itself is unaffected. On the GitHub path this costs one extra fetch, and only when an update is pending.
 
 Ask Claude for more details and it looks up the commit that set `VERSION` to each listed version, reads its message, changed files and pull request, and explains the change with a link to that pull request (or the commit when none merged it). The notice gives Claude the `gh api` and `git log` commands for this, so the answer comes from the history, not from the summary sentence.
 
-The notice is printed by the *installed* hook, so the block first appears when you update **from** v2.8.0 or later to a newer version.
+The notice is printed by the *installed* hook, so the short form and the block first appear when you update **from** v2.8.0 or later to a newer version.
 
 ### The update contract
 

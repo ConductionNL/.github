@@ -651,6 +651,37 @@ emit_claude_instruction() {   # $1 = "the update" | "the repair"
     echo "started and that you checked the Global Claude Settings. Then immediately display the"
     echo "notice as a clearly visible warning block — bold, a header, or a highlighted quote block."
     echo "The user must not be able to overlook it. Do not bury it in the middle of your response."
+    emit_full_form_rules "$1"
+}
+
+# emit_update_instruction — the update notice is shown short at session start
+# (it returns in every new session until the update is done) and in full only
+# when the user asks how to update. The relock options are never skipped: they
+# come with the full form and again after the update.
+emit_update_instruction() {
+    echo "INSTRUCTION FOR CLAUDE: At the very start of your response, mention that a new session has"
+    echo "started and that you checked the Global Claude Settings. Then show the SHORT form of this"
+    echo "notice as one clearly visible warning block — a header and a few lines, no command blocks:"
+    echo "  - the header 'GLOBAL CLAUDE SETTINGS: UPDATE REQUIRED';"
+    echo "  - the Installed and Latest lines;"
+    echo "  - the 'What this update adds' lines, word for word;"
+    echo "  - one line: unlocking takes TWO commands, 'sudo chattr -i' and 'chmod u+w', and afterwards"
+    echo "    the user must re-apply 'sudo chattr +i', or the immutable lock stays off until the next"
+    echo "    session;"
+    echo "  - one line: the user can ask you how to update for the full steps, or for more details"
+    echo "    about what these changes do."
+    echo "The user must not be able to overlook the block. Leave out steps 1 to 4, the command blocks"
+    echo "and the relock options at session start, and do not look anything up yet."
+    echo "FULL FORM: when the user asks how to update, for the update steps or for more information"
+    echo "about updating, display steps 1 to 4 of the notice with each command as its own fenced block."
+    echo "The same rules then apply as after the update below."
+    echo "AFTER THE UPDATE (the user said the step-3 phrase and you ran the file blocks): always show"
+    echo "the relock step, even if the full form was never shown."
+    emit_full_form_rules "the update"
+}
+
+# emit_full_form_rules — what the full notice and the update itself must cover.
+emit_full_form_rules() {   # $1 = "the update" | "the repair"
     echo "Also remind the user that the unlock is TWO commands — 'sudo chattr -i' for the kernel flag"
     echo "and a plain 'chmod u+w' for the read-only mode a previous update left behind — and that they"
     echo "must run 'sudo chattr +i' afterward to re-apply the kernel-level lock. Without the relock the"
@@ -676,19 +707,16 @@ emit_changes() {
     local l
     for l in "${changes_lines[@]}"; do echo "    ${l}"; done
     [ "$changes_more" -gt 0 ] && echo "    … and ${changes_more} earlier version(s), listed in global-settings/CHANGELOG.md"
-    echo "  Want to know more? Ask Claude for the details of these changes."
+    echo "  Want to know more? Ask Claude how to update, or for the details of these changes."
 }
 
-# emit_changes_instruction — how Claude relays the summary and, on request,
-# digs into the commits and pull requests behind it.
+# emit_changes_instruction — how Claude, on request, digs into the commits and
+# pull requests behind the "What this update adds" lines.
 emit_changes_instruction() {
-    echo "WHAT THIS UPDATE ADDS: Show the 'What this update adds' lines from the notice word for word,"
-    echo "directly under the Installed/Latest lines of your warning block, followed by one line telling"
-    echo "the user they can ask you for more details about these changes. Do not look anything up yet."
-    echo "If the user asks for more details, look deeper before answering — never expand on the summary"
-    echo "sentence from memory. For each listed version, find the commit that set global-settings/VERSION"
-    echo "to it (its subject ends in '(vX.Y.Z)'), read its full message and changed files, and find the"
-    echo "pull request that merged it:"
+    echo "MORE DETAILS ABOUT THE CHANGES: when the user asks what these changes do, look deeper before"
+    echo "answering — never expand on the summary sentence from memory. For each listed version, find"
+    echo "the commit that set global-settings/VERSION to it (its subject usually names the version),"
+    echo "read its full message and changed files, and find the pull request that merged it:"
     if [ -n "$changes_slug" ]; then
         echo "    gh api 'repos/${changes_slug}/commits?path=global-settings/VERSION&sha=${tracking_ref}&per_page=20' --jq '.[] | .sha[0:8] + \" \" + (.commit.message | split(\"\\n\")[0])'"
         echo "    gh api 'repos/${changes_slug}/commits/<sha>' --jq '.commit.message, (.files[] | .filename)'"
@@ -746,7 +774,7 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
     echo ""
     emit_file_blocks settings.json "${managed_hooks[@]}" VERSION
     echo ""
-    emit_claude_instruction "the update"
+    emit_update_instruction
     emit_changes_instruction
     echo "=========================================="
     echo ""
