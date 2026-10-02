@@ -196,7 +196,7 @@ The dispatcher never blocks Claude regardless of state — a broken personal hoo
 - `plan-context.sh` (`UserPromptSubmit`) points Claude at those guides, and at notes in that repo, when your prompt is about such work.
 - `read-markers.sh` is the read log both scripts share. It records which parts of a file were read, so a guide that was only partly read does not count as read.
 
-[`hooks/README.md`](https://github.com/ConductionNL/readonly-mirror-wilco-claude-plans/blob/main/hooks/README.md) describes every rule and the `user-hooks.json` entries. The scripts are written for that developer's own setup. The paths, the plans tree and the role lines in the messages are theirs, so adapt them before you register a copy (see [Enabling per-user hooks](#enabling-per-user-hooks)). The production read-only guard started there and has been part of `block-write-commands.sh` since v2.6.0.
+[`hooks/README.md`](https://github.com/ConductionNL/readonly-mirror-wilco-claude-plans/blob/main/hooks/README.md) describes every rule. Its section [Overnemen voor je eigen Claude Code](https://github.com/ConductionNL/readonly-mirror-wilco-claude-plans/blob/main/hooks/README.md#overnemen-voor-je-eigen-claude-code) (in Dutch) is the guide to taking them over: which parts work without that developer's plans tree, how to clone the mirror and run the test suites first, the `user-hooks.json` entries for your own path (set the file up first under [Enabling per-user hooks](#enabling-per-user-hooks)), and which messages name that developer's roles and need adapting. The production read-only guard started there and has been part of `block-write-commands.sh` since v2.6.0.
 
 ## Not part of the global settings: your own `~/.claude/CLAUDE.md`
 
