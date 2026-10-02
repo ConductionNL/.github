@@ -10,15 +10,23 @@
 input=$(cat)
 cmd=$(echo "$input" | jq -r '.tool_input.command // ""')
 transcript_path=$(echo "$input" | jq -r '.transcript_path // ""')
+hook_cwd=$(echo "$input" | jq -r '.cwd // ""')
 
 hard_deny() {
     printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$*"
     exit 2  # exit 2 = hard block — tool call refused even if JSON parsing fails
 }
 
+# ask — record that the command needs approval, and carry on. The prompt is
+# emitted at the very end of the hook, after every guard has run, so a hard
+# deny anywhere in the file wins over an ask anywhere in the file: one
+# approval of `gh pr create … && date -s …` can no longer slip the date -s
+# past its hard block. Before v2.7.3 ask() exited on the spot, so every hard
+# deny placed below an ask guard was skipped for a chained command. The first
+# reason recorded is the one shown, as before.
+_ask_reason=""
 ask() {
-    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$*"
-    exit 0
+    [ -n "$_ask_reason" ] || _ask_reason="$*"
 }
 
 # Returns 0 (true) if the last human-typed user message in the transcript contains
@@ -301,7 +309,8 @@ fi
 # through on one approval of the gh prompt.
 # The binary may sit anywhere in a segment (`bash -c "kubectl …"` counts);
 # only DATA text is ignored (data_free_cmd). Added in v2.6.0; it started
-# life as a personal user-hook.
+# life as a personal user-hook. (Since v2.7.3 ask() no longer exits, so the
+# placement is belt and braces.)
 _KUBE_WRITE='^(apply|create|delete|edit|patch|replace|scale|set|label|annotate|exec|cp|drain|cordon|uncordon|taint|run|expose|autoscale|debug|attach|rollout)$'
 _HELM_WRITE='^(install|upgrade|uninstall|delete|rollback)$'
 while IFS= read -r _seg; do
@@ -337,21 +346,94 @@ done < <(data_free_cmd | sed -E 's/(\|\||&&|;|\|)/\n/g')
 # Every form: direct, chained (`cd x && git push`, `git -C r commit … && git
 # push`), and with git's global options before the subcommand (`git -C <path>
 # push`, `git -c k=v push`, `git --no-pager push`, `git --work-tree <path>
-# push`). Placed before every `ask` guard: an ask exits the hook, so a push
-# chained after, say, `git -C r commit` or `gh pr create` would otherwise run
-# on one approval of that prompt, without the phrase.
+# push`). Placed before every `ask` guard (v2.7.2); since v2.7.3 an ask no
+# longer exits the hook, so a push chained after a prompting command is
+# denied either way.
 # Matched on data_free_cmd: a commit message or PR body that mentions
 # `git push` is data, not a push. A push inside bash -c, eval or a heredoc
-# fed to a shell is still seen.
+# fed to a shell is still seen. `push` must end the word: `git push-notes`
+# is another command (an alias that pushes is caught below).
+#
+# Aliases (v2.7.3): `git p` with alias.p = push is a push. Two checks:
+#   1. a command that defines an alias and mentions push (`git config
+#      alias.p push`, `git -c alias.p=push p`, `alias.p '!git push'`, an
+#      `[alias]` section written to a git config file, heredoc included)
+#      needs the phrase too;
+#   2. every other git subcommand is looked up with `git config --get
+#      alias.<name>`, in the -C directory or the session cwd, following
+#      alias → alias chains up to ten deep. A name git ships as a command
+#      is never an alias (git ignores aliases that shadow commands).
+# Not covered: config set through GIT_CONFIG_* environment variables or
+# --config-env, and a push hidden in a script the alias runs.
 _GIT_VAL='([^[:space:];&|"'\'']|"[^"]*"|'\''[^'\'']*'\'')+'
 # git's own options that take a separate value; any other --option is a flag
 # or --option=value.
 _GIT_GOPTS='([[:space:]]+(-[Cc]|--(git-dir|work-tree|namespace|config-env|super-prefix|attr-source))[[:space:]]+'"$_GIT_VAL"'|[[:space:]]+--[a-z][a-z-]*(='"$_GIT_VAL"')?|[[:space:]]+-[pP])*'
-if data_free_cmd | grep -qE '\bgit'"$_GIT_GOPTS"'[[:space:]]+push\b'; then
+_PUSH_END='([^A-Za-z0-9_-]|$)'
+_dfc=$(data_free_cmd)
+
+# _git_alias_pushes <name> <dir> — 0 when `git <name>`, run in <dir>, expands
+# to a push through one or more aliases.
+_git_alias_pushes() {
+    local name="$1" dir="$2" val depth
+    for ((depth = 0; depth < 10; depth++)); do
+        val=$(git -C "$dir" config --get "alias.$name" 2>/dev/null) || return 1
+        [ -n "$val" ] || return 1
+        # An alias named after a real git command is never used by git.
+        git -C "$dir" --list-cmds=main,others 2>/dev/null | grep -qxF -- "$name" && return 1
+        if [[ "$val" == '!'* ]]; then
+            # Shell alias: any push word counts (`!git push`, `!f() { git push; }; f`).
+            printf '%s' "$val" | grep -qE '(^|[^A-Za-z0-9_-])push'"$_PUSH_END" && return 0
+            return 1
+        fi
+        printf ' %s' "$val" | grep -qE '^'"$_GIT_GOPTS"'[[:space:]]+push'"$_PUSH_END" && return 0
+        name=$(printf ' %s' "$val" | sed -E 's/^'"$_GIT_GOPTS"'[[:space:]]+//' | awk '{print $1}')
+        [ -n "$name" ] || return 1
+    done
+    return 1
+}
+
+_push_how=""
+if printf '%s\n' "$_dfc" | grep -qE '\bgit'"$_GIT_GOPTS"'[[:space:]]+push'"$_PUSH_END"; then
+    _push_how="direct"
+elif printf '%s\n' "$_dfc" | grep -qE '\balias\.[A-Za-z0-9_.-]+|\[alias\]' \
+  && printf '%s\n' "$_dfc" | grep -qE '(^|[^A-Za-z0-9_-])push'"$_PUSH_END"; then
+    _push_how="defines a git alias that pushes"
+elif printf '%s\n' "$_dfc" | grep -qE '\.gitconfig|\.git/config|/git/config' \
+  && printf '%s\n' "$cmd" | grep -qF '[alias]' \
+  && printf '%s\n' "$cmd" | grep -qE '(^|[^A-Za-z0-9_-])push'"$_PUSH_END"; then
+    # A heredoc body is data to data_free_cmd; written into a git config
+    # file (named outside the data), an [alias] section is configuration
+    # all the same.
+    _push_how="writes a git alias that pushes into a git config file"
+else
+    _base="${hook_cwd:-$PWD}"
+    while IFS= read -r _inv; do
+        [ -n "$_inv" ] || continue
+        _sub="${_inv##*[[:space:]]}"
+        _dir="$_base"
+        if [[ "$_inv" =~ [[:space:]]-C[[:space:]]+(\"[^\"]*\"|\'[^\']*\'|[^[:space:]]+) ]]; then
+            _cdir="${BASH_REMATCH[1]}"; _cdir="${_cdir//[\"\']/}"
+            # shellcheck disable=SC2088 # literal tilde token, expanded by hand
+            [[ "$_cdir" == '~/'* ]] && _cdir="$HOME/${_cdir#'~/'}"
+            [[ "$_cdir" == /* ]] || _cdir="$_base/$_cdir"
+            _dir="$_cdir"
+        fi
+        [ -d "$_dir" ] || _dir="$HOME"
+        if _git_alias_pushes "$_sub" "$_dir"; then
+            _push_how="runs \`git $_sub\`, a git alias for push"
+            break
+        fi
+    done < <(printf '%s\n' "$_dfc" | grep -oE '\bgit'"$_GIT_GOPTS"'[[:space:]]+[A-Za-z][A-Za-z0-9_.-]*' \
+             | grep -vE '[[:space:]](status|log|diff|show|add|commit|fetch|pull|checkout|switch|branch|rebase|merge|stash|rev-parse|config|remote|tag|reset|restore|worktree|ls-files|grep|blame|describe|clean|init|clone|help|version)$')
+fi
+if [ -n "$_push_how" ]; then
     if git_push_authorized; then
         : # authorized by user message — allow
-    else
+    elif [ "$_push_how" = "direct" ]; then
         hard_deny "$PUSH_DENY_MSG"
+    else
+        hard_deny "Blocked: this command $_push_how, and ${PUSH_DENY_MSG#Blocked: }"
     fi
 fi
 
@@ -606,8 +688,8 @@ fi
 
 # ── Generic output redirect guard ────────────────────────────────────────────
 # Safety net: catch any command writing to a file via > or >> that was not
-# already handled by a specific guard above (those guards exit 0 on match,
-# so this only fires for unhandled commands).
+# already handled by a specific guard above (a guard that asked first keeps
+# its own reason: ask() records only the first one).
 # The character class [^[:space:]&>/] already excludes fd-to-fd redirects
 # (>&2) and absolute paths (>/dev/null, >/tmp/…). Do NOT add a blanket
 # "skip if >/dev/null appears anywhere" — that suppresses the guard for
@@ -768,6 +850,12 @@ fi
 # The wsl binary itself can run commands on the Windows host or switch distros.
 if echo "$cmd" | grep -qiE '(^|[[:space:]])(wsl)([[:space:]]|$)'; then
     hard_deny "$WSL_DENY_MSG"
+fi
+
+# ── Deferred ask ─────────────────────────────────────────────────────────────
+# Every hard deny has had its turn; now raise the prompt, if any guard asked.
+if [ -n "$_ask_reason" ]; then
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$_ask_reason"
 fi
 
 exit 0
