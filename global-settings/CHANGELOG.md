@@ -10,6 +10,10 @@ Versions 1.0.0 to 1.3.0 were released from the now archived `ConductionNL/claude
 
 The update notice is now short at session start and says in one sentence what each pending version adds. Ask Claude how to update for the full steps, or for the details of the changes with links to the pull requests.
 
+## 2.7.3 — 2026-10-02
+
+A hard block anywhere in a chained command now wins over a prompt for another part of it, and a git alias that pushes (or a command that defines one) needs the push phrase just like `git push`.
+
 ## 2.7.2 — 2026-10-01
 
 An unauthorized `git push` is now denied in every form, including `git -C <path> push`, `git -c k=v push` and a push chained after a command Claude was asked to approve.
