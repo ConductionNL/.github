@@ -197,7 +197,7 @@ The dispatcher never blocks Claude regardless of state — a broken personal hoo
 - `plan-context.sh` (`UserPromptSubmit`) points Claude at those guides, and at notes in that repo, when your prompt is about such work.
 - `read-markers.sh` is the read log both scripts share. It records which parts of a file were read, so a guide that was only partly read does not count as read.
 
-[`hooks/README.md`](https://github.com/ConductionNL/readonly-mirror-wilco-claude-plans/blob/main/hooks/README.md) describes every rule and the `user-hooks.json` entries. The scripts are written for that developer's own setup. The paths, the plans tree and the role lines in the messages are theirs, so adapt them before you register a copy (see [Enabling per-user hooks](#enabling-per-user-hooks)). The production read-only guard started there and has been part of `block-write-commands.sh` since v2.6.0.
+[`hooks/README.md`](https://github.com/ConductionNL/readonly-mirror-wilco-claude-plans/blob/main/hooks/README.md) describes every rule. Its section [Overnemen voor je eigen Claude Code](https://github.com/ConductionNL/readonly-mirror-wilco-claude-plans/blob/main/hooks/README.md#overnemen-voor-je-eigen-claude-code) (in Dutch) is the guide to taking them over: which parts work without that developer's plans tree, how to clone the mirror and run the test suites first, the `user-hooks.json` entries for your own path (set the file up first under [Enabling per-user hooks](#enabling-per-user-hooks)), and which messages name that developer's roles and need adapting. The production read-only guard started there and has been part of `block-write-commands.sh` since v2.6.0.
 
 ## Not part of the global settings: your own `~/.claude/CLAUDE.md`
 
@@ -296,7 +296,7 @@ If Claude reports `Permission denied` mid-update, that is this and nothing else.
 
 `block-write-commands.sh` hard-denies `kubectl` / `oc` with a mutating verb (`apply`, `create`, `delete`, `edit`, `patch`, `replace`, `scale`, `set`, `label`, `annotate`, `exec`, `cp`, `drain`, `cordon`, `uncordon`, `taint`, `run`, `expose`, `autoscale`, `debug`, `attach`, `rollout` except `status`/`history`) and `helm install|upgrade|uninstall|delete|rollback`, whenever the same command segment names a `*-prod` namespace or context. No phrase unlocks it: Claude gives you the filled-in command and you run it. Reads (`get`, `describe`, `logs`, `top`, `rollout status`) and every non-prod namespace are not this guard's business.
 
-The check runs **before** every `ask` guard. An ask exits the hook, so a production write chained after, for example, `gh pr create` would otherwise get through on one approval of the gh prompt.
+The check runs **before** every `ask` guard. Before v2.7.3 an ask exited the hook, so that placement was what kept a production write chained after, for example, `gh pr create` from getting through on one approval of the gh prompt; since v2.7.3 every hard deny wins over every ask regardless of placement — see [A hard deny always beats a prompt](#a-hard-deny-always-beats-a-prompt-v273).
 
 ### Data is not a command
 
@@ -314,7 +314,30 @@ Without an authorization phrase in your last message, `block-write-commands.sh` 
 - with git's global options before `push`: `git -C <path> push`, `git -c key=value push`, `git --no-pager push`, `git -P push`, `git --git-dir <path> push`, `git --work-tree <path> push`;
 - chained after a command that prompts: `git -C repo commit -m … && git push`, `gh pr create … && git push`, `curl -X POST … ; git push`.
 
-Before v2.7.2 the push check ran after the `git -C`, `gh`, `curl` and `docker` prompts. An ask exits the hook, so approving that prompt also ran the chained push without the phrase. The check now runs before every `ask`, like the production guard, and with the phrase the hook still asks about the rest of the command.
+Before v2.7.2 the push check ran after the `git -C`, `gh`, `curl` and `docker` prompts. An ask exited the hook, so approving that prompt also ran the chained push without the phrase. The check now runs before every `ask`, like the production guard, and with the phrase the hook still asks about the rest of the command.
+
+Since v2.7.3 two more forms count as a push:
+
+- **a git alias that resolves to `push`.** For every git subcommand in the command the hook runs `git config --get alias.<name>` — in the `-C` directory or the session's working directory — and follows alias-to-alias chains up to ten deep: `git p` with `alias.p = push`, `alias.pp = p`, `alias.sp = !git push origin` or `alias.x = -c k=v push` is denied like `git push`. A name git ships as a command is skipped, because git ignores an alias that shadows a command.
+- **defining such an alias**: `git config alias.p push`, `git config set alias.p push`, `git -c alias.p=push p`, `git -c 'alias.p=!git push' p`, or an `[alias]` section with `push` written into `.gitconfig`, `.git/config` or `~/.config/git/config` (heredoc included).
+
+`push` must end the word: `git push-notes` is a different command and is no longer denied as a push (an alias named `push-notes` that pushes still is).
+
+Not covered: git configuration set through `GIT_CONFIG_*` environment variables or `--config-env`, and a push hidden inside a script that an alias runs.
+
+## A hard deny always beats a prompt (v2.7.3)
+
+Before v2.7.3, `ask()` printed its prompt and exited on the spot. Every hard deny placed lower in `block-write-commands.sh` was then never reached for a chained command, so one approval of the first part also ran the rest:
+
+| Command | Before v2.7.3 | Since v2.7.3 |
+|---|---|---|
+| `gh pr create … && date -s 2020-01-01` | prompt for `gh` — the clock change ran too | denied (`date -s`) |
+| `rm build.log && npm ci --legacy-peer-deps` | prompt for `rm` | denied (`--legacy-peer-deps`) |
+| `curl -X POST … && ln -s /tmp/x ~/.claude/settings.json` | prompt for `curl` | denied (link to a config file) |
+| `docker compose up -d && bash /tmp/script-that-writes-claude-config.sh` | prompt for `docker` | denied (script-body scan) |
+| `git -C repo commit -m x && cd /mnt/c` (or `powershell.exe`, `wsl`) | prompt for `git -C` | denied (WSL boundary) |
+
+Now `ask()` only records its reason. Every guard runs, a hard deny anywhere wins, and the prompt is raised at the very end of the hook — once, with the reason of the first guard that asked (the same reason you saw before). The order of the parts in the command does not matter either: `date -s … && gh pr create …` is denied the same way.
 
 ## ⚠️ Bumping the version — REQUIRED on every change
 
@@ -338,7 +361,7 @@ Use the `/verify-global-settings-version` command to check whether a version bum
 The settings use four independent layers of protection, each catching what the others miss:
 
 1. **Deny-list** (`settings.json` deny rules) — hard-blocks file edits to `~/.claude/` config files and destructive Bash commands. These cannot be overridden from within a Claude session. The rules are `Edit(...)` only: one `Edit(path)` rule covers every file-editing tool (Write, MultiEdit, NotebookEdit), while a `Write(path)` rule is not matched by file-permission checks at all — the seven inert `Write(...)` twins were dropped in v2.4.5.
-2. **Bash hook** (`block-write-commands.sh`) — runs on every Bash command. Catches write operations, command chaining, obfuscation, symlink attacks, and (since v1.7.0) `chattr` attempts on protected paths plus script-body scans for invoked scripts that target `~/.claude/`. Can deny (hard block) or ask (prompt the user). Since v2.6.0 it also hard-blocks production writes and ignores *data* in two checks — see [Production is read-only](#production-is-read-only-v260). Since v2.7.2 the `git push` check, too, runs before every prompt — see [`git push` needs the phrase in every form](#git-push-needs-the-phrase-in-every-form-v272).
+2. **Bash hook** (`block-write-commands.sh`) — runs on every Bash command. Catches write operations, command chaining, obfuscation, symlink attacks, and (since v1.7.0) `chattr` attempts on protected paths plus script-body scans for invoked scripts that target `~/.claude/`. Can deny (hard block) or ask (prompt the user). Since v2.6.0 it also hard-blocks production writes and ignores *data* in two checks — see [Production is read-only](#production-is-read-only-v260). Since v2.7.2 the `git push` check, too, runs before every prompt — see [`git push` needs the phrase in every form](#git-push-needs-the-phrase-in-every-form-v272) — and since v2.7.3 a prompt is raised only after every hard deny has had its turn — see [A hard deny always beats a prompt](#a-hard-deny-always-beats-a-prompt-v273).
 3. **Tool hook** (`block-config-tool-writes.sh`, added in v1.7.0) — runs on Write/Edit/MultiEdit tool calls. Denies tools whose `file_path` is a protected `~/.claude/` config file, and denies tools that would create a _script_ whose body, when executed, would write to a protected path. Closes the "write a script then run it" bypass. Since v2.4.6 the body scan exempts the canonical sources in this repo's `global-settings/` directory (matched by their exact filenames, plus `tests/*.sh`) — those files *are* the update mechanism, so their bodies necessarily contain the operations the scan looks for, and without the exemption Claude could never maintain them. The exemption matches on a canonicalized path (`realpath -m`, plus an outright refusal to exempt any path still carrying a `..` component), so neither a traversal nor a symlinked parent can reach an exempt pattern while landing on an installed file. The exemption covers staging only. What still holds after it: the installed copies stay covered by this hook's `file_path` guard and by layer 4, and layer 2 catches the common invocation shapes (`bash <path>`, `source <path>`, bare-path execution) if such a script is run. Layer 2's script-body scan is not exhaustive — it reads the first token of each command segment, so wrapper forms like `nohup bash <path>` or `timeout 5 bash <path>` slip past it. That limit is not introduced here: staging an executable payload was already possible pre-exemption via any path a script-extension check doesn't cover (`/tmp/x.txt` with no shebang, then `bash /tmp/x.txt`). Layer 4 is what actually closes it, which is why the relock matters.
 4. **Kernel immutability** (`chattr +i`, the new authoritative layer in v1.7.0) — once set, the kernel refuses every write to the file regardless of permissions, regardless of which process attempts it, regardless of any hook outcome. Only `root` can clear the bit, and only `sudo chattr -i` (which Claude is hard-blocked from running) toggles it.
 
