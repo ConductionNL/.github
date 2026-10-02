@@ -321,14 +321,14 @@ When both define the same server name, the project-scope entry wins.
 
 ## What `block-write-commands.sh` does
 
-- Reads **JSON from stdin** once into a variable, then extracts `cmd` and `transcript_path`.
-- On deny, prints `permissionDecision: "deny"` JSON. On ask, prints `permissionDecision: "ask"` JSON. On allow, exits `0`.
+- Reads **JSON from stdin** once into a variable, then extracts `cmd`, `transcript_path` and `cwd`.
+- On deny, prints `permissionDecision: "deny"` JSON and exits `2`. On ask, prints `permissionDecision: "ask"` JSON — since v2.7.3 only at the end, after every deny check has run, so a hard block anywhere in a chained command wins over a prompt for another part. On allow, exits `0`.
 
 | Area                         | Allowed silently                                                          | Prompts for approval                                                    | Hard blocked                                        |
 | ---------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------- |
 | **curl**                     | —                                                                         | All curl write commands (data/output flags); canonical GitHub raw URL passes when wrapped in a config-file write | —                                                   |
 | **gh api**                   | —                                                                         | All gh api commands (not auto-approved)                                 | —                                                   |
-| **git push**                 | Last user message contains authorized phrase                              | —                                                                       | Blocked otherwise — in every form (`git -C <path> push`, `git -c k=v push`, `git --no-pager push`) and when chained after a command that prompts (v2.7.2) |
+| **git push**                 | Last user message contains authorized phrase                              | —                                                                       | Blocked otherwise — in every form (`git -C <path> push`, `git -c k=v push`, `git --no-pager push`, v2.7.2; a git alias for push, v2.7.3) and when chained with a command that prompts |
 | **git -C**                   | Read-only subcommands                                                     | Write subcommands, branch/remote writes                                 | `push` (phrase-authorized)                          |
 | **git branch** (bare)        | `--list`, `-a`, `-v` (auto-approved)                                      | `-d/-D/-m/-M/-c/-C`, `--delete`, `--move`, `--copy`                     | —                                                   |
 | **git remote** (bare)        | `-v`, `show` (auto-approved)                                              | `add`, `remove`, `rename`, `set-url`, `prune`, `update`                 | —                                                   |
