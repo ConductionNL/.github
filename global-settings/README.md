@@ -16,6 +16,7 @@ Current version: see [`VERSION`](VERSION)
 | `sound-notify.sh`             | `~/.claude/hooks/sound-notify.sh`             | Optional notification-sound wrapper. Reads `~/.claude/sound-config.sh` and plays a sound on question / permission / stop events. Silent by default (added in v2.2.0)         |
 | `user-hooks-dispatch.sh`      | `~/.claude/hooks/user-hooks-dispatch.sh`      | Reads `~/.claude/user-hooks.json` and executes per-user hooks for every Claude Code event. Lets each user register private hooks that survive a settings update (added in v2.4.0) |
 | `VERSION`                     | `~/.claude/settings-version`                  | Installed version tracker (semver)                                                                                          |
+| `CHANGELOG.md`                | not installed                                 | One sentence per version; shown in the update notice as "What this update adds" (added in v2.8.0)                          |
 | `settings-repo-url.example`   | `~/.claude/settings-repo-url`                 | GitHub repo slug for online version checking                                                                                |
 | `settings-repo-ref.example`   | `~/.claude/settings-repo-ref`                 | Branch to track (defaults to `main` when absent; the GitHub raw URL uses `raw.githubusercontent.com/<slug>/<ref>/`)         |
 | `sound-config.sh.example`     | `~/.claude/sound-config.sh` (optional)        | Opt-in sound configuration. Only install if you want notification sounds. User-editable — **not** `chattr +i`-locked        |
@@ -275,6 +276,16 @@ When the installed version already matches the online one, the hook also compare
 
 A missing or changed file turns the session-start message into **FILES OUT OF SYNC**. It names the files, the phrase for step 3 is **"repair my global settings"**, and the unlock, contract and relock steps are the same as for an update. Only the affected files are rewritten; `VERSION` is left alone. On the GitHub path the check costs two extra fetches per session (`settings.json`, then every registered hook in one `curl` call); on the git-fetch path it costs none. A canonical file that could not be fetched is reported as not verified, never as fine.
 
+### A short notice, and what the update adds (v2.8.0)
+
+The update notice comes back in every new session until you update, so Claude shows it **short** at session start: the header, the installed and latest version, what the update adds, a reminder that unlocking takes two commands (`sudo chattr -i` and `chmod u+w`) and relocking one (`sudo chattr +i`), and that you can ask for more. Ask Claude how to update and you get the full steps 1 to 4 above, with every command in its own block and both relock options. After the update Claude always shows the relock step, whether or not you asked for the full steps. The FILES OUT OF SYNC notice is still shown in full.
+
+The UPDATE REQUIRED notice has a **What this update adds** block under the version lines: one sentence per version after the installed one, up to the latest, newest first, taken from [`CHANGELOG.md`](CHANGELOG.md). It shows at most five versions and counts the rest. A version without an entry is listed as such, not left out. If `CHANGELOG.md` cannot be fetched, the block says so, and the update itself is unaffected. On the GitHub path this costs one extra fetch, and only when an update is pending.
+
+Ask Claude for more details and it looks up the commit that set `VERSION` to each listed version, reads its message, changed files and pull request, and explains the change with a link to that pull request (or the commit when none merged it). The notice gives Claude the `gh api` and `git log` commands for this, so the answer comes from the history, not from the summary sentence.
+
+The notice is printed by the *installed* hook, so the short form and the block first appear when you update **from** v2.8.0 or later to a newer version.
+
 ### The update contract
 
 Claude reinstalls each file with `chmod 555` (hooks) or `chmod 444` (`settings-version`) because `block-write-commands.sh` permits only those two modes on protected paths — `chmod 644`, `chmod u+w` and `chattr` are all hard-denied to Claude, by design, so it can never widen its own access. The consequence is the one step 1 covers: read-only mode is *sticky* across updates and only you can clear it.
@@ -333,6 +344,8 @@ Now `ask()` only records its reason. Every guard runs, a hard deny anywhere wins
 **Any commit that modifies an *installed artifact* in `global-settings/` MUST also increment `VERSION`.** An installed artifact is anything the [Install](#install) steps copy into `~/.claude/` — `settings.json`, the hook scripts, and the `.example` files.
 
 Failing to bump the version means users will not be warned to update, and their installed settings will silently fall behind.
+
+**Every bump also adds an entry to [`CHANGELOG.md`](CHANGELOG.md)**: a `## X.Y.Z — YYYY-MM-DD` heading, dated the day the version reaches `main`, with one sentence under it that says what the update adds, in words a developer understands without opening the code. The update notice shows that sentence. A missing entry, or a heading without a date, fails the version-check tests.
 
 Changes to `global-settings/README.md` alone do **not** require a bump: nothing installed changes, so a bump would push every developer through the unlock/relock cycle to copy a file they don't have. Documentation under `docs/claude/` is likewise never a trigger.
 
