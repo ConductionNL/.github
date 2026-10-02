@@ -322,7 +322,7 @@ Before v2.7.2 the push check ran after the `git -C`, `gh`, `curl` and `docker` p
 
 Failing to bump the version means users will not be warned to update, and their installed settings will silently fall behind.
 
-**Every bump also adds an entry to [`CHANGELOG.md`](CHANGELOG.md)**: a `## X.Y.Z` heading with one sentence under it that says what the update adds, in words a developer understands without opening the code. The update notice shows that sentence. A missing entry fails the version-check tests.
+**Every bump also adds an entry to [`CHANGELOG.md`](CHANGELOG.md)**: a `## X.Y.Z — YYYY-MM-DD` heading, dated the day the version reaches `main`, with one sentence under it that says what the update adds, in words a developer understands without opening the code. The update notice shows that sentence. A missing entry fails the version-check tests.
 
 Changes to `global-settings/README.md` alone do **not** require a bump: nothing installed changes, so a bump would push every developer through the unlock/relock cycle to copy a file they don't have. Documentation under `docs/claude/` is likewise never a trigger.
 
