@@ -34,7 +34,8 @@ deliberate:
 
 1. **The signature is imposed from outside.**  The declaring class names a
    supertype (``implements`` / ``extends``, transitively) that is resolvable in
-   this repository and declares the same method with the same parameter.  This
+   this repository (under ``lib/`` or a ``stubs``/``Stubs`` directory: the root
+   one or any under ``tests/``) and declares the same method with the same parameter.  This
    is fully mechanical: nothing the author asserts, only what the type graph
    says.  It is what makes the exemption un-sprinklable — a fixer agent cannot
    escape the rule by adding a docblock line, because an invented service
@@ -62,8 +63,8 @@ deliberate:
 FAIL-CLOSED
 -----------
 Anything unresolvable is NOT an exemption: a supertype that lives outside this
-repository (an OCP interface, a vendored contract) cannot be inspected, so the
-finding stands.  Every error path exits non-zero.  A gate helper that cannot
+repository (an OCP interface, a vendored contract) and that no stub mirrors
+cannot be inspected, so the finding stands.  Every error path exits non-zero.  A gate helper that cannot
 read its input must not answer "exempt".
 
 Usage:
@@ -162,25 +163,62 @@ def parse_supertypes(header):
     return names
 
 
-def index_types(root):
-    """Map short type name -> [file paths] for every PHP type declared under lib/."""
-    index = {}
+# Directories, besides lib/, whose PHP files mirror a contract that lives in
+# ANOTHER app (.github: learniq's LifecycleGuardInterface false positive).
+#
+# Every guard learniq ships implements OpenRegister's
+# `OCA\OpenRegister\Lifecycle\LifecycleGuardInterface::check(array $object,
+# string $action, string $userId)`. OpenRegister is not a composer dependency,
+# so the interface is not in this repository's lib/ and condition 1 could never
+# be met: six correctly marked guards were reported with no closing action.
+#
+# The fleet already carries those contracts as PHP stubs, because psalm,
+# phpstan and phpunit need them too (learniq, launchpad and pipelinq under
+# tests/Stubs, thematiq under stubs/). A stub is INSPECTABLE, so reading it keeps
+# condition 1 mechanical: the stub must declare the same method with the same
+# parameter, exactly as a lib/ supertype must. A supertype found nowhere is
+# still not an exemption (fail-closed is unchanged).
+STUB_DIR_NAMES = ('stubs', 'Stubs')
+
+
+def contract_dirs(root):
+    """lib/ plus every stub directory: <root>/stubs and any tests/**/stubs."""
+    dirs = []
     lib = os.path.join(root, 'lib')
-    if not os.path.isdir(lib):
-        return index
-    for dirpath, _dirnames, filenames in os.walk(lib):
-        for fn in filenames:
-            if not fn.endswith('.php'):
-                continue
-            path = os.path.join(dirpath, fn)
-            try:
-                lines = read_lines(path)
-            except OSError:
-                continue
-            for line in lines:
-                m = TYPE_DECL.match(line)
-                if m:
-                    index.setdefault(m.group(2), []).append(path)
+    if os.path.isdir(lib):
+        dirs.append(lib)
+    for name in STUB_DIR_NAMES:
+        top = os.path.join(root, name)
+        if os.path.isdir(top) and top not in dirs:
+            dirs.append(top)
+    tests = os.path.join(root, 'tests')
+    if os.path.isdir(tests):
+        for dirpath, dirnames, _filenames in os.walk(tests):
+            dirnames[:] = [d for d in dirnames if d not in ('node_modules', 'vendor')]
+            if os.path.basename(dirpath) in STUB_DIR_NAMES:
+                dirs.append(dirpath)
+                dirnames[:] = []  # its subtree is walked by index_types
+    return dirs
+
+
+def index_types(root):
+    """Map short type name -> [file paths] for every PHP type declared under
+    lib/ or a stub directory (see STUB_DIR_NAMES)."""
+    index = {}
+    for base in contract_dirs(root):
+        for dirpath, _dirnames, filenames in os.walk(base):
+            for fn in filenames:
+                if not fn.endswith('.php'):
+                    continue
+                path = os.path.join(dirpath, fn)
+                try:
+                    lines = read_lines(path)
+                except OSError:
+                    continue
+                for line in lines:
+                    m = TYPE_DECL.match(line)
+                    if m and path not in index.get(m.group(2), []):
+                        index.setdefault(m.group(2), []).append(path)
     return index
 
 

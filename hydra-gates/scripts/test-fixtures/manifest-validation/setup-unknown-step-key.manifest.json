@@ -1,0 +1,56 @@
+{
+	"$schema": "https://conduction.nl/schemas/app-manifest-v2.schema.json",
+	"version": "1.0.0",
+	"menu": [
+		{
+			"id": "Widgets",
+			"label": "Widgets",
+			"icon": "ViewDashboardOutline",
+			"route": "Widgets",
+			"order": 10
+		}
+	],
+	"pages": [
+		{
+			"id": "Widgets",
+			"route": "/widgets",
+			"type": "index",
+			"title": "Widgets",
+			"config": {
+				"register": "fixture",
+				"schema": "widget"
+			}
+		},
+		{
+			"id": "WidgetDetail",
+			"route": "/widgets/:id",
+			"type": "detail",
+			"title": "Widget",
+			"config": {
+				"register": "fixture",
+				"schema": "widget"
+			}
+		}
+	],
+	"setup": {
+		"version": 1,
+		"completionConfigKey": "setup_completed_version",
+		"steps": [
+			{
+				"id": "welcome",
+				"type": "info",
+				"title": "Welcome",
+				"body": "A short setup."
+			},
+			{
+				"id": "remove-example-set",
+				"type": "run-action",
+				"action": "remove-example-set",
+				"title": "Remove the example data",
+				"required": false,
+				"body": "Runs only when you click the button.",
+				"onDemandd": true
+			}
+		]
+	}
+}
