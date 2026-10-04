@@ -43,7 +43,7 @@ _no() { echo "FAIL — $1"; _fails=$((_fails + 1)); }
 
 # Guard the guard: if the fixtures go missing again, say so rather than quietly
 # re-running the "Tier 0, skipping" exit-0 path and reporting it as green.
-for _f in valid-apphost malformed-apphost non-apphost; do
+for _f in valid-apphost malformed-apphost non-apphost setup-ondemand setup-unknown-step-key; do
 	if [ ! -f "${FIX}/${_f}.manifest.json" ]; then
 		echo "FAIL — fixture ${FIX}/${_f}.manifest.json is MISSING; this suite cannot assert anything"
 		exit 1
@@ -87,6 +87,14 @@ else
 	_assert_log '^at /observability/health/checks/0/type' "the failure NAMES the bad health-check type"
 	_assert_log '^at /deepLinks/0' "the failure NAMES the incomplete deepLink"
 	_assert 0 non-apphost.manifest.json       "non-AppHost manifest → PASS (unaffected)"
+	# The vendored schema must keep up with the published one (learniq,
+	# 2026-10-04): `onDemand` on a run-action setup step is published since
+	# schema 2.42.0 (@conduction/nextcloud-vue 2.59.0), and the 2.37.0 copy
+	# rejected a manifest the library accepts. The second fixture differs by one
+	# misspelt key, so the step stays closed to keys the library does not know.
+	_assert 0 setup-ondemand.manifest.json   "setup step with onDemand (schema >= 2.42.0) → PASS"
+	_assert 1 setup-unknown-step-key.manifest.json "setup step with an unknown key → FAIL"
+	_assert_log '^at /setup/steps/1: must NOT have additional properties' "the failure NAMES the step with the unknown key"
 fi
 
 # --- the degraded contract --------------------------------------------------
