@@ -105,24 +105,30 @@ check('a property REMOVED under additionalProperties:false is reported', () => {
 
 // --- the real pair this helper was written for ------------------------------
 
-check('the shipped 2.33.0 -> 2.37.0 bump reads additive in BOTH directions of the check', () => {
-	// Forward: nothing got stricter, which is why #785 could be merged without
-	// a warning period. Reverse: the same two files DO produce findings, which
-	// is the control proving the forward "none" was a measurement and not a
-	// checker that cannot speak.
+check('the shipped 2.41.0 -> 2.42.0 bump reads additive in BOTH directions of the check', () => {
+	// Forward: nothing got stricter. Reverse: the same two files DO produce
+	// findings, which is the control proving the forward "none" was a
+	// measurement and not a checker that cannot speak.
+	//
+	// The pair is the vendored schema with and without the key its latest bump
+	// added. It used to be savedViewPlaces (2.33.0 -> 2.37.0, #785); the
+	// library has since dropped that key, so the arm now follows the addition
+	// the current copy was vendored for: `onDemand` on a setup step (2.42.0).
 	const vendored = path.resolve(__dirname, '..', 'schemas', 'app-manifest-v2.schema.json')
 	assert.ok(fs.existsSync(vendored), 'vendored schema is missing')
 	const doc = JSON.parse(fs.readFileSync(vendored, 'utf8'))
+	const step = doc.properties.setup.properties.steps.items
+	assert.ok(step.properties.onDemand, 'the vendored schema no longer declares setup.steps[].onDemand; re-point this arm at the latest addition')
+	assert.strictEqual(step.additionalProperties, false, 'setup steps are no longer closed; the reverse control cannot fire')
 	const stripped = JSON.parse(JSON.stringify(doc))
-	delete stripped.$defs.savedViewPlaces
-	delete stripped.$defs.page.properties.savedViewPlaces
+	delete stripped.properties.setup.properties.steps.items.properties.onDemand
 
 	const forward = run(stripped, doc)
-	assert.strictEqual(forward.code, 0, `adding savedViewPlaces back should be additive, got exit ${forward.code}: ${forward.out}`)
+	assert.strictEqual(forward.code, 0, `adding onDemand back should be additive, got exit ${forward.code}: ${forward.out}`)
 
 	const reverse = run(doc, stripped)
-	assert.strictEqual(reverse.code, 1, 'removing savedViewPlaces must be reported as a tightening')
-	assert.match(reverse.out, /savedViewPlaces/)
+	assert.strictEqual(reverse.code, 1, 'removing onDemand must be reported as a tightening')
+	assert.match(reverse.out, /onDemand/)
 })
 
 fs.rmSync(TMP, { recursive: true, force: true })
