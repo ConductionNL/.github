@@ -2438,7 +2438,22 @@ while IFS= read -r f; do
             _sig_region=$(awk -v start="${_line_no}" 'NR >= start { printf "%s", $0; if (/[;{]/) exit }' "${_stub_code}")
             _sig_term=$(printf '%s' "${_sig_region}" | grep -oE '[;{]' | head -1)
             [ "${_sig_term}" = ";" ] && continue
-            _body=$(awk -v start="${_line_no}" 'NR >= start { print; if (NR > start && /^    \}/) exit }' "${_stub_code}")
+            # THE BODY ENDS AT THE BRACE THAT MATCHES THE SIGNATURE'S OWN
+            # INDENT, NOT AT FOUR SPACES. The stop used to be `^    \}`, so a
+            # TAB-indented file (learniq, and anything else on the Nextcloud
+            # tab style) never matched it: "the body" ran from the signature to
+            # EOF. A stub that ignores $userId then read as using it whenever a
+            # LATER method in the file mentioned $userId (a false negative), and
+            # the `< 4` short-method skip below could never fire. The closing
+            # brace is the first line that is exactly the signature's leading
+            # whitespace followed by `}`, which is the same `^    \}` for a
+            # four-space file and `^\t\}` for a tab one.
+            _body=$(awk -v start="${_line_no}" '
+                NR == start { match($0, /^[ \t]*/); ind = substr($0, 1, RLENGTH) }
+                NR >= start {
+                    print
+                    if (NR > start && substr($0, 1, length(ind)) == ind && substr($0, length(ind) + 1, 1) == "}") exit
+                }' "${_stub_code}")
             _body_lines=$(echo "${_body}" | wc -l)
             # A legitimate ≥3-line method that accepts a caller-identity
             # param and never references it is a stub. Skip very short
