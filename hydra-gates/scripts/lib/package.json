@@ -1,0 +1,4 @@
+{
+	"//": "The helpers here are CommonJS. Without this file Node takes the module type from the nearest package.json ABOVE the checkout, so a package sitting under a \"type\": \"module\" tree (the Nextcloud server checkout) crashed with: require is not defined in ES module scope.",
+	"type": "commonjs"
+}
