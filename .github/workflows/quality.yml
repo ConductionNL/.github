@@ -5190,13 +5190,13 @@ jobs:
           # it APCu loads but stays inert, which looks exactly like not having
           # installed it.
           #
-          # `opcache.enable_cli=1` for the same reason. OPcache ships enabled
-          # for every SAPI except the CLI, so `php -S` compiled Nextcloud's PHP
-          # from scratch on EVERY request: each page load and each fetch() a
-          # spec makes. The setup log of thematiq run 37305793889 shows
-          # `apc.enable_cli=1` as the only value added, at about 26 s per test.
-          # The sizes follow Nextcloud's own recommended OPcache settings; the
-          # defaults are too small to hold server, app and sibling apps at once.
+          # OPcache and `php -S`: the built-in server runs as the `cli-server`
+          # SAPI, not `cli`, and OPcache is already on there by default.
+          # `opcache.enable_cli` switches it on only for `cli` and `phpdbg`, so
+          # here it reaches just the `occ` and Composer processes. The three
+          # size settings are the part the server uses: they are set above the
+          # PHP defaults (128 MB / 8 MB / 10000 files) so that server, app and
+          # sibling apps fit at once. Neither part has been timed on this job.
           extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json, apcu
           ini-values: apc.enable_cli=1, opcache.enable_cli=1, opcache.memory_consumption=256, opcache.interned_strings_buffer=16, opcache.max_accelerated_files=20000
           tools: composer:v2
