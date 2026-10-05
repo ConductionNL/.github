@@ -5186,9 +5186,10 @@ jobs:
           # session does not survive between requests on this instance …
           # this harness has no cache backend".
           #
-          # `apc.enable_cli=1` matters because `php -S` IS the CLI SAPI: without
-          # it APCu loads but stays inert, which looks exactly like not having
-          # installed it.
+          # `apc.enable_cli=1` is what lets APCu work for the `occ` and `php -r`
+          # CLI processes (the APCu check in "Configure the Nextcloud cache
+          # backend" runs under `php -r`). Whether APCu needs it under the
+          # `cli-server` SAPI was not verified here.
           #
           # OPcache and `php -S`: the built-in server runs as the `cli-server`
           # SAPI, not `cli`, and OPcache is already on there by default.
