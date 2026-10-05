@@ -6061,16 +6061,34 @@ jobs:
           # A real file on disk is served as-is by ci-router.php (rule 1), so a
           # throwaway script under server/ is reached the same way status.php is.
           # A warning, not a failure: without OPcache the suite is slower, not
-          # wrong. A curl error gives the warning too, and nothing here can fail
-          # the step. This branch is not covered by the repo's self-tests.
-          printf '%s\n' '<?php header("Content-Type: text/plain"); $s = function_exists("opcache_get_status") ? opcache_get_status(false) : false; echo (is_array($s) && !empty($s["opcache_enabled"])) ? "opcache=on" : "opcache=off";' > ci-opcache-probe.php
-          OPCACHE_STATE="$(curl -s --max-time 10 http://localhost:8080/ci-opcache-probe.php || true)"
-          rm -f ci-opcache-probe.php
-          if [ "$OPCACHE_STATE" = "opcache=on" ]; then
-            echo "OPcache is enabled in the php -S server."
+          # wrong. No answer from the probe is "unknown", not "off", and nothing
+          # here can fail the step. This branch is not covered by the repo's
+          # self-tests.
+          OPCACHE_STATE=""
+          if printf '%s\n' '<?php header("Content-Type: text/plain"); $s = function_exists("opcache_get_status") ? opcache_get_status(false) : false; echo (is_array($s) && !empty($s["opcache_enabled"])) ? "opcache=on" : "opcache=off";' > ci-opcache-probe.php; then
+            OPCACHE_STATE="$(curl -s --max-time 10 http://localhost:8080/ci-opcache-probe.php || true)"
           else
-            echo "::warning::OPcache is not enabled in the php -S server (probe answered '${OPCACHE_STATE:-nothing}'), so Nextcloud's PHP is compiled on every request and every spec waits for it. Check opcache.enable and the opcache size settings in Setup PHP."
+            echo "::warning::could not write the OPcache probe; state unknown"
+            OPCACHE_STATE="skipped"
           fi
+          rm -f ci-opcache-probe.php
+          case "$OPCACHE_STATE" in
+            "opcache=on")
+              echo "OPcache is enabled in the php -S server."
+              ;;
+            "opcache=off")
+              echo "::warning::OPcache is not enabled in the php -S server, so Nextcloud's PHP is compiled on every request and every spec waits for it. Check opcache.enable and the opcache size settings in Setup PHP."
+              ;;
+            "skipped")
+              ;;
+            "")
+              echo "::warning::The OPcache probe could not reach the php -S server, so whether OPcache is enabled there is unknown."
+              ;;
+            *)
+              SHOWN="$(printf '%s' "$OPCACHE_STATE" | tr -d '\n' | cut -c1-40 || true)"
+              echo "::warning::The OPcache probe gave an unexpected answer ('${SHOWN}'), so whether OPcache is enabled in the php -S server is unknown."
+              ;;
+          esac
           echo "PHP built-in server alive (pid=${PHP_PID})."
 
       - name: Seed test data
