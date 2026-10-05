@@ -1328,6 +1328,29 @@
 				}
 			}
 		},
+		"linkCard": {
+			"type": "object",
+			"required": ["id", "label"],
+			"additionalProperties": false,
+			"description": "One card on a type='links' page: a link to another page of the app, or to a URL. Same vocabulary as menuItem and navCardEntry.",
+			"properties": {
+				"id": { "type": "string", "minLength": 1, "description": "Unique within the page's cards." },
+				"label": { "type": "string", "minLength": 1, "description": "i18n key / text of the card's title." },
+				"description": { "type": "string", "description": "i18n key / one line under the title." },
+				"icon": { "type": "string", "description": "MDI icon name (e.g. 'CashMultiple')." },
+				"category": { "type": "string", "description": "Key in config.categories naming the group this card sits in. A card without one, or with an unknown one, renders first under no caption." },
+				"route": { "type": "string", "minLength": 1, "description": "Route name (a pages[].id), or a router path when it starts with '/'. Resolved through the router, so it works with and without /index.php. Mutually exclusive with href." },
+				"params": { "type": "object", "description": "Route params passed along with `route`.", "additionalProperties": { "type": ["string", "number"] } },
+				"query": { "type": "object", "description": "Query passed along with `route`.", "additionalProperties": { "type": ["string", "number", "boolean"] } },
+				"href": { "type": "string", "minLength": 1, "description": "External URL, opened in a new tab. Mutually exclusive with route." },
+				"permission": { "type": "string", "description": "Permission the user must hold for the card to render. Same rule as menuItem.permission." },
+				"visibleIf": { "$ref": "#/$defs/visibleIfCondition", "description": "Display condition, evaluated the way a menu entry's is." }
+			},
+			"allOf": [
+				{ "not": { "required": ["route", "href"] } },
+				{ "anyOf": [{ "required": ["route"] }, { "required": ["href"] }] }
+			]
+		},
 		"navCardEntry": {
 			"type": "object",
 			"required": ["id", "label"],
@@ -2858,8 +2881,8 @@
 				"type": {
 					"type": "string",
 					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "reports",
-						"store", "search", "wiki", "flow", "flows", "flow-detail", "custom"],
-					"description": "Page type. Closed enum of 17 supported types. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
+						"links", "store", "search", "wiki", "flow", "flows", "flow-detail", "custom"],
+					"description": "Page type. Closed enum of 18 supported types. 'links' mounts CnLinkCardsPage: a page of link cards grouped under captions, declared with config.categories + config.cards ($defs/linkCard). Use it for the pages a short menu leaves out; unlike 'reports' an app may have several. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
 				},
 				"title": {
 					"type": "string",
@@ -3646,6 +3669,25 @@
 								"properties": {
 									"register": { "type": "string", "minLength": 1 },
 									"schema": { "type": "string", "minLength": 1 }
+								}
+							}
+						},
+						"required": ["config"]
+					}
+				},
+				{
+					"description": "type='links' (CnLinkCardsPage) renders config.cards as link cards grouped by config.categories. It MUST declare a non-empty cards list, and every card is a $defs/linkCard, so a card that can go nowhere is refused here and not dropped in silence at render time (link-cards-page).",
+					"if": { "properties": { "type": { "const": "links" } }, "required": ["type"] },
+					"then": {
+						"properties": {
+							"config": {
+								"type": "object",
+								"required": ["cards"],
+								"properties": {
+									"description": { "type": "string" },
+									"emptyLabel": { "type": "string" },
+									"categories": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+									"cards": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/linkCard" } }
 								}
 							}
 						},
