@@ -3707,6 +3707,21 @@ jobs:
     # would newly fail shillinq's already-green runs. 45 min is ~2.4x the worst
     # observed green run and still cuts a hang from 6 hours to 45 minutes.
     timeout-minutes: 45
+    # READ-ONLY TOKEN, AND NO TOKEN ON DISK (keepiq#881). This job installs
+    # code from OTHER repositories (`additional-apps`, cloned at a branch such
+    # as `development`) and runs their composer scripts, migrations and app
+    # bootstrap next to the caller's GITHUB_TOKEN. A job without its own
+    # `permissions:` inherits the caller's grant, which is `contents: write` on
+    # most fleet callers, and actions/checkout writes that token into
+    # .git/config unless told not to. So a bad commit on a sibling's branch
+    # could push to THIS repository. Nothing in the job writes to GitHub: it
+    # clones public repos, caches and uploads artifacts (which use the runtime
+    # token, not GITHUB_TOKEN). Same block on newman and playwright;
+    # journeydoc-capture keeps its write grant because it pushes screenshots,
+    # and passes the token to that one `git push` only.
+    # Asserted by scripts/assert-sibling-jobs-read-only-token.py.
+    permissions:
+      contents: read
 
     # A service whose `image` evaluates to an empty string is not started, which
     # is how one job definition serves several backends. Both are keyed off
@@ -3781,6 +3796,7 @@ jobs:
       - name: Checkout Nextcloud server
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           repository: nextcloud/server
           ref: ${{ matrix.nextcloud-ref }}
           path: server
@@ -3793,6 +3809,7 @@ jobs:
       - name: Checkout app
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           path: server/apps/${{ inputs.app-name }}
           # Full history: the coverage ratchet measures the MERGE BASE, and the
           # default depth-1 checkout cannot reach it. Unconditional rather than
@@ -4475,6 +4492,10 @@ jobs:
     # Observed across 39 executions: median 1.9 min, max 7.5 min (launchpad).
     # Also installs a full Nextcloud server first, so 30 min — 4x the worst run.
     timeout-minutes: 30
+    # Read-only token, none persisted to disk: this job runs sibling apps'
+    # code. See the comment on `phpunit` (keepiq#881).
+    permissions:
+      contents: read
 
     services:
       postgres:
@@ -4495,6 +4516,7 @@ jobs:
       - name: Checkout Nextcloud server
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           repository: nextcloud/server
           # THE single server for this job — the numerically highest stable
           # branch in the resolved set, published by the `nextcloud-matrix` job.
@@ -4513,6 +4535,7 @@ jobs:
       - name: Checkout app
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           path: server/apps/${{ inputs.app-name }}
 
       - name: Setup PHP
@@ -5099,6 +5122,10 @@ jobs:
     # minutes leaves a wide margin over every healthy run while turning a hang
     # into a failure in under an hour instead of burning a runner for six.
     timeout-minutes: 45
+    # Read-only token, none persisted to disk: this job runs sibling apps'
+    # code. See the comment on `phpunit` (keepiq#881).
+    permissions:
+      contents: read
 
     services:
       postgres:
@@ -5119,6 +5146,7 @@ jobs:
       - name: Checkout Nextcloud server
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           repository: nextcloud/server
           # THE single server for this job — the numerically highest stable
           # branch in the resolved set, published by the `nextcloud-matrix` job.
@@ -5137,6 +5165,7 @@ jobs:
       - name: Checkout app
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           path: server/apps/${{ inputs.app-name }}
 
       - name: Setup PHP
@@ -6145,6 +6174,7 @@ jobs:
         if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() }}
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           repository: ConductionNL/.github
           ref: ${{ inputs.hydra-gates-ref }}
           path: gates
@@ -6808,6 +6838,7 @@ jobs:
       - name: Checkout Nextcloud server
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           repository: nextcloud/server
           # THE single server for this job — the numerically highest stable
           # branch in the resolved set, published by the `nextcloud-matrix` job.
@@ -6824,10 +6855,14 @@ jobs:
           git submodule update --init 3rdparty
 
       - name: Checkout app
-        # Default token (github.token) is the caller's GITHUB_TOKEN with
-        # contents:write — we need that for the screenshot commit-back later.
+        # The job's token has contents:write for the screenshot commit-back
+        # below, but it is NOT persisted to .git/config: this job also runs
+        # sibling apps' code (`additional-apps`), and that code must not be able
+        # to read a write token off disk (keepiq#881). The commit step passes
+        # the token to its one `git push` instead.
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           path: server/apps/${{ inputs.app-name }}
 
       - name: Setup PHP
@@ -7236,6 +7271,11 @@ jobs:
 
       - name: Commit refreshed screenshots if changed
         id: commit
+        # The only place the write token is used. It is handed to `git push`
+        # as a one-shot header (the same header actions/checkout would have
+        # persisted), so no earlier step could read it from .git/config.
+        env:
+          PUSH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           cd server/apps/${{ inputs.app-name }}
@@ -7267,7 +7307,9 @@ jobs:
           # The step runs under `set -euo pipefail`, so a non-zero `git push`
           # fails the job. The screenshots are still uploaded as an artifact by
           # the `if: always()` step below, so a refusal is recoverable by hand.
-          git push origin "HEAD:${REF_NAME}"
+          AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)"
+          echo "::add-mask::${AUTH_HEADER#AUTHORIZATION: basic }"
+          git -c "http.https://github.com/.extraheader=${AUTH_HEADER}" push origin "HEAD:${REF_NAME}"
           echo "Screenshots pushed to ${REF_NAME}."
           echo "changed=1" >> "$GITHUB_OUTPUT"
 
