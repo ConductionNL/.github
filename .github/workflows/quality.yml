@@ -5542,7 +5542,9 @@ jobs:
           set -euo pipefail
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
-          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+          PW_VERSION=$(node -p "require('@playwright/test/package.json').version")
+          [ -n "$PW_VERSION" ] || { echo "::error::could not resolve the @playwright/test version"; exit 1; }
+          echo "version=${PW_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Restore the Playwright browsers
         id: playwright-browsers
