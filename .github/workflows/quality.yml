@@ -5383,10 +5383,8 @@ jobs:
       # Only apps the build step would build are keyed, with the same three
       # checks it makes, and only their `js/` is cached, which is where every
       # fleet app's webpack writes (openregister's .gitignore carries `/js/`).
-      #
       # The build step's evidence check still counts the JavaScript on disk
       # after a restore, so an empty cache fails as loudly as an empty build.
-      #
       # Purging: an entry keeps its first writer's content, so a poisoned bundle
       # outlives a revert. Bump `v1` in `sibling-frontends-v1`, or run
       # `gh cache list --key sibling-frontends-` and `gh cache delete <id>`.
