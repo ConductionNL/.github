@@ -5186,17 +5186,18 @@ jobs:
           # session does not survive between requests on this instance …
           # this harness has no cache backend".
           #
-          # `apc.enable_cli=1` matters because `php -S` IS the CLI SAPI: without
-          # it APCu loads but stays inert, which looks exactly like not having
-          # installed it.
+          # `apc.enable_cli=1` is what lets APCu work for the `occ` and `php -r`
+          # CLI processes (the APCu check in "Configure the Nextcloud cache
+          # backend" runs under `php -r`). Whether APCu needs it under the
+          # `cli-server` SAPI was not verified here.
           #
-          # `opcache.enable_cli=1` for the same reason. OPcache ships enabled
-          # for every SAPI except the CLI, so `php -S` compiled Nextcloud's PHP
-          # from scratch on EVERY request: each page load and each fetch() a
-          # spec makes. The setup log of thematiq run 37305793889 shows
-          # `apc.enable_cli=1` as the only value added, at about 26 s per test.
-          # The sizes follow Nextcloud's own recommended OPcache settings; the
-          # defaults are too small to hold server, app and sibling apps at once.
+          # OPcache and `php -S`: the built-in server runs as the `cli-server`
+          # SAPI, not `cli`, and OPcache is already on there by default.
+          # `opcache.enable_cli` switches it on only for `cli` and `phpdbg`, so
+          # here it reaches just the `occ` and Composer processes. The three
+          # size settings are the part the server uses: they are set above the
+          # PHP defaults (128 MB / 8 MB / 10000 files) so that server, app and
+          # sibling apps fit at once. Neither part has been timed on this job.
           extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json, apcu
           ini-values: apc.enable_cli=1, opcache.enable_cli=1, opcache.memory_consumption=256, opcache.interned_strings_buffer=16, opcache.max_accelerated_files=20000
           tools: composer:v2
@@ -5309,12 +5310,6 @@ jobs:
           cd server
           php -r 'exit(extension_loaded("apcu") && ini_get("apc.enabled") ? 0 : 1);' \
             || { echo "::error::apcu is not loaded/enabled for the CLI SAPI; php -S would run without a cache and cache-backed tests would silently degrade."; exit 1; }
-          # A warning, not a failure: without OPcache the suite is slower, not
-          # wrong. Asked of the running engine rather than of php.ini, because a
-          # value that was written but not applied reads the same in the ini.
-          php -r '$s = function_exists("opcache_get_status") ? opcache_get_status(false) : false; exit(is_array($s) && !empty($s["opcache_enabled"]) ? 0 : 1);' \
-            && echo "OPcache is enabled for the CLI SAPI." \
-            || echo "::warning::OPcache is not enabled for the CLI SAPI, so php -S compiles Nextcloud's PHP on every request and every spec waits for it. Check opcache.enable_cli in Setup PHP."
           php occ config:system:set memcache.local --value '\OC\Memcache\APCu'
           php occ config:system:set memcache.distributed --value '\OC\Memcache\APCu'
           php occ config:system:get memcache.distributed
@@ -5391,6 +5386,9 @@ jobs:
       # fleet app's webpack writes (openregister's .gitignore carries `/js/`).
       # The build step's evidence check still counts the JavaScript on disk
       # after a restore, so an empty cache fails as loudly as an empty build.
+      # Purging: an entry keeps its first writer's content, so a poisoned bundle
+      # outlives a revert. Bump `v1` in `sibling-frontends-v1`, or run
+      # `gh cache list --key sibling-frontends-` and `gh cache delete <id>`.
       - name: Key the additional app frontends
         id: sibling-frontends
         if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
@@ -5540,6 +5538,10 @@ jobs:
       # the package is installed, so that install moves into its own step and
       # the browser cache is keyed on the version it resolved. With the browser
       # restored, `playwright install` finds it in place and downloads nothing.
+      #
+      # Purging: an entry keeps its first writer's content, so a poisoned
+      # browser outlives a revert. Bump `v1` in `playwright-browsers-v1`, or run
+      # `gh cache list --key playwright-browsers-` and `gh cache delete <id>`.
       - name: Resolve the Playwright version
         id: playwright-version
         # The same bound as `Install Playwright`, for the same reason.
@@ -5548,7 +5550,9 @@ jobs:
           set -euo pipefail
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
-          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+          PW_VERSION=$(node -p "require('@playwright/test/package.json').version")
+          [ -n "$PW_VERSION" ] || { echo "::error::could not resolve the @playwright/test version"; exit 1; }
+          echo "version=${PW_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Restore the Playwright browsers
         id: playwright-browsers
@@ -6051,6 +6055,40 @@ jobs:
             echo "::error::The php -S front-controller router is swallowing Nextcloud's OCS entry point — /ocs/v2.php/cloud/user returned 404 instead of reaching ocs/v2.php. Every OCS call (current user, groups, user_status, dashboard layout) will 404, and specs will report it as a missing element."
             exit 1
           fi
+          # Is OPcache on in the process that serves the specs? Ask the server,
+          # not a `php -r`: that would run in the `cli` SAPI, where the answer
+          # follows `opcache.enable_cli` and says nothing about `cli-server`.
+          # A real file on disk is served as-is by ci-router.php (rule 1), so a
+          # throwaway script under server/ is reached the same way status.php is.
+          # A warning, not a failure: without OPcache the suite is slower, not
+          # wrong. No answer from the probe is "unknown", not "off", and nothing
+          # here can fail the step. This branch is not covered by the repo's
+          # self-tests.
+          OPCACHE_STATE=""
+          if printf '%s\n' '<?php header("Content-Type: text/plain"); $s = function_exists("opcache_get_status") ? opcache_get_status(false) : false; echo (is_array($s) && !empty($s["opcache_enabled"])) ? "opcache=on" : "opcache=off";' > ci-opcache-probe.php; then
+            OPCACHE_STATE="$(curl -s --max-time 10 http://localhost:8080/ci-opcache-probe.php || true)"
+          else
+            echo "::warning::could not write the OPcache probe; state unknown"
+            OPCACHE_STATE="skipped"
+          fi
+          rm -f ci-opcache-probe.php
+          case "$OPCACHE_STATE" in
+            "opcache=on")
+              echo "OPcache is enabled in the php -S server."
+              ;;
+            "opcache=off")
+              echo "::warning::OPcache is not enabled in the php -S server, so Nextcloud's PHP is compiled on every request and every spec waits for it. Check opcache.enable and the opcache size settings in Setup PHP."
+              ;;
+            "skipped")
+              ;;
+            "")
+              echo "::warning::The OPcache probe could not reach the php -S server, so whether OPcache is enabled there is unknown."
+              ;;
+            *)
+              SHOWN="$(printf '%s' "$OPCACHE_STATE" | tr -d '\n' | cut -c1-40 || true)"
+              echo "::warning::The OPcache probe gave an unexpected answer ('${SHOWN}'), so whether OPcache is enabled in the php -S server is unknown."
+              ;;
+          esac
           echo "PHP built-in server alive (pid=${PHP_PID})."
 
       - name: Seed test data
