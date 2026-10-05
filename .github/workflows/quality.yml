@@ -5189,8 +5189,16 @@ jobs:
           # `apc.enable_cli=1` matters because `php -S` IS the CLI SAPI: without
           # it APCu loads but stays inert, which looks exactly like not having
           # installed it.
+          #
+          # `opcache.enable_cli=1` for the same reason. OPcache ships enabled
+          # for every SAPI except the CLI, so `php -S` compiled Nextcloud's PHP
+          # from scratch on EVERY request: each page load and each fetch() a
+          # spec makes. The setup log of thematiq run 37305793889 shows
+          # `apc.enable_cli=1` as the only value added, at about 26 s per test.
+          # The sizes follow Nextcloud's own recommended OPcache settings; the
+          # defaults are too small to hold server, app and sibling apps at once.
           extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json, apcu
-          ini-values: apc.enable_cli=1
+          ini-values: apc.enable_cli=1, opcache.enable_cli=1, opcache.memory_consumption=256, opcache.interned_strings_buffer=16, opcache.max_accelerated_files=20000
           tools: composer:v2
 
       - name: Checkout additional apps
@@ -5301,6 +5309,12 @@ jobs:
           cd server
           php -r 'exit(extension_loaded("apcu") && ini_get("apc.enabled") ? 0 : 1);' \
             || { echo "::error::apcu is not loaded/enabled for the CLI SAPI; php -S would run without a cache and cache-backed tests would silently degrade."; exit 1; }
+          # A warning, not a failure: without OPcache the suite is slower, not
+          # wrong. Asked of the running engine rather than of php.ini, because a
+          # value that was written but not applied reads the same in the ini.
+          php -r '$s = function_exists("opcache_get_status") ? opcache_get_status(false) : false; exit(is_array($s) && !empty($s["opcache_enabled"]) ? 0 : 1);' \
+            && echo "OPcache is enabled for the CLI SAPI." \
+            || echo "::warning::OPcache is not enabled for the CLI SAPI, so php -S compiles Nextcloud's PHP on every request and every spec waits for it. Check opcache.enable_cli in Setup PHP."
           php occ config:system:set memcache.local --value '\OC\Memcache\APCu'
           php occ config:system:set memcache.distributed --value '\OC\Memcache\APCu'
           php occ config:system:get memcache.distributed
@@ -5363,6 +5377,51 @@ jobs:
             npm ci
           fi
 
+      # ── The sibling apps' compiled frontends, cached per commit ──────────
+      #
+      # The build below is a cold `npm ci` plus a production webpack build of
+      # openregister on every run: 87 s of thematiq run 37305793889, and again
+      # on every shard leg. Its output depends only on the sibling's commit and
+      # the Node version, so it is cached under exactly that key and nothing
+      # looser: no restore-keys, so a cache can only ever hold the bundle of
+      # the commit that was checked out.
+      #
+      # Only apps the build step would build are keyed, with the same three
+      # checks it makes, and only their `js/` is cached, which is where every
+      # fleet app's webpack writes (openregister's .gitignore carries `/js/`).
+      # The build step's evidence check still counts the JavaScript on disk
+      # after a restore, so an empty cache fails as loudly as an empty build.
+      - name: Key the additional app frontends
+        id: sibling-frontends
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
+        run: |
+          set -euo pipefail
+          IDS=""
+          PATHS=""
+          for name in $(printf '%s\n%s\n' '${{ inputs.additional-apps }}' '${{ inputs.e2e-additional-apps }}' | jq -r -s 'add // [] | .[].app'); do
+            dir="server/apps/$name"
+            [ -f "$dir/package.json" ] && [ -f "$dir/package-lock.json" ] || continue
+            node -e "const s = require('./$dir/package.json').scripts || {}; process.exit(s.build ? 0 : 1)" || continue
+            IDS="${IDS}${name}@$(git -C "$dir" rev-parse HEAD);"
+            PATHS="${PATHS}${dir}/js"$'\n'
+          done
+          if [ -z "$IDS" ]; then
+            echo "additional-app-frontend cache: no sibling app has a frontend to build."
+            echo "paths=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "key=sibling-frontends-v1-${RUNNER_OS}-node$(node --version)-$(printf '%s' "$IDS" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          { echo "paths<<PATHS_EOF"; printf '%s' "$PATHS"; echo "PATHS_EOF"; } >> "$GITHUB_OUTPUT"
+          echo "additional-app-frontend cache key covers: ${IDS}"
+
+      - name: Restore additional app frontends
+        id: sibling-frontends-cache
+        if: ${{ steps.sibling-frontends.outputs.paths != '' }}
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.sibling-frontends.outputs.paths }}
+          key: ${{ steps.sibling-frontends.outputs.key }}
+
       - name: Build additional app frontends
         # A SIBLING APP WAS INSTALLED WITH NO COMPILED FRONTEND, IN EVERY
         # BROWSER JOB THIS WORKFLOW HAS EVER RUN.
@@ -5405,6 +5464,8 @@ jobs:
         # A cold `npm ci` plus a production webpack build of the largest app in
         # the fleet (openregister) measures well inside this.
         timeout-minutes: 20
+        env:
+          FRONTENDS_RESTORED: ${{ steps.sibling-frontends-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
           BUILT=0
@@ -5431,9 +5492,13 @@ jobs:
               SKIPPED=$((SKIPPED + 1))
               continue
             fi
-            echo "additional-app-frontend: building $name ..."
-            # A subshell, so the cd cannot leak into the next iteration.
-            (cd "$dir" && npm ci --no-audit --no-fund && npm run build)
+            if [ "${FRONTENDS_RESTORED:-}" = "true" ] && [ -d "$dir/js" ]; then
+              echo "additional-app-frontend: $name restored from the cache for commit $(git -C "$dir" rev-parse --short HEAD), not rebuilt."
+            else
+              echo "additional-app-frontend: building $name ..."
+              # A subshell, so the cd cannot leak into the next iteration.
+              (cd "$dir" && npm ci --no-audit --no-fund && npm run build)
+            fi
             BUILT=$((BUILT + 1))
             # EVIDENCE, NOT A CLAIM. A build that exits 0 and emits nothing is
             # precisely the state this step exists to remove, and it must not
@@ -5458,6 +5523,40 @@ jobs:
           done
           echo "additional-app-frontend: built ${BUILT}, skipped ${SKIPPED}."
 
+      # Saved explicitly, right after a successful build. The post-job save of
+      # `actions/cache` only runs when the WHOLE job succeeds, so a suite with a
+      # single red spec would never have stored the bundle it built.
+      - name: Save additional app frontends
+        if: ${{ steps.sibling-frontends.outputs.paths != '' && steps.sibling-frontends-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.sibling-frontends.outputs.paths }}
+          key: ${{ steps.sibling-frontends.outputs.key }}
+
+      # ── Chromium, cached per Playwright version ──────────────────────────
+      #
+      # `npx playwright install chromium` downloads the browser on every run.
+      # The binary depends only on the Playwright version, which is known once
+      # the package is installed, so that install moves into its own step and
+      # the browser cache is keyed on the version it resolved. With the browser
+      # restored, `playwright install` finds it in place and downloads nothing.
+      - name: Resolve the Playwright version
+        id: playwright-version
+        # The same bound as `Install Playwright`, for the same reason.
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          cd server/apps/${{ inputs.app-name }}
+          npm install --save-dev @playwright/test
+          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Playwright browsers
+        id: playwright-browsers
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-v1-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright
         # A STALLED SETUP STEP EATS THE JOB'S WHOLE CAP AND LEAVES NO VERDICT.
         #
@@ -5481,7 +5580,8 @@ jobs:
         timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
-          npm install --save-dev @playwright/test
+          # @playwright/test itself is installed by `Resolve the Playwright
+          # version` above, so the browser cache can be keyed on it.
 
           # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
           #
@@ -5522,6 +5622,13 @@ jobs:
           else
             echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
           fi
+
+      - name: Save the Playwright browsers
+        if: ${{ steps.playwright-browsers.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-v1-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       # ── Reuse the bundle the `frontend-build` job already compiled ─────────
       #
