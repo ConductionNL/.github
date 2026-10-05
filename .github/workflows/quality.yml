@@ -8562,8 +8562,39 @@ jobs:
           echo "available=false" >> "$GITHUB_OUTPUT"
           echo "::warning::pandoc/wkhtmltopdf could not be installed after 3 bounded attempts. The PDF rendering of the quality report is skipped; the report, the step summary and every gate below still run. This is infrastructure, not a finding about this app."
 
+      # A run superseded by a newer commit is cancelled by `concurrency`, and its
+      # cancelled legs are NO VERDICT, not a failure. "Gate — fail when an
+      # upstream job was cancelled mid-run" already tells the two apart by
+      # asking whether this run's head SHA is still the tip of its ref; the
+      # report table and the PR comment ask the same question here, so the table
+      # stops stamping a superseded Playwright leg ❌ while the gate beside it
+      # correctly passes.
+      #
+      # Its own step so the token reaches this one lookup only, not the report
+      # script that reads every job's artifacts. A failed lookup leaves
+      # superseded=false, so a cancelled leg renders as no verdict rather than
+      # being waved through.
+      - name: Is this run superseded?
+        id: superseded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -uo pipefail
+
+          TIP="$(gh api "repos/${{ github.repository }}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
+          SUPERSEDED=false
+          if [ -n "$TIP" ] && [ "$TIP" != "$RUN_SHA" ]; then
+            SUPERSEDED=true
+          fi
+          echo "superseded=${SUPERSEDED}" >> "$GITHUB_OUTPUT"
+          echo "tip=${TIP:0:7}" >> "$GITHUB_OUTPUT"
+
       - name: Generate report
         env:
+          SUPERSEDED: ${{ steps.superseded.outputs.superseded }}
+          SUPERSEDED_BY: ${{ steps.superseded.outputs.tip }}
           # The SAME three facts the "Gate — a test job that was ENABLED but
           # never ran" step below reads, so the table and the gate classify one
           # skip one way. Before this, the gate knew a deferred E2E run and
@@ -8607,6 +8638,13 @@ jobs:
             case "$1" in
               success|Success) echo "✅" ;;
               skipped|Skipped) echo "⏭️" ;;
+              cancelled|Cancelled)
+                if [ "${SUPERSEDED:-}" = "true" ]; then
+                  echo "⏹️ cancelled — superseded by \`${SUPERSEDED_BY:-}\`"
+                else
+                  echo "❌ cancelled — no verdict"
+                fi
+                ;;
               *) echo "❌" ;;
             esac
           }
@@ -8887,7 +8925,9 @@ jobs:
           retention-days: 90
 
       - name: Comment PR with results
-        if: github.event_name == 'pull_request'
+        # Not for a superseded run: its table describes a commit the PR no
+        # longer points at, and the newer run posts the report that counts.
+        if: github.event_name == 'pull_request' && steps.superseded.outputs.superseded != 'true'
         # Posting the summary comment needs `pull-requests: write`. A reusable
         # workflow inherits the CALLER's permissions, and most callers declare
         # only `contents: read` + `packages: read` — so this step 403s with
