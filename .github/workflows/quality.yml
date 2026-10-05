@@ -8573,23 +8573,31 @@ jobs:
       # Its own step so the token reaches this one lookup only, not the report
       # script that reads every job's artifacts. A failed lookup leaves
       # superseded=false, so a cancelled leg renders as no verdict rather than
-      # being waved through.
+      # being waved through. The ref is looked up in the PR head repository, so
+      # a fork PR asks about its own branch, not a base branch of the same name;
+      # a private fork 404s and reads as not superseded.
       - name: Is this run superseded?
         id: superseded
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           RUN_REF: ${{ github.head_ref || github.ref_name }}
+          RUN_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
         run: |
           set -uo pipefail
 
-          TIP="$(gh api "repos/${{ github.repository }}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
+          TIP="$(gh api "repos/${RUN_REPO}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
           SUPERSEDED=false
           if [ -n "$TIP" ] && [ "$TIP" != "$RUN_SHA" ]; then
             SUPERSEDED=true
           fi
           echo "superseded=${SUPERSEDED}" >> "$GITHUB_OUTPUT"
           echo "tip=${TIP:0:7}" >> "$GITHUB_OUTPUT"
+          if [ -z "$TIP" ]; then
+            echo "::notice::Could not read the tip of ${RUN_REF}; treating this run as not superseded."
+          else
+            echo "::notice::${RUN_REF} is at ${TIP:0:7}, this run is ${RUN_SHA:0:7}: superseded=${SUPERSEDED}."
+          fi
 
       - name: Generate report
         env:
@@ -8997,6 +9005,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           RUN_REF: ${{ github.head_ref || github.ref_name }}
+          RUN_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           SECURITY_RESULT: ${{ needs.security.result }}
           PHPUNIT_ENABLED: ${{ inputs.enable-php && inputs.enable-phpunit }}
           PHPUNIT_RESULT: ${{ needs.phpunit.result }}
@@ -9126,7 +9135,7 @@ jobs:
             exit 0
           fi
 
-          TIP="$(gh api "repos/${{ github.repository }}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
+          TIP="$(gh api "repos/${RUN_REPO}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
           if [ -n "$TIP" ] && [ "$TIP" != "$RUN_SHA" ]; then
             echo "::notice::Test job(s) did not run, but this run has been SUPERSEDED (${RUN_REF} is now at ${TIP:0:7}, this run is ${RUN_SHA:0:7}). The newer run is the one whose verdict counts — staying quiet."
             exit 0
@@ -9244,10 +9253,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           RUN_REF: ${{ github.head_ref || github.ref_name }}
+          RUN_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
         run: |
           set -uo pipefail
 
-          TIP="$(gh api "repos/${{ github.repository }}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
+          TIP="$(gh api "repos/${RUN_REPO}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
 
           if [ -n "$TIP" ] && [ "$TIP" != "$RUN_SHA" ]; then
             echo "::notice::Job(s) cancelled, but this run has been SUPERSEDED (${RUN_REF} is now at ${TIP:0:7}, this run is ${RUN_SHA:0:7}). Concurrency cancellation of an outdated run is not a defect — staying quiet."
