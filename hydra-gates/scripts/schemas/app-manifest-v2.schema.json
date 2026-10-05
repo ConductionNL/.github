@@ -240,6 +240,29 @@
 					"$ref": "#/$defs/primaryAction",
 					"description": "App-wide default primary action rendered as an NcAppNavigationNew button above the main menu list. A page-scoped pages[].primaryAction for the current route wins over this default."
 				},
+				"brand": {
+					"type": "object",
+					"additionalProperties": false,
+					"description": "A brand block at the very top of the app navigation, above the primary action: a logo, a name and a caption. Rendered by CnAppNav. Omitted, nothing renders there.",
+					"properties": {
+						"logo": {
+							"type": "string",
+							"description": "URL of the logo image. Decorative when `name` is set."
+						},
+						"name": {
+							"type": "string",
+							"description": "i18n key / text for the app or organisation name."
+						},
+						"caption": {
+							"type": "string",
+							"description": "i18n key / text for the line under the name, for example the organisation."
+						},
+						"alt": {
+							"type": "string",
+							"description": "i18n key / alternative text for the logo. Used only when no `name` is set."
+						}
+					}
+				},
 				"featureRequestRepo": {
 					"type": "string",
 					"description": "`<owner>/<repo>` slug on the forge that the in-product feature-request deep-link targets (provided to descendants as `cnFeatureRequestRepo`). Falls back to `Conduction/<appId>` when omitted."
@@ -976,6 +999,72 @@
 				"swimlaneField": {
 					"type": "string",
 					"description": "A second field to group the board into rows by, while the columns stay the stages. Cards with no value for it land in one named row, last, rather than being dropped: grouping by handler and hiding the unassigned work turns a board into a picture of what is already somebody's problem."
+				},
+				"dueRule": {
+					"$ref": "#/$defs/dueRule",
+					"description": "Marks late cards. A card whose date is before today gets an error edge and the label 'Overdue'; one due within `soonDays` gets 'Due soon'. Omitted, no card is marked."
+				}
+			}
+		},
+		"headerPill": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["field"],
+			"description": "A pill in a detail page header, rendered through CnStatusBadge from one field of the record. Nothing renders while the field is empty.",
+			"properties": {
+				"field": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Dot-path to the value on the record."
+				},
+				"colorMap": {
+					"type": "object",
+					"description": "Raw value to badge variant. Keys are matched ignoring case.",
+					"additionalProperties": { "type": "string", "enum": ["default", "primary", "success", "warning", "error", "info"] }
+				},
+				"labels": {
+					"type": "object",
+					"description": "Raw value to the i18n key / text to show. A value without an entry is shown as is.",
+					"additionalProperties": { "type": "string" }
+				},
+				"variant": {
+					"type": "string",
+					"enum": ["default", "primary", "success", "warning", "error", "info"],
+					"default": "default",
+					"description": "Badge variant for a value `colorMap` does not name."
+				}
+			}
+		},
+		"dueRule": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["field"],
+			"description": "How a surface decides that a dated item is late. One shape for boards and lists, so a list and its board agree. A date before today is overdue. Days are whole calendar days in the reader's own timezone.",
+			"properties": {
+				"field": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Dot-path to the due date on the row."
+				},
+				"soonDays": {
+					"type": "integer",
+					"minimum": 0,
+					"default": 3,
+					"description": "How many days ahead still counts as due soon. 0 marks only today."
+				},
+				"variantWhen": {
+					"type": "array",
+					"description": "The full rule list, in the shape a table's date cell uses, for a board that needs more than `soonDays`. Compared against the calendar days until the date (0 is today, negative is past); first match wins. `error` marks the card overdue, `warning` due soon. When set, `soonDays` is ignored.",
+					"items": {
+						"type": "object",
+						"additionalProperties": false,
+						"required": ["op", "value", "variant"],
+						"properties": {
+							"op": { "type": "string", "enum": ["eq", "neq", "gt", "gte", "lt", "lte"] },
+							"value": { "type": "number" },
+							"variant": { "type": "string", "enum": ["default", "success", "warning", "error", "danger"] }
+						}
+					}
 				}
 			}
 		},
@@ -1238,6 +1327,29 @@
 					"description": "Property name in the response items to use as the menu entry route."
 				}
 			}
+		},
+		"linkCard": {
+			"type": "object",
+			"required": ["id", "label"],
+			"additionalProperties": false,
+			"description": "One card on a type='links' page: a link to another page of the app, or to a URL. Same vocabulary as menuItem and navCardEntry.",
+			"properties": {
+				"id": { "type": "string", "minLength": 1, "description": "Unique within the page's cards." },
+				"label": { "type": "string", "minLength": 1, "description": "i18n key / text of the card's title." },
+				"description": { "type": "string", "description": "i18n key / one line under the title." },
+				"icon": { "type": "string", "description": "MDI icon name (e.g. 'CashMultiple')." },
+				"category": { "type": "string", "description": "Key in config.categories naming the group this card sits in. A card without one, or with an unknown one, renders first under no caption." },
+				"route": { "type": "string", "minLength": 1, "description": "Route name (a pages[].id), or a router path when it starts with '/'. Resolved through the router, so it works with and without /index.php. Mutually exclusive with href." },
+				"params": { "type": "object", "description": "Route params passed along with `route`.", "additionalProperties": { "type": ["string", "number"] } },
+				"query": { "type": "object", "description": "Query passed along with `route`.", "additionalProperties": { "type": ["string", "number", "boolean"] } },
+				"href": { "type": "string", "minLength": 1, "description": "External URL, opened in a new tab. Mutually exclusive with route." },
+				"permission": { "type": "string", "description": "Permission the user must hold for the card to render. Same rule as menuItem.permission." },
+				"visibleIf": { "$ref": "#/$defs/visibleIfCondition", "description": "Display condition, evaluated the way a menu entry's is." }
+			},
+			"allOf": [
+				{ "not": { "required": ["route", "href"] } },
+				{ "anyOf": [{ "required": ["route"] }, { "required": ["href"] }] }
+			]
 		},
 		"navCardEntry": {
 			"type": "object",
@@ -1575,6 +1687,47 @@
 											{ "type": "string" },
 											{ "type": "object", "additionalProperties": true }
 										]
+									},
+									"layout": {
+										"type": "string",
+										"enum": ["banner", "attention"],
+										"default": "banner",
+										"description": "How the banner renders. `banner` (default) is the note card. `attention` is a card with a severity edge, a kicker, a title, a reason line and up to two actions."
+									},
+									"kicker": {
+										"type": "string",
+										"description": "Attention card: the small label above the title."
+									},
+									"title": {
+										"type": "string",
+										"description": "Attention card: the title. Falls back to `text`."
+									},
+									"reason": {
+										"type": "string",
+										"description": "Attention card: the line that says why this needs attention. `{value}` is replaced by the value visibleWhen read."
+									},
+									"actions": {
+										"type": "array",
+										"maxItems": 2,
+										"description": "Attention card: at most two actions. The first is the primary one unless an action sets `primary: true`.",
+										"items": {
+											"type": "object",
+											"required": ["label"],
+											"additionalProperties": false,
+											"properties": {
+												"id": { "type": "string", "description": "Identifier passed with the `action` event of an action that has no route or href." },
+												"label": { "type": "string", "description": "The text on the action." },
+												"route": {
+													"description": "A vue-router route NAME (string) or a full location object.",
+													"oneOf": [
+														{ "type": "string" },
+														{ "type": "object", "additionalProperties": true }
+													]
+												},
+												"href": { "type": "string", "description": "An URL, used when there is no route." },
+												"primary": { "type": "boolean", "description": "Render this action as the primary one." }
+											}
+										}
 									}
 								}
 							}
@@ -1869,6 +2022,125 @@
 												"type": "string",
 												"description": "Text shown when the provider rejects / is unavailable (replaces the default 'Knowledge base unavailable')."
 											}
+										}
+									}
+								}
+							}
+						}
+					}
+				},
+				{
+					"description": "week-strip catalog widget (CnWeekStripWidget): the current week as day columns with the dated items under each day. Takes a `props.content` blob. Items come from an OpenRegister `source` (one request for the week, bucketed by `dateField`) or from static `items`.",
+					"if": {
+						"properties": { "widgetKey": { "const": "week-strip" } },
+						"required": ["widgetKey"]
+					},
+					"then": {
+						"properties": {
+							"props": {
+								"type": "object",
+								"properties": {
+									"content": {
+										"type": "object",
+										"additionalProperties": true,
+										"properties": {
+											"days": { "type": "integer", "enum": [5, 7], "default": 5, "description": "5 working days (default) or the whole week. The week starts on Monday." },
+											"source": {
+												"type": "object",
+												"additionalProperties": false,
+												"required": ["register", "schema"],
+												"description": "OpenRegister object query; `filter` supports the shared @-token grammar.",
+												"properties": {
+													"register": { "type": "string" },
+													"schema": { "type": "string" },
+													"filter": { "type": "object", "additionalProperties": true },
+													"limit": { "type": "integer", "minimum": 1, "description": "Cap on the records fetched for the week (default 100)." }
+												}
+											},
+											"dateField": { "type": "string", "description": "The field the items are bucketed by. Required with a source." },
+											"titleField": { "type": "string", "description": "The field shown as the item title. Defaults to the object's display name." },
+											"metaFields": { "type": "array", "items": { "type": "string" }, "description": "Fields shown under the title." },
+											"itemRoute": { "type": "string", "description": "Route name an item links to; the record id goes in params.id." },
+											"lateWhen": {
+												"type": "object",
+												"additionalProperties": false,
+												"description": "Rule on the number of days until the date that marks an item late. Default: before today ({ op: 'lt', value: 0 }).",
+												"properties": {
+													"op": { "type": "string", "enum": ["eq", "neq", "gt", "gte", "lt", "lte"] },
+													"value": { "type": "number" }
+												}
+											},
+											"lateField": { "type": "string", "description": "A boolean field that marks a record late, whatever its date." },
+											"items": {
+												"type": "array",
+												"description": "Static items, used when there is no source.",
+												"items": {
+													"type": "object",
+													"required": ["title", "date"],
+													"additionalProperties": false,
+													"properties": {
+														"title": { "type": "string" },
+														"meta": { "type": "string" },
+														"date": { "type": "string", "description": "ISO date or date-time." },
+														"route": { "oneOf": [{ "type": "string" }, { "type": "object", "additionalProperties": true }] },
+														"href": { "type": "string" },
+														"late": { "type": "boolean" }
+													}
+												}
+											},
+											"emptyText": { "type": "string", "description": "Text of a day without items." },
+											"weekOffset": { "type": "integer", "description": "Whole weeks from the current one (1 = next week)." }
+										}
+									}
+								}
+							}
+						}
+					}
+				},
+				{
+					"description": "stacked-bar catalog widget (CnStackedBarWidget): one segmented bar with a legend that carries the label and count of every segment. Takes a `props.content` blob. Segments come from one grouped count request (`source.groupBy`) or from static `segments`.",
+					"if": {
+						"properties": { "widgetKey": { "const": "stacked-bar" } },
+						"required": ["widgetKey"]
+					},
+					"then": {
+						"properties": {
+							"props": {
+								"type": "object",
+								"properties": {
+									"content": {
+										"type": "object",
+										"additionalProperties": true,
+										"properties": {
+											"source": {
+												"type": "object",
+												"additionalProperties": false,
+												"required": ["register", "schema", "groupBy"],
+												"description": "OpenRegister grouped count; `filter` supports the shared @-token grammar.",
+												"properties": {
+													"register": { "type": "string" },
+													"schema": { "type": "string" },
+													"groupBy": { "type": "string", "description": "The field the records are counted per." },
+													"filter": { "type": "object", "additionalProperties": true }
+												}
+											},
+											"segments": {
+												"type": "array",
+												"description": "Static segments, used when there is no source.",
+												"items": {
+													"type": "object",
+													"required": ["label", "value"],
+													"additionalProperties": false,
+													"properties": {
+														"key": { "type": "string" },
+														"label": { "type": "string" },
+														"value": { "type": "number", "minimum": 0 }
+													}
+												}
+											},
+											"order": { "type": "array", "items": { "type": "string" }, "description": "Group keys in the order they render. Unlisted groups follow; a listed key without records shows 0." },
+											"labels": { "type": "object", "additionalProperties": { "type": "string" }, "description": "The label of a group key." },
+											"emptyText": { "type": "string", "description": "Shown when the total is 0." }
 										}
 									}
 								}
@@ -2264,6 +2536,16 @@
 					"type": "string",
 					"description": "i18n key naming the `children` dropdown. Falls back to the parent action's own label, so the chevron is never announced unlabelled."
 				},
+				"group": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Detail page header actions only. i18n key / text naming the group this action sits in inside the overflow menu. Grouped actions render under a caption with this name, in first appearance order, after the ungrouped ones. Ignored on other surfaces."
+				},
+				"adminOnly": {
+					"type": "boolean",
+					"default": false,
+					"description": "Detail page header actions only. Shows the action to instance admins alone, in the last group of the overflow menu. Hides a control and nothing more: the endpoint behind the action still decides who may call it. Ignored on other surfaces."
+				},
 				"visibleWhen": {
 					"$ref": "#/$defs/visibleWhen",
 					"description": "#91 Wave 3: an optional predicate gating whether the action renders — the shared banner shape ({ endpoint | source | field, op, value }). The `field`-only LOCAL form evaluates against the page object context (a detail action shown only in the right lifecycle state); endpoint / source forms fetch. Fail-safe: a broken predicate hides the action."
@@ -2599,8 +2881,8 @@
 				"type": {
 					"type": "string",
 					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "reports",
-						"store", "search", "wiki", "flow", "flows", "flow-detail", "custom"],
-					"description": "Page type. Closed enum of 17 supported types. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
+						"links", "store", "search", "wiki", "flow", "flows", "flow-detail", "custom"],
+					"description": "Page type. Closed enum of 18 supported types. 'links' mounts CnLinkCardsPage: a page of link cards grouped under captions, declared with config.categories + config.cards ($defs/linkCard). Use it for the pages a short menu leaves out; unlike 'reports' an app may have several. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
 				},
 				"title": {
 					"type": "string",
@@ -2887,7 +3169,7 @@
 						},
 						"columns": {
 							"type": "array",
-							"description": "Table columns (for type='index' and type='logs'). Items may be strings (legacy shorthand) or column objects ({ key, label, sortable?, width?, formatter?, formatterOptions?, widget?, widgetProps?, format?, aggregate? }). `formatter` resolves against cnFormatters (built-ins incl. currency / conditionalPhrase — configured via `formatterOptions`); `widget` resolves against cnCellWidgets (built-ins incl. badge / fkResolve / link).",
+							"description": "Table columns (for type='index' and type='logs'). Items may be strings (legacy shorthand) or column objects ({ key, label, sortable?, width?, formatter?, formatterOptions?, widget?, widgetProps?, format?, aggregate? }). `formatter` resolves against cnFormatters (built-ins incl. currency / conditionalPhrase — configured via `formatterOptions`); `widget` resolves against cnCellWidgets (built-ins incl. badge / fkResolve / link / avatar / date).",
 							"items": {
 								"oneOf": [
 									{ "type": "string" },
@@ -2934,6 +3216,127 @@
 							"items": {
 								"type": "object",
 								"additionalProperties": true
+							}
+						},
+						"stageField": {
+							"type": "string",
+							"minLength": 1,
+							"default": "status",
+							"description": "type='detail': dot-path to the field holding the record's stage. Read by `primaryActionByStage` and `nextStep`."
+						},
+						"primaryActionByStage": {
+							"type": "object",
+							"description": "type='detail': the page's primary button per stage. Keys are values of `stageField` (matched exactly first, then ignoring case). A value is an action in the header action shape, or the id of a `headerActions` entry, which then leaves the overflow menu. A stage without an entry falls back to the page's `primaryAction`.",
+							"additionalProperties": {
+								"oneOf": [
+									{ "type": "string", "minLength": 1 },
+									{ "$ref": "#/$defs/action" }
+								]
+							}
+						},
+						"quickActions": {
+							"type": "array",
+							"maxItems": 3,
+							"description": "type='detail': at most three always visible buttons in the header, for the actions a handler uses on every record. An item is an action in the header action shape, or the id of a `headerActions` entry, which then leaves the overflow menu.",
+							"items": {
+								"oneOf": [
+									{ "type": "string", "minLength": 1 },
+									{ "$ref": "#/$defs/action" }
+								]
+							}
+						},
+						"actionsMenu": {
+							"type": "object",
+							"additionalProperties": false,
+							"description": "type='detail': what the header's overflow menu itself shows. Omitted, the menu keeps Refresh and the three help links.",
+							"properties": {
+								"showRefresh": {
+									"type": "boolean",
+									"description": "false removes Refresh from the menu."
+								},
+								"showHelpLinks": {
+									"type": "boolean",
+									"description": "false removes Request a feature, Report a bug and Documentation, for an app that offers them in its own help menu."
+								},
+								"label": {
+									"type": "string",
+									"minLength": 1,
+									"description": "i18n key / text naming the menu, for example 'More'. Defaults to 'Actions'."
+								}
+							}
+						},
+						"nextStep": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": ["stages"],
+							"description": "type='detail': the 'what now' card above the body. For the record's stage it shows a short checklist next to the primary button. A stage without an entry shows no card. Rendered by CnNextStepCard.",
+							"properties": {
+								"field": {
+									"type": "string",
+									"minLength": 1,
+									"description": "Dot-path to the stage, when it differs from `stageField`."
+								},
+								"title": {
+									"type": "string",
+									"description": "i18n key / heading used by a stage that names none."
+								},
+								"stages": {
+									"type": "object",
+									"description": "Keys are stage values.",
+									"additionalProperties": {
+										"type": "object",
+										"additionalProperties": false,
+										"required": ["checklist"],
+										"properties": {
+											"title": { "type": "string", "description": "i18n key / heading of the card for this stage." },
+											"after": { "type": "string", "description": "i18n key / one line under the button saying what follows." },
+											"checklist": {
+												"type": "array",
+												"description": "What this stage still needs. An empty list shows no card.",
+												"items": {
+													"type": "object",
+													"additionalProperties": false,
+													"required": ["label"],
+													"properties": {
+														"label": { "type": "string", "minLength": 1, "description": "i18n key / text of the item." },
+														"hint": { "type": "string", "description": "i18n key / short note after the label, for example '2 of 5 done'." },
+														"doneField": { "type": "string", "minLength": 1, "description": "Dot-path on the record. The item is done when it holds a value; a list counts when it is not empty." },
+														"doneWhen": { "type": "object", "description": "A local visibleWhen condition ({ field, op, value } or { all | any }). The item is done when it is true. Wins over `doneField`." },
+														"done": { "type": "boolean", "description": "A fixed state, for an item the record cannot answer." }
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						},
+						"typePill": {
+							"$ref": "#/$defs/headerPill",
+							"description": "type='detail': a pill above the title saying what kind of record this is."
+						},
+						"statusPill": {
+							"$ref": "#/$defs/headerPill",
+							"description": "type='detail': a pill above the title saying where the record stands."
+						},
+						"sideColumn": {
+							"type": "array",
+							"description": "type='detail': a column of cards beside the body, for the record's facts. An item is a widget definition, or the id of a widget declared on the page. The column stacks under the body on a narrow page.",
+							"items": {
+								"oneOf": [
+									{ "type": "string", "minLength": 1 },
+									{
+										"type": "object",
+										"additionalProperties": true,
+										"required": ["type"],
+										"properties": {
+											"id": { "type": "string" },
+											"type": { "type": "string", "minLength": 1 },
+											"title": { "type": "string" },
+											"content": { "type": "object", "additionalProperties": true }
+										}
+									}
+								]
 							}
 						},
 						"headerActions": {
@@ -2991,6 +3394,14 @@
 								"minLength": 1
 							},
 							"description": "type='index': saved view ids this page renders as tabs instead of as entries in the views control. A view appears in one place or the other, never both. An id naming a view that no longer exists produces no tab, rather than a tab that opens nothing. Maps to CnIndexPage `viewTabs`."
+						},
+						"viewCounts": {
+							"description": "type='index': which saved views show how many records they match. `true` counts every saved view (tabs and the entries in the views control), an array counts only the view ids it lists. Off by default, so no count request is made. Quick filters opt in per entry with `showCount: true`. Maps to CnIndexPage `viewCounts`.",
+							"oneOf": [
+								{ "type": "boolean" },
+								{ "type": "array", "items": { "type": "string", "minLength": 1 } }
+							],
+							"default": false
 						},
 						"priorityField": {
 							"type": "string",
@@ -3258,6 +3669,25 @@
 								"properties": {
 									"register": { "type": "string", "minLength": 1 },
 									"schema": { "type": "string", "minLength": 1 }
+								}
+							}
+						},
+						"required": ["config"]
+					}
+				},
+				{
+					"description": "type='links' (CnLinkCardsPage) renders config.cards as link cards grouped by config.categories. It MUST declare a non-empty cards list, and every card is a $defs/linkCard, so a card that can go nowhere is refused here and not dropped in silence at render time (link-cards-page).",
+					"if": { "properties": { "type": { "const": "links" } }, "required": ["type"] },
+					"then": {
+						"properties": {
+							"config": {
+								"type": "object",
+								"required": ["cards"],
+								"properties": {
+									"description": { "type": "string" },
+									"emptyLabel": { "type": "string" },
+									"categories": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+									"cards": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/linkCard" } }
 								}
 							}
 						},
