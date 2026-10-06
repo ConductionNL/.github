@@ -1590,11 +1590,23 @@ jobs:
               except subprocess.CalledProcessError:
                   previous = ""  # 404: no stable release yet
           else:
-              releases = json.loads(gh("release", "list", "-R", repo, "--limit", "200",
-                                       "--json", "tagName,createdAt"))
-              same = sorted((r for r in releases if ("-%s." % kind) in r["tagName"]),
-                            key=lambda r: r["createdAt"])
-              previous = same[-1]["tagName"] if same else ""
+              # Page newest-first until the channel shows up: a busy repo cuts
+              # ~10 unstables a day, so a fixed window loses the last beta
+              # within weeks (openregister 2026-10-06: newest beta at index 129).
+              newest = None
+              page = 1
+              while page <= 50:
+                  batch = json.loads(gh("api", "repos/%s/releases?per_page=100&page=%d" % (repo, page)))
+                  hits = [r for r in batch if ("-%s." % kind) in r["tag_name"] and r["tag_name"] != tag]
+                  if hits:
+                      newest = max(hits, key=lambda r: r["created_at"])
+                      break
+                  if len(batch) < 100:
+                      break
+                  page += 1
+              previous = newest["tag_name"] if newest else ""
+              if not previous:
+                  print("::warning::No earlier %s release found; GitHub picks the base for the notes." % kind)
           if previous == tag:
               previous = ""  # a re-run of an already-published version
 
