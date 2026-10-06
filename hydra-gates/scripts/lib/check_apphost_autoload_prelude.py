@@ -58,6 +58,19 @@ an acceptable substitute: it sets `loadedApps[..]=true` and calls
 `Coordinator::bootApp()`, booting OpenRegister before its own register() has
 run — so this gate rejects it explicitly rather than accepting it as a prelude.
 
+On Nextcloud 35 `OC_App::registerAutoloading()` no longer exists; it moved to
+`\\OC\\App\\AppManager::registerAutoloading()`, which is `@internal` and not on
+`IAppManager`. The public-API form is a loader of the app's own that maps the
+`OCA\\OpenRegister\\` prefix onto OpenRegister's `lib/`:
+
+    $path = $appManager->getAppPath('openregister');
+    spl_autoload_register(static function (string $class) use ($path): void {
+        // 'OCA\\OpenRegister\\' + rest  ->  $path . '/lib/' + rest . '.php'
+    });
+
+Both forms count as the prelude. has_spl_prelude() says what the second one
+must show.
+
 WHAT FAILS
 ----------
 Anything under lib/AppInfo/ that, without the prelude:
@@ -122,6 +135,18 @@ LOAD_APP = re.compile(r"""loadApp\s*\(\s*['"]openregister['"]\s*\)""")
 # taking 98× the time. `_args_at` below walks the parentheses once instead.
 LOAD_APP_OPEN = re.compile(r"loadApp\s*\(")
 PRELUDE_OPEN = re.compile(r"registerAutoloading\s*\(")
+
+# The Nextcloud 35 prelude (see the module header). MEASURED: portaliq#1241
+# replaced `\OC_App::registerAutoloading()` with exactly this shape in
+# lib/AppInfo/OpenRegisterAutoloader.php, and from then on every portaliq PR
+# was red on this gate, for a prelude that runs before its Bootstrap reference.
+SPL_REGISTER_OPEN = re.compile(r"spl_autoload_register\s*\(")
+GET_APP_PATH_OPEN = re.compile(r"getAppPath\s*\(")
+# A string literal that is EXACTLY the OpenRegister namespace prefix, in either
+# escaping: 'OCA\\OpenRegister\\' or 'OCA\OpenRegister\'.
+OR_NAMESPACE_LITERAL = re.compile(
+    r"""(['"])\\{0,2}OCA\\{1,2}OpenRegister\\{1,2}\1"""
+)
 
 
 def _paren_map(text: str) -> dict:
@@ -323,6 +348,66 @@ def has_prelude(text: str, anchor: str | None = None) -> bool:
             if re.search(r"\b" + re.escape(name) + r"\b", args):
                 return True
     return False
+
+
+def has_spl_prelude(text: str, anchor: str) -> bool:
+    """True when ONE file registers its own loader for OpenRegister's prefix.
+
+    The Nextcloud 35 prelude. All three must be code in the same file, because
+    each on its own is common and says nothing about OpenRegister:
+
+      * an `spl_autoload_register(` call;
+      * a string literal that is exactly the `OCA\\OpenRegister\\` prefix,
+        which is what the loader matches class names against;
+      * a `getAppPath(` call naming 'openregister' (literal, or a constant
+        defined to it), which is where the loader finds the files.
+
+    Calls are found in *anchor* (string contents blanked) and their arguments
+    read out of *text*, as in has_prelude(). The namespace literal must be a
+    WHOLE string: its quotes survive in *anchor* and its contents are blank
+    there. A sentence quoting the prefix inside a longer string does not count.
+    """
+    if not SPL_REGISTER_OPEN.search(anchor):
+        return False
+
+    whole_literal = False
+    for m in OR_NAMESPACE_LITERAL.finditer(text):
+        start, end = m.start(), m.end() - 1
+        if (anchor[start] == text[start] and anchor[end] == text[end]
+                and not anchor[start + 1:end].strip()):
+            whole_literal = True
+            break
+    if not whole_literal:
+        return False
+
+    const_names = {
+        m.group(1)
+        for m in APPID_CONST.finditer(text)
+        if anchor.startswith("const", m.start())
+    }
+    parens = _paren_map(anchor)
+    for m in GET_APP_PATH_OPEN.finditer(anchor):
+        close = parens.get(m.end() - 1)
+        if close is None:
+            continue
+        args = text[m.end():close]
+        if OPENREGISTER_LITERAL.search(args):
+            return True
+        if any(re.search(r"\b" + re.escape(n) + r"\b", args) for n in const_names):
+            return True
+    return False
+
+
+def has_any_prelude(code: dict, anchors: dict) -> bool:
+    """Either prelude form, anywhere under lib/AppInfo/.
+
+    The `registerAutoloading()` form is read across the joined files, as it
+    always was; the spl form file by file (see has_spl_prelude()).
+    """
+    # Joined with the SAME separator so the two blobs stay offset-aligned.
+    if has_prelude("\n".join(code.values()), "\n".join(anchors.values())):
+        return True
+    return any(has_spl_prelude(code[path], anchors[path]) for path in code)
 
 
 def has_load_app(text: str, anchor: str | None = None) -> bool:
@@ -563,7 +648,7 @@ def scan_app(app_dir: str) -> list[tuple[str, str]]:
 
     # The prelude may legitimately live in a sibling composition-root file that
     # register() calls, so look for it across the whole of lib/AppInfo/.
-    if has_prelude(blob, anchor_blob):
+    if has_any_prelude(code, anchors):
         return []
 
     if suppression_reason(raw_blob):
@@ -612,8 +697,7 @@ def scan_notes(app_dir: str) -> list[tuple[str, list[str]]]:
     code = {path: pair[0] for path, pair in masks.items()}
     if any(OWN_NAMESPACE.search(text) for _, text in masks.values()):
         return []
-    if has_prelude("\n".join(code.values()),
-                   "\n".join(pair[1] for pair in masks.values())):
+    if has_any_prelude(code, {path: pair[1] for path, pair in masks.items()}):
         return []
     if suppression_reason("\n".join(sources.values())):
         return []
@@ -681,7 +765,10 @@ def main(argv: list[str] | None = None) -> int:
                 f"register() one app at a time. Add the ADR-040 prelude: "
                 f"$p = \\OCP\\Server::get(\\OCP\\App\\IAppManager::class)"
                 f"->getAppPath('openregister'); \\OC_App::registerAutoloading("
-                f"'openregister', $p); wrapped in try/catch(\\Throwable). Or add a "
+                f"'openregister', $p); wrapped in try/catch(\\Throwable). On "
+                f"Nextcloud 35, where OC_App::registerAutoloading() is gone, "
+                f"spl_autoload_register() a loader that maps 'OCA\\\\OpenRegister\\\\' "
+                f"onto getAppPath('openregister') . '/lib/' instead. Or add a "
                 f"comment 'apphost-prelude exclude <reason>'."
             )
             failures += 1
