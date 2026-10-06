@@ -5186,11 +5186,30 @@ jobs:
           # session does not survive between requests on this instance …
           # this harness has no cache backend".
           #
-          # `apc.enable_cli=1` matters because `php -S` IS the CLI SAPI: without
-          # it APCu loads but stays inert, which looks exactly like not having
-          # installed it.
+          # `apc.enable_cli=1` is what lets APCu work for the `occ` and `php -r`
+          # CLI processes (the APCu check in "Configure the Nextcloud cache
+          # backend" runs under `php -r`). The `cli-server` SAPI does not read
+          # it: measured on PHP 8.5 with apc.enable_cli=0, a script served by
+          # `php -S` reports APCu enabled while the `cli` SAPI reports it off.
+          #
+          # OPcache and `php -S`: the built-in server runs as the `cli-server`
+          # SAPI, not `cli`, and OPcache is already on there by default.
+          # `opcache.enable_cli` switches it on only for `cli` and `phpdbg`, and
+          # is not set: each `occ` call is its own short process, so a CLI cache
+          # would be thrown away at its exit. The three size settings are the
+          # part the server uses: they are set above the PHP defaults (128 MB /
+          # 8 MB / 10000 files, which PHP rounds up to 16,229 slots). Nextcloud's
+          # shipped core, lib, 3rdparty and apps alone are 13,044 PHP files,
+          # before the app under test and its siblings with their vendor/ trees,
+          # so a full cache, which stops caching new scripts, is plausible. Not
+          # timed on this job; "Report the server's OPcache" after the suite
+          # shows whether it filled up.
+          #
+          # `opcache.revalidate_freq=0`, because specs and seed commands change
+          # config/config.php through `occ` while the server runs, and the
+          # default lets the server read the old file for up to 2 s.
           extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json, apcu
-          ini-values: apc.enable_cli=1
+          ini-values: apc.enable_cli=1, opcache.memory_consumption=256, opcache.interned_strings_buffer=16, opcache.max_accelerated_files=20000, opcache.revalidate_freq=0
           tools: composer:v2
 
       - name: Checkout additional apps
@@ -5363,6 +5382,60 @@ jobs:
             npm ci
           fi
 
+      # ── The sibling apps' compiled frontends, cached per commit ──────────
+      #
+      # The build below is a cold `npm ci` plus a production webpack build of
+      # openregister on every run: 87 s of thematiq run 37305793889, and again
+      # on every shard leg. Its output depends only on the sibling's commit and
+      # the Node version, so it is cached under exactly that key and nothing
+      # looser: no restore-keys, so a cache can only ever hold the bundle of
+      # the commit that was checked out.
+      #
+      # Only apps the build step would build are keyed, with the same three
+      # checks it makes, and only their `js/` is cached, which is where every
+      # fleet app's webpack writes (openregister's .gitignore carries `/js/`).
+      # A build writes `js/.ci-bundle.sha256`, a checksum of every file it
+      # emitted, and a restored `js/` is used only when that checksum still
+      # matches; anything else, a partial restore included, is rebuilt. The
+      # build step's evidence check then still counts the JavaScript on disk,
+      # so an empty cache fails as loudly as an empty build.
+      # Purging: an entry keeps its first writer's content, so a poisoned bundle
+      # outlives a revert. Bump `v1` in `sibling-frontends-v1`, or run
+      # `gh cache list --key sibling-frontends-` and `gh cache delete <id>`.
+      - name: Key the additional app frontends
+        id: sibling-frontends
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
+        env:
+          ADDITIONAL_APPS: ${{ inputs.additional-apps }}
+          E2E_ADDITIONAL_APPS: ${{ inputs.e2e-additional-apps }}
+        run: |
+          set -euo pipefail
+          IDS=""
+          PATHS=""
+          for name in $(printf '%s\n%s\n' "$ADDITIONAL_APPS" "$E2E_ADDITIONAL_APPS" | jq -r -s 'add // [] | .[].app'); do
+            dir="server/apps/$name"
+            [ -f "$dir/package.json" ] && [ -f "$dir/package-lock.json" ] || continue
+            node -e "const s = require('./$dir/package.json').scripts || {}; process.exit(s.build ? 0 : 1)" || continue
+            IDS="${IDS}${name}@$(git -C "$dir" rev-parse HEAD);"
+            PATHS="${PATHS}${dir}/js"$'\n'
+          done
+          if [ -z "$IDS" ]; then
+            echo "additional-app-frontend cache: no sibling app has a frontend to build."
+            echo "paths=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "key=sibling-frontends-v1-${RUNNER_OS}-node$(node --version)-$(printf '%s' "$IDS" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          { echo "paths<<PATHS_EOF"; printf '%s' "$PATHS"; echo "PATHS_EOF"; } >> "$GITHUB_OUTPUT"
+          echo "additional-app-frontend cache key covers: ${IDS}"
+
+      - name: Restore additional app frontends
+        id: sibling-frontends-cache
+        if: ${{ steps.sibling-frontends.outputs.paths != '' }}
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.sibling-frontends.outputs.paths }}
+          key: ${{ steps.sibling-frontends.outputs.key }}
+
       - name: Build additional app frontends
         # A SIBLING APP WAS INSTALLED WITH NO COMPILED FRONTEND, IN EVERY
         # BROWSER JOB THIS WORKFLOW HAS EVER RUN.
@@ -5405,6 +5478,8 @@ jobs:
         # A cold `npm ci` plus a production webpack build of the largest app in
         # the fleet (openregister) measures well inside this.
         timeout-minutes: 20
+        env:
+          FRONTENDS_RESTORED: ${{ steps.sibling-frontends-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
           BUILT=0
@@ -5431,9 +5506,25 @@ jobs:
               SKIPPED=$((SKIPPED + 1))
               continue
             fi
-            echo "additional-app-frontend: building $name ..."
-            # A subshell, so the cd cannot leak into the next iteration.
-            (cd "$dir" && npm ci --no-audit --no-fund && npm run build)
+            if [ "${FRONTENDS_RESTORED:-}" = "true" ] \
+              && [ -f "$dir/js/.ci-bundle.sha256" ] \
+              && (cd "$dir" && sha256sum --quiet --check js/.ci-bundle.sha256); then
+              echo "additional-app-frontend: $name restored from the cache for commit $(git -C "$dir" rev-parse --short HEAD), checksums match, not rebuilt."
+            else
+              if [ "${FRONTENDS_RESTORED:-}" = "true" ]; then
+                echo "::warning::additional-app-frontend: the cached bundle of '$name' does not match its checksum file, so it is rebuilt."
+              fi
+              echo "additional-app-frontend: building $name ..."
+              # A subshell, so the cd cannot leak into the next iteration.
+              (cd "$dir" && npm ci --no-audit --no-fund && npm run build)
+              # The checksum a later restore is verified against. Written only
+              # after a build, so it can only ever describe a build's output.
+              # Skipped when there is no js/, so the evidence check below is
+              # still the step that reports an empty build.
+              if [ -d "$dir/js" ]; then
+                (cd "$dir" && find js -type f ! -name .ci-bundle.sha256 -print0 | sort -z | xargs -0 -r sha256sum > js/.ci-bundle.sha256)
+              fi
+            fi
             BUILT=$((BUILT + 1))
             # EVIDENCE, NOT A CLAIM. A build that exits 0 and emits nothing is
             # precisely the state this step exists to remove, and it must not
@@ -5458,6 +5549,48 @@ jobs:
           done
           echo "additional-app-frontend: built ${BUILT}, skipped ${SKIPPED}."
 
+      # Saved explicitly, right after a successful build. The post-job save of
+      # `actions/cache` only runs when the WHOLE job succeeds, so a suite with a
+      # single red spec would never have stored the bundle it built.
+      - name: Save additional app frontends
+        if: ${{ steps.sibling-frontends.outputs.paths != '' && steps.sibling-frontends-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.sibling-frontends.outputs.paths }}
+          key: ${{ steps.sibling-frontends.outputs.key }}
+
+      # ── Chromium, cached per Playwright version ──────────────────────────
+      #
+      # `npx playwright install chromium` downloads the browser on every run.
+      # The binary depends only on the Playwright version, which is known once
+      # the package is installed, so that install moves into its own step and
+      # the browser cache is keyed on the version it resolved. With the browser
+      # restored, `playwright install` finds it in place and downloads nothing.
+      #
+      # Purging: an entry keeps its first writer's content, so a poisoned
+      # browser outlives a revert. Bump `v1` in `playwright-browsers-v1`, or run
+      # `gh cache list --key playwright-browsers-` and `gh cache delete <id>`.
+      - name: Resolve the Playwright version
+        id: playwright-version
+        # The same bound as `Install Playwright`, for the same reason.
+        timeout-minutes: 10
+        env:
+          APP_NAME: ${{ inputs.app-name }}
+        run: |
+          set -euo pipefail
+          cd "server/apps/${APP_NAME}"
+          npm install --save-dev @playwright/test
+          PW_VERSION=$(node -p "require('@playwright/test/package.json').version")
+          [ -n "$PW_VERSION" ] || { echo "::error::could not resolve the @playwright/test version"; exit 1; }
+          echo "version=${PW_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Playwright browsers
+        id: playwright-browsers
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-v1-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright
         # A STALLED SETUP STEP EATS THE JOB'S WHOLE CAP AND LEAVES NO VERDICT.
         #
@@ -5481,7 +5614,8 @@ jobs:
         timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
-          npm install --save-dev @playwright/test
+          # @playwright/test itself is installed by `Resolve the Playwright
+          # version` above, so the browser cache can be keyed on it.
 
           # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
           #
@@ -5522,6 +5656,13 @@ jobs:
           else
             echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
           fi
+
+      - name: Save the Playwright browsers
+        if: ${{ steps.playwright-browsers.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-v1-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       # ── Reuse the bundle the `frontend-build` job already compiled ─────────
       #
@@ -5944,6 +6085,40 @@ jobs:
             echo "::error::The php -S front-controller router is swallowing Nextcloud's OCS entry point — /ocs/v2.php/cloud/user returned 404 instead of reaching ocs/v2.php. Every OCS call (current user, groups, user_status, dashboard layout) will 404, and specs will report it as a missing element."
             exit 1
           fi
+          # Is OPcache on in the process that serves the specs? Ask the server,
+          # not a `php -r`: that would run in the `cli` SAPI, where the answer
+          # follows `opcache.enable_cli` and says nothing about `cli-server`.
+          # A real file on disk is served as-is by ci-router.php (rule 1), so a
+          # throwaway script under server/ is reached the same way status.php is.
+          # A warning, not a failure: without OPcache the suite is slower, not
+          # wrong. No answer from the probe is "unknown", not "off", and nothing
+          # here can fail the step. This branch is not covered by the repo's
+          # self-tests.
+          OPCACHE_STATE=""
+          if printf '%s\n' '<?php header("Content-Type: text/plain"); $s = function_exists("opcache_get_status") ? opcache_get_status(false) : false; echo (is_array($s) && !empty($s["opcache_enabled"])) ? "opcache=on" : "opcache=off";' > ci-opcache-probe.php; then
+            OPCACHE_STATE="$(curl -s --max-time 10 http://localhost:8080/ci-opcache-probe.php || true)"
+          else
+            echo "::warning::could not write the OPcache probe; state unknown"
+            OPCACHE_STATE="skipped"
+          fi
+          rm -f ci-opcache-probe.php
+          case "$OPCACHE_STATE" in
+            "opcache=on")
+              echo "OPcache is enabled in the php -S server."
+              ;;
+            "opcache=off")
+              echo "::warning::OPcache is not enabled in the php -S server, so Nextcloud's PHP is compiled on every request and every spec waits for it. Check opcache.enable and the opcache size settings in Setup PHP."
+              ;;
+            "skipped")
+              ;;
+            "")
+              echo "::warning::The OPcache probe could not reach the php -S server, so whether OPcache is enabled there is unknown."
+              ;;
+            *)
+              SHOWN="$(printf '%s' "$OPCACHE_STATE" | tr -d '\n' | cut -c1-40 || true)"
+              echo "::warning::The OPcache probe gave an unexpected answer ('${SHOWN}'), so whether OPcache is enabled in the php -S server is unknown."
+              ;;
+          esac
           echo "PHP built-in server alive (pid=${PHP_PID})."
 
       - name: Seed test data
@@ -6054,6 +6229,61 @@ jobs:
           # partition step before this one, so it never reaches here.
           E2E_SHARD_INDEX: ${{ matrix.shard }}
           E2E_SHARD_TOTAL: ${{ (inputs.e2e-shards >= 1 && inputs.e2e-shards <= 8) && inputs.e2e-shards || 1 }}
+
+      # ── How full the server's OPcache got under the suite ──────────────────
+      #
+      # "Start PHP built-in server" asks whether OPcache is on. This asks the
+      # same server, the same way (a throwaway script under server/, served by
+      # ci-router.php on :8080), what the suite left in it: whether the sizes
+      # in Setup PHP were big enough is only visible once the suite has loaded
+      # what it loads. Written to the step summary, so a run is its own
+      # measurement.
+      #
+      # Reports, never fails. No answer is "unknown" and an answer that is not
+      # the expected JSON is "unexpected", never read as "off". No self-test in
+      # this repository covers this step.
+      - name: Report the server's OPcache
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          PROBE="server/ci-opcache-report.php"
+          cat > "$PROBE" <<'PHP'
+          <?php
+          $s = function_exists('opcache_get_status') ? opcache_get_status(false) : false;
+          $mb = static fn ($bytes, $precision = 0) => $bytes === null ? null : round($bytes / 1048576, $precision);
+          header('Content-Type: application/json');
+          echo json_encode([
+              'enabled' => is_array($s) && !empty($s['opcache_enabled']),
+              'cache_full' => is_array($s) && !empty($s['cache_full']),
+              'scripts' => $s['opcache_statistics']['num_cached_scripts'] ?? null,
+              'max_scripts' => $s['opcache_statistics']['max_cached_keys'] ?? null,
+              'oom_restarts' => $s['opcache_statistics']['oom_restarts'] ?? null,
+              'hit_rate' => isset($s['opcache_statistics']['opcache_hit_rate']) ? round($s['opcache_statistics']['opcache_hit_rate'], 1) : null,
+              'memory_used_mb' => $mb($s['memory_usage']['used_memory'] ?? null),
+              'memory_free_mb' => $mb($s['memory_usage']['free_memory'] ?? null),
+              'strings_used_mb' => $mb($s['interned_strings_usage']['used_memory'] ?? null, 1),
+              'strings_free_mb' => $mb($s['interned_strings_usage']['free_memory'] ?? null, 1),
+          ]);
+          PHP
+          REPORT="$(curl -s --max-time 10 http://localhost:8080/ci-opcache-report.php || true)"
+          rm -f "$PROBE"
+          if [ -z "$REPORT" ]; then
+            echo "::warning::The OPcache report could not reach the php -S server, so how full its cache got is unknown."
+            exit 0
+          fi
+          if ! printf '%s' "$REPORT" | jq -e 'type == "object" and has("enabled")' > /dev/null 2>&1; then
+            SHOWN="$(printf '%s' "$REPORT" | tr -d '\n' | cut -c1-40 || true)"
+            echo "::warning::The OPcache report gave an unexpected answer ('${SHOWN}'), so how full the cache got is unknown."
+            exit 0
+          fi
+          echo "php -S OPcache after the suite: ${REPORT}"
+          { echo "### php -S OPcache after the suite"; echo; echo '```json'; printf '%s' "$REPORT" | jq .; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$(printf '%s' "$REPORT" | jq -r .enabled)" != "true" ]; then
+            echo "::warning::OPcache was not enabled in the php -S server, so Nextcloud's PHP was compiled on every request."
+          elif [ "$(printf '%s' "$REPORT" | jq -r .cache_full)" = "true" ]; then
+            echo "::warning::The php -S server's OPcache filled up during the suite, so scripts loaded after that were compiled on every request. Raise the sizes in Setup PHP."
+          fi
 
       # ── THE SERVER'S OWN ACCOUNT OF A 5xx, WHICH THIS JOB USED TO DISCARD ───
       #
