@@ -1543,6 +1543,93 @@ jobs:
             nextcloud-release.signature
           retention-days: ${{ inputs.release-type == 'stable' && 90 || (inputs.release-type == 'beta' && 30 || 7) }}
 
+      # ── RELEASE NOTES FROM THE SAME CHANNEL, AND NEVER OVER GITHUB'S CAP ──
+      #
+      # `generateReleaseNotes: true` let GitHub pick the previous tag itself,
+      # and it picks badly on a repo with three release channels. Measured
+      # 2026-10-06 on openregister: for a new unstable on `development` it took
+      # v1.1.5-unstable.20260821054342 as the base, six weeks back, and
+      # produced a 125,760-character body. GitHub refuses a release body over
+      # 125,000 characters (422 "body is too long"), so every unstable release
+      # of openregister failed from 2026-10-05 17:32 onwards, after the package
+      # was built. The pending beta would have failed the same way.
+      #
+      # So name the base explicitly: the newest release of the SAME channel
+      # (the last `-unstable.` tag for unstable, the last `-beta.` tag for
+      # beta, the last non-prerelease for stable). Same openregister commit,
+      # measured: 1,200 characters since the last unstable, 43,042 since the
+      # last beta. With no earlier release in the channel, GitHub's own choice
+      # stays. Any body still over 120,000 characters is cut at a line
+      # boundary, with a link to the full compare, so a long channel can
+      # never block a release again.
+      - name: Write release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TYPE: ${{ inputs.release-type }}
+          TARGET_SHA: ${{ steps.bump.outputs.bump_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          tag = "v" + os.environ["NEW_VERSION"]
+          kind = os.environ["RELEASE_TYPE"]
+          out = os.path.join(os.environ["RUNNER_TEMP"], "release-notes.md")
+          limit = 120000
+
+          def gh(*args):
+              return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
+
+          previous = ""
+          if kind == "stable":
+              # releases/latest is the newest non-prerelease, non-draft release;
+              # a list would have to page past every unstable to find it.
+              try:
+                  previous = json.loads(gh("api", "repos/%s/releases/latest" % repo))["tag_name"]
+              except subprocess.CalledProcessError:
+                  previous = ""  # 404: no stable release yet
+          else:
+              # Page newest-first until the channel shows up: a busy repo cuts
+              # ~10 unstables a day, so a fixed window loses the last beta
+              # within weeks (openregister 2026-10-06: newest beta at index 129).
+              newest = None
+              page = 1
+              while page <= 50:
+                  batch = json.loads(gh("api", "repos/%s/releases?per_page=100&page=%d" % (repo, page)))
+                  hits = [r for r in batch if ("-%s." % kind) in r["tag_name"] and r["tag_name"] != tag]
+                  if hits:
+                      newest = max(hits, key=lambda r: r["created_at"])
+                      break
+                  if len(batch) < 100:
+                      break
+                  page += 1
+              previous = newest["tag_name"] if newest else ""
+              if not previous:
+                  print("::warning::No earlier %s release found; GitHub picks the base for the notes." % kind)
+          if previous == tag:
+              previous = ""  # a re-run of an already-published version
+
+          args = ["api", "repos/%s/releases/generate-notes" % repo,
+                  "-f", "tag_name=" + tag, "-f", "target_commitish=" + os.environ["TARGET_SHA"]]
+          if previous:
+              args += ["-f", "previous_tag_name=" + previous]
+          body = json.loads(gh(*args))["body"]
+          print("Release notes for %s: base %s, %d characters" % (tag, previous or "(GitHub's choice)", len(body)))
+
+          if len(body) > limit:
+              cut = body[:limit].rsplit("\n", 1)[0]
+              base = previous or "the previous release"
+              link = ("https://github.com/%s/compare/%s...%s" % (repo, previous, tag)) if previous else ""
+              cut += ("\n\n_The list is cut here: GitHub caps a release body at 125,000 characters. "
+                      "Every change since %s: %s_\n" % (base, link or "see the repository history"))
+              print("::warning::Release notes truncated from %d to %d characters." % (len(body), len(cut)))
+              body = cut
+
+          with open(out, "w", encoding="utf-8") as fh:
+              fh.write(body)
+          PY
+
       - name: Create GitHub release
         uses: ncipollo/release-action@v1
         with:
@@ -1555,7 +1642,7 @@ jobs:
           name: "${{ inputs.release-type == 'stable' && 'Release' || (inputs.release-type == 'beta' && 'Beta' || 'Unstable') }} ${{ env.NEW_VERSION }}"
           draft: false
           prerelease: ${{ inputs.release-type != 'stable' }}
-          generateReleaseNotes: true
+          bodyFile: ${{ runner.temp }}/release-notes.md
 
       # ── PROVE THE TAG CONTAINS WHAT TRIGGERED THE RUN ──
       #
