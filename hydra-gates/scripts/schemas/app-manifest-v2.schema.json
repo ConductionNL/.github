@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.47.0",
+	"version": "2.49.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -98,7 +98,7 @@
 							"suggestMap": { "type": "object", "description": "choice: map of suggestFrom value → suggested option value. Used to auto-suggest a default (e.g. RGS template suggested from organisation type).", "additionalProperties": { "type": "string" } },
 							"multiple": { "type": "boolean", "default": false, "description": "choice: allow multi-select." },
 							"loadAction": { "type": "string", "minLength": 1, "description": "choice with display cards: an actionId each option card loads itself with. Every card except the one whose value is `none` gets its own Load button, which POSTs { dataset: <value> } to /api/setup/action/{loadAction}, spins while it runs and shows the result on that card. A successful load also selects the card. With loadAction the separate run-action step that loaded the picked dataset is no longer needed; manifests that keep it still work." },
-							"requires": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true, "description": "App ids this step needs. When any of them is not installed and enabled, the wizard skips the step and the summary shows it as skipped, naming the missing apps. Do not combine with required: true; setup status would keep reporting the skipped step as unmet." },
+							"requires": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true, "description": "App ids this step needs. When any of them is not installed and enabled, the wizard skips the step and the summary shows it as skipped, naming the missing apps. Setup status then counts the step as not applicable, neither met nor unmet, so it never reopens the wizard or gates the app. This holds for a required step too." },
 							"action": { "type": "string", "description": "run-action: actionId POSTed to /api/setup/action/{action}." },
 							"onDemand": { "type": "boolean", "default": false, "description": "run-action: the step runs only when the user clicks Run, never automatically, and is never outstanding work (it does not open the wizard or decide where a resumed wizard starts). The summary ticks it only when its action succeeded in the current session and shows it as not run otherwise, whatever the server reports. For destructive steps an app reports as done on purpose so they never auto-run, such as removing example data." },
 							"healthCheck": { "type": "boolean", "default": false, "description": "summary: render a health recap." },
@@ -236,7 +236,7 @@
 				},
 				"settingsLabel": {
 					"type": "string",
-					"description": "Override label for the settings foldout's gear button. Defaults to 'Settings'."
+					"description": "Override label for the settings foldout's gear button. Defaults to 'Advanced'."
 				},
 				"card": {
 					"type": "object",
@@ -3607,6 +3607,34 @@
 							"type": "boolean",
 							"default": true,
 							"description": "type='dashboard': `false` drops the header row (title, description, header actions, edit toggle) for a page that opens with its own heading, such as a greeting widget; the title stays as a visually hidden heading (zuiddrecht-pixel-gaps). Maps to CnDashboardPage `showHeader`."
+						},
+						"views": {
+							"type": "array",
+							"minItems": 1,
+							"description": "type='dashboard' | type='detail': views of the page, each its own widget grid behind one segmented control (\"My work | My team\") (view-switch-containers). The chosen view renders in a region below the page's own grid, drawn with the same grid and widgets; the page's own `widgets` and `layout` stay above it. The switch sits in the page header, or in a greeting header widget whose `content.views.options[]` carry `view` instead of `route`. The chosen view is in the address (`?view=<id>`) and in the user's preferences; the address wins. A view with nothing to draw shows `emptyText`, else a default sentence. On a detail page, views replace the automatic Data and Related body. Maps to CnDashboardPage / CnDetailPage `views`.",
+							"items": {
+								"type": "object",
+								"required": ["id", "label"],
+								"additionalProperties": false,
+								"properties": {
+									"id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_-]+$", "description": "The view id, written to the address as `?view=<id>`." },
+									"label": { "type": "string", "minLength": 1, "description": "The option label and the region's accessible name (through the app's translations)." },
+									"icon": { "type": "string", "minLength": 1, "description": "Optional MDI icon name, reserved for an icon-bearing switch." },
+									"emptyText": { "type": "string", "minLength": 1, "description": "The sentence shown when the view has nothing to draw." },
+									"widgets": { "type": "array", "description": "The view's widget definitions, the same shape as the page's `widgets`.", "items": { "type": "object", "additionalProperties": true } },
+									"layout": { "type": "array", "description": "The view's grid layout, the same shape as the page's `layout`.", "items": { "type": "object", "additionalProperties": true } }
+								}
+							}
+						},
+						"defaultView": {
+							"type": "string",
+							"minLength": 1,
+							"description": "type='dashboard' | type='detail': the id of the view chosen when neither the address nor the user's stored choice names one; without it the first view (view-switch-containers). Maps to `defaultView`."
+						},
+						"viewsLabel": {
+							"type": "string",
+							"minLength": 1,
+							"description": "type='dashboard' | type='detail': the accessible name of the page's view switch, e.g. \"Whose work\"; defaults to \"View\" (view-switch-containers). Maps to `viewsLabel`."
 						},
 						"showWidgetActions": {
 							"type": "boolean",
