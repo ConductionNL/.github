@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.49.0",
+	"version": "2.53.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -64,6 +64,7 @@
 				"enabled": { "type": "boolean", "default": true, "description": "Whether the setup wizard is active for this app." },
 				"version": { "type": "integer", "default": 1, "description": "Setup contract version; bump to re-trigger setup after a breaking change." },
 				"completionConfigKey": { "type": "string", "description": "App-config key storing the completed setup version." },
+				"dismissAction": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "Setup action that records a closed or finished setup wizard on the server, so it stays closed in every browser. CnAppRoot posts `/apps/{appId}/api/setup/action/{dismissAction}` with `{ finished }` once when the user closes or finishes the wizard. The app either answers the outstanding optional steps or reports `dismissed` (true, or the setup version it was closed at) in `GET /api/setup/status`. Without it, the close is remembered only in the browser (localStorage), as before." },
 				"steps": {
 					"type": "array",
 					"description": "Ordered setup steps rendered by CnSetupWizard.",
@@ -1569,6 +1570,11 @@
 						"href": { "type": "string" }
 					}
 				},
+				"showButtons": {
+					"type": "boolean",
+					"default": true,
+					"description": "`false` drops the widget's footer links (its definition's `buttons`, e.g. a calendar's \"More events\"), for a placement whose card says enough without them (zuiddrecht-pixel-gaps-3)."
+				},
 				"sizeToContent": {
 					"type": ["boolean", "integer"],
 					"minimum": 1,
@@ -2195,7 +2201,8 @@
 												}
 											},
 											"emptyText": { "type": "string", "description": "Text of a day without items." },
-											"weekOffset": { "type": "integer", "description": "Whole weeks from the current one (1 = next week)." }
+											"weekOffset": { "type": "integer", "description": "Whole weeks from the current one (1 = next week)." },
+											"inset": { "type": "boolean", "default": false, "description": "Draw the strip inside the board's inset (16px above, 24px at the sides, 22px below) instead of from card edge to card edge (zuiddrecht-pixel-gaps-3). Theme hook --cn-widget-board-inset." }
 										}
 									}
 								}
@@ -2246,7 +2253,8 @@
 											},
 											"order": { "type": "array", "items": { "type": "string" }, "description": "Group keys in the order they render. Unlisted groups follow; a listed key without records shows 0." },
 											"labels": { "type": "object", "additionalProperties": { "type": "string" }, "description": "The label of a group key." },
-											"emptyText": { "type": "string", "description": "Shown when the total is 0." }
+											"emptyText": { "type": "string", "description": "Shown when the total is 0." },
+											"inset": { "type": "boolean", "default": false, "description": "Draw the bar and legend inside the board's inset (16px above, 24px at the sides, 22px below) instead of from card edge to card edge (zuiddrecht-pixel-gaps-3). Theme hook --cn-widget-board-inset." }
 										}
 									}
 								}
@@ -2903,7 +2911,7 @@
 			"type": "object",
 			"required": ["register", "schema"],
 			"additionalProperties": false,
-			"description": "One KPI entry inside a multi-entry stats-block widget (CnStatsBlockWidget `entries[]`). Carries the same source contract as a type:'stat' widget: register + schema + metric + token-resolved filter (@today / @me / @workspace.* and ?-optional clauses), plus per-entry presentation (title, variant, countLabel), an optional route deep link, and hideWhenZero.",
+			"description": "One KPI entry inside a multi-entry stats-block widget (CnStatsBlockWidget `entries[]`). Carries the same source contract as a type:'stat' widget: register + schema + metric + token-resolved filter (@today / @me / @workspace.* and ?-optional clauses), plus per-entry presentation (title, variant, countLabel, format), an optional route deep link, and hideWhenZero. A money value names its currency with currencyField (the page object's field) or currency.",
 			"properties": {
 				"title": {
 					"type": "string",
@@ -2952,6 +2960,32 @@
 					"type": "boolean",
 					"default": false,
 					"description": "When true, the entry is omitted from the card when its resolved count is 0."
+				},
+				"format": {
+					"description": "How the value is shown, as a type:'stat' widget's content.format: a style name, or { style, currency, currencyField, decimals, prefix, suffix }. Omitted, the plain localized count is shown. Numbers are formatted with Intl in the user's locale.",
+					"oneOf": [
+						{ "type": "string", "enum": ["number", "currency", "percent", "decimal", "duration-hours"] },
+						{
+							"type": "object",
+							"additionalProperties": false,
+							"properties": {
+								"style": { "type": "string", "enum": ["number", "currency", "percent", "decimal", "duration-hours"] },
+								"currency": { "type": "string", "description": "ISO-4217 code, or a token such as @config.currency or @object.currency." },
+								"currencyField": { "type": "string", "description": "Field of the detail page's object that holds the currency (dot-path allowed)." },
+								"decimals": { "type": "integer", "minimum": 0, "description": "Fraction digits." },
+								"prefix": { "type": "string" },
+								"suffix": { "type": "string" }
+							}
+						}
+					]
+				},
+				"currency": {
+					"type": "string",
+					"description": "Shorthand for format.currency: an ISO-4217 code, or a token such as @config.currency. Implies format 'currency'."
+				},
+				"currencyField": {
+					"type": "string",
+					"description": "Shorthand for format.currencyField: the field of the detail page's object that holds the currency, e.g. 'currency'. Implies format 'currency'. The currency is taken from the object, then currency, then the app's reporting currency (config currency), then EUR."
 				}
 			}
 		},
@@ -3458,14 +3492,30 @@
 						"actions": {
 							"type": "array",
 							"items": {
-								"type": "object",
-								"required": ["label"],
-								"additionalProperties": true,
-								"properties": {
-									"label": { "type": "string", "minLength": 1 }
-								}
+								"anyOf": [
+									{
+										"type": "object",
+										"required": ["label"],
+										"additionalProperties": true,
+										"properties": {
+											"label": { "type": "string", "minLength": 1 },
+											"id": { "type": "string", "not": { "pattern": "^builtin:" } },
+											"builtin": false
+										}
+									},
+									{
+										"type": "string",
+										"enum": ["builtin:view", "builtin:edit", "builtin:copy", "builtin:delete"]
+									}
+								]
 							},
-							"description": "Declarative actions on a page. Governed ONLY by \"an object carrying a non-empty label\", deliberately: this key is polymorphic by page type (index rows dispatch $defs/action; detail pages also carry type='lifecycle-transition' entries), so one closed grammar here would reject working manifests. A label is what every dialect needs — CnRowActions renders an entry from its label and icon, so an entry without one became a full-height, clickable, EMPTY row in the overflow menu. Two shapes hit this, both meaning \"show the built-in\": a bare string (\"edit\") and a key-only object ({\"key\": \"edit\"}). Built-ins are enabled with config.actionToggles / the show*Action keys, never by naming them here."
+							"allOf": [
+								{ "contains": { "const": "builtin:view" }, "minContains": 0, "maxContains": 1 },
+								{ "contains": { "const": "builtin:edit" }, "minContains": 0, "maxContains": 1 },
+								{ "contains": { "const": "builtin:copy" }, "minContains": 0, "maxContains": 1 },
+								{ "contains": { "const": "builtin:delete" }, "minContains": 0, "maxContains": 1 }
+							],
+							"description": "Declarative actions on a page. An object entry is governed ONLY by \"an object carrying a non-empty label\", deliberately: this key is polymorphic by page type (index rows dispatch $defs/action; detail pages also carry type='lifecycle-transition' entries), so one closed grammar here would reject working manifests. A label is what every dialect needs — CnRowActions renders an entry from its label and icon, so an entry without one became a full-height, clickable, EMPTY row in the overflow menu. An object is always an app action whatever its id: an id, when present, must be a string that does not start with 'builtin:', and the object may not set a 'builtin' key. On a type='index' page an entry may also be one of the placeholders \"builtin:view\", \"builtin:edit\", \"builtin:copy\" or \"builtin:delete\", each at most once, which puts that built-in row action at its position in the menu. A placeholder only places a built-in: config.actionToggles / the show*Action keys still decide whether it renders. Enabled built-ins the array does not place are appended after everything else in the order View, Edit, Copy, Delete. Any other string (a bare \"edit\", an unknown \"builtin:archive\") is refused, and placeholders are refused on every page type other than index."
 						},
 						"rowIndicators": {
 							"type": "array",
@@ -3639,7 +3689,12 @@
 						"showWidgetActions": {
 							"type": "boolean",
 							"default": true,
-							"description": "type='dashboard': `false` drops the overflow Actions menu from every widget that does not set `showActions` itself, for a dashboard whose widget headers carry a header link and nothing else (zuiddrecht-pixel-gaps-2). Maps to CnDashboardPage `showWidgetActions`."
+							"description": "type='dashboard' and type='detail': `false` drops the overflow Actions menu from every widget that does not set `showActions` itself, for a dashboard whose widget headers carry a header link and nothing else (zuiddrecht-pixel-gaps-2), or a record page whose data cards carry none (zuiddrecht-pixel-gaps-3; a card with an Add action keeps it). Maps to CnDashboardPage / CnDetailPage `showWidgetActions`."
+						},
+						"gridFloat": {
+							"type": "boolean",
+							"default": true,
+							"description": "type='dashboard': `false` packs widgets upward (GridStack `float: false`), so a size-to-content widget that shrinks closes the gap under it instead of leaving an empty band (zuiddrecht-pixel-gaps-3). Maps to CnDashboardPage `gridFloat`."
 						},
 						"showTitle": {
 							"type": "boolean",
@@ -3649,6 +3704,33 @@
 						"countSubtitle": {
 							"type": "string",
 							"description": "type='index': an i18n key for the description line with `{total}` replaced by the collection's total, e.g. \"{total} open cases\" (zuiddrecht-pixel-gaps). Shown in place of `description` once a total is known. Maps to CnIndexPage `countSubtitle`."
+						},
+						"showTitleIcon": {
+							"type": "boolean",
+							"default": true,
+							"description": "type='index': `false` drops the icon before the page title, for a title that stands alone as the board draws it (zuiddrecht-pixel-gaps-3). Maps to CnIndexPage `showTitleIcon`."
+						},
+						"showCount": {
+							"type": "boolean",
+							"default": true,
+							"description": "type='index': `false` drops the actions bar's \"Showing 20 of 258\" line, for a page whose title line already gives the total through `countSubtitle` (zuiddrecht-pixel-gaps-3). Maps to CnIndexPage `showCount`."
+						},
+						"headerButtons": {
+							"type": "array",
+							"description": "type='index': buttons beside the page title, as the board's \"Export\" and \"New case\" (zuiddrecht-pixel-gaps-3). `action` is `add` (the Add flow; the label defaults to the Add label), `export` (the export leaf in `format`, else the export dialog), `import`, `refresh`, or the id of a `headerActions` entry. Shown only with `showTitle`; when they show, the actions bar drops its Views and Actions menus, and the Add button and Export menu when a button takes their action. Maps to CnIndexPage `headerButtons`.",
+							"items": {
+								"type": "object",
+								"additionalProperties": false,
+								"required": ["action"],
+								"properties": {
+									"id": { "type": "string", "minLength": 1 },
+									"label": { "type": "string", "minLength": 1, "description": "i18n key; optional for `add`." },
+									"action": { "type": "string", "minLength": 1 },
+									"variant": { "type": "string", "enum": ["primary", "secondary"], "default": "secondary" },
+									"icon": { "type": "string", "minLength": 1, "description": "MDI icon name." },
+									"format": { "type": "string", "enum": ["csv", "excel"], "default": "csv", "description": "For `export`." }
+								}
+							}
 						},
 						"showTypeEyebrow": {
 							"type": "boolean",
@@ -3665,7 +3747,9 @@
 								"route": { "type": "string" },
 								"params": { "type": "object", "additionalProperties": true },
 								"href": { "type": "string" },
-								"icon": { "type": "string", "minLength": 1, "description": "Optional MDI icon name (e.g. `Home`) drawn as the first crumb instead of the label, which then becomes its accessible name (zuiddrecht-pixel-gaps-2). Without it the label shows as text." }
+								"icon": { "type": "string", "minLength": 1, "description": "Optional MDI icon name (e.g. `Home`) drawn as the first crumb instead of the label, which then becomes its accessible name (zuiddrecht-pixel-gaps-2). Without it the label shows as text." },
+								"currentField": { "type": "string", "minLength": 1, "description": "A field of the record (dotted path, e.g. `identifier`) whose value is the current crumb instead of the display name; an empty value falls back to the display name (zuiddrecht-pixel-gaps-3)." },
+								"separator": { "type": "string", "minLength": 1, "maxLength": 3, "description": "Text drawn between the crumbs (e.g. `/`) instead of the chevron (zuiddrecht-pixel-gaps-3)." }
 							}
 						},
 						"headerCard": {
@@ -3731,6 +3815,10 @@
 								"showFormDialog": {
 									"type": "boolean",
 									"description": "Whether the built-in create / edit form dialog is enabled. Maps to CnIndexPage `showFormDialog`."
+								},
+								"showViewAction": {
+									"type": "boolean",
+									"description": "Whether to add a View action to row actions. Maps to CnIndexPage `showViewAction`."
 								},
 								"showEditAction": {
 									"type": "boolean",
@@ -3821,6 +3909,24 @@
 								{ "required": ["board"] },
 								{ "required": ["dateAxis"] }
 							]
+						}
+					}
+				},
+				{
+					"description": "The \"builtin:<id>\" placeholders in config.actions place CnIndexPage's built-in row actions, so only a type='index' page may use them. On every other page type config.actions holds objects only; a placeholder there would validate and then render nothing (row-action-builtin-placement).",
+					"if": {
+						"not": {
+							"properties": { "type": { "const": "index" } },
+							"required": ["type"]
+						}
+					},
+					"then": {
+						"properties": {
+							"config": {
+								"properties": {
+									"actions": { "items": { "type": "object" } }
+								}
+							}
 						}
 					}
 				},
