@@ -5,7 +5,7 @@
 		"includePersonalSettings": false,
 		"_note": "ANTI-WIDENING 4: suppressing the auto-prepended entry is LEGITIMATE when the app declares its own action:\"user-settings\" entry, which opens the same dialog. keepiq does exactly this and injects its own sections into CnAppRoot's #user-settings slot; re-enabling the shell copy would give it two entries onto one dialog. A gate that flagged the flag alone would red keepiq."
 	},
-	"_note": "CLEAN arm for gate-107 (ADR-114). The remedy the gate prescribes, applied to all three planted defects: Documentation moved to footer, a Flows surface added in the settings foldout, and the hand-rolled AdminSettingsLink deleted (CnAppNav prepends it). Two anti-widening controls ride along, see their own notes.",
+	"_note": "CLEAN arm: the same app with ReportsMenu in section:\"settings\", the foldout labelled Advanced (amended 2026-10-07). Everything else matches the planted arm.",
 	"menu": [
 		{
 			"id": "DashboardMenu",

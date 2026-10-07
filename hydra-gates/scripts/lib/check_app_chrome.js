@@ -12,9 +12,14 @@
 //
 //   footer   Documentation        order  90   href to the app's docs site
 //   footer   Store                order  92   type: "store"
-//   footer   Reports              order  95   type: "reports"
 //   footer   Features & roadmap   order 100   type: "roadmap"
+//   settings Reports                           type: "reports"
 //   settings Flows                             type: "flows"
+//
+// The settings foldout is labelled Advanced. Reports moved there from the
+// footer on 2026-10-07, on Ruben's decision (ADR-114 Decisions 1 and 3 and
+// ADR-112 Decision 3, amended that day). A Reports entry in the footer or the
+// main menu is now a placement finding.
 //
 // Measured 2026-09-03 across the 21 core apps: ONE carries all seven, and it
 // is dossiq. Reports is in 3 of 19, Store in 4 of 19.
@@ -362,10 +367,11 @@ const CHROME = [
 	},
 	{
 		item: 'Reports',
-		section: 'footer',
+		section: 'settings',
 		blocking: REPORTS_IS_BLOCKING,
 		find: () => entries.find(({ node }) => isSurface(pageOf(node), 'reports', '/reports')),
-		absent: 'no Reports entry. ADR-114 Decision 3 amends ADR-112 Decision 4: the title of that ADR wins, and every app in scope declares one type:"reports" page in section:"footer" at order 95. An empty Reports page is still forbidden, so an app with nothing to report fills the page rather than skipping it.',
+		absent: 'no Reports entry. ADR-114 Decision 3 amends ADR-112 Decision 4: every app in scope declares one type:"reports" page and one entry for it in section:"settings", the foldout labelled Advanced (amended 2026-10-07). An empty Reports page is still forbidden, so an app with nothing to report fills the page rather than skipping it.',
+		misplaced: 'ADR-114 Decisions 1 and 3, amended 2026-10-07: Reports is one entry in the settings foldout, labelled Advanced, not in the footer or the main menu.',
 	},
 	{
 		item: 'Features & roadmap',
@@ -400,7 +406,8 @@ for (const spec of CHROME) {
 		continue
 	}
 
-	report(severity, spec.item, `the ${spec.item} entry is section:${JSON.stringify(hit.node.section ?? null)}, not ${JSON.stringify(spec.section)}. ADR-114 Decision 1 fixes the sections so the bottom-left of the navigation reads the same in every app.`)
+	const why = spec.misplaced || 'ADR-114 Decision 1 fixes the sections so the bottom-left of the navigation reads the same in every app.'
+	report(severity, spec.item, `the ${spec.item} entry is section:${JSON.stringify(hit.node.section ?? null)}, not ${JSON.stringify(spec.section)}. ${why}`)
 }
 
 // --- Decision 1: the footer group reads in the same ORDER everywhere --------
@@ -413,14 +420,19 @@ for (const spec of CHROME) {
 // would be a fleet-wide diff that changes not one pixel.
 //
 // What a user can actually see is the sequence, so the sequence is the rule:
-// Documentation, then Store, then Reports, then Features & roadmap. Measured
-// 2026-09-03: all 19 manifest-driven apps already satisfy it, so this blocks
-// nothing today and catches the next entry dropped in at the wrong number.
+// Documentation, then Store, then Features & roadmap. Measured 2026-09-03:
+// all 19 manifest-driven apps already satisfy it, so this blocks nothing today
+// and catches the next entry dropped in at the wrong number.
+//
+// Reports left this sequence on 2026-10-07, when it moved to the settings
+// foldout (ADR-114 Decision 1, amended). A Reports entry still in the footer is
+// reported once, as a placement finding above, and is not ordered here.
 {
-	const wanted = ['Documentation', 'Store', 'Reports', 'Features & roadmap']
+	const wanted = ['Documentation', 'Store', 'Features & roadmap']
 	const placed = []
 	for (const spec of CHROME) {
 		if (spec.section !== 'footer') { continue }
+		if (!wanted.includes(spec.item)) { continue }
 		const hit = spec.find()
 		if (hit === undefined || sectionOf(hit.node) !== 'footer') { continue }
 		const order = typeof hit.node.order === 'number' ? hit.node.order : null
@@ -433,7 +445,7 @@ for (const spec of CHROME) {
 	const expected = wanted.filter((w) => actual.includes(w))
 
 	if (actual.join(' > ') !== expected.join(' > ')) {
-		report('error', 'footer order', `the footer group reads ${JSON.stringify(actual.join(' > '))}, and ADR-114 Decision 1 orders it ${JSON.stringify(expected.join(' > '))}. The RELATIVE order is the rule, not the absolute numbers: a new entry takes Documentation 90, Store 92, Reports 95, Features & roadmap 100, but an app already running its footer at other numbers only has to keep the sequence.`)
+		report('error', 'footer order', `the footer group reads ${JSON.stringify(actual.join(' > '))}, and ADR-114 Decision 1 orders it ${JSON.stringify(expected.join(' > '))}. The RELATIVE order is the rule, not the absolute numbers: a new entry takes Documentation 90, Store 92, Features & roadmap 100, but an app already running its footer at other numbers only has to keep the sequence.`)
 	}
 }
 

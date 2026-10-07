@@ -5,7 +5,7 @@
 		"includePersonalSettings": false,
 		"_note": "DEFECT 5: Personal settings is suppressed and nothing replaces it, so the user's notification preferences and the ADR-110 Integrations section are reachable nowhere. CnAppRoot's #user-settings slot is NOT empty by default."
 	},
-	"_note": "PLANTED arm for gate-107 (ADR-114). Three blocking defects, one per direction of the rule: Documentation sits in main instead of footer (Decision 1), there is no Flows surface at all (Decision 6 / ADR-110 D4), and AdminSettingsLink hand-rolls the link CnAppNav already prepends (Decision 2). Store and Reports are PRESENT and correctly placed in both arms on purpose: they are on the D8 ratchet, so if they were absent here the arm would still fail for the three real reasons and the fixture would stop proving anything the day the ratchet promotes.",
+	"_note": "PLANTED arm for gate-107 (ADR-114). Three blocking defects, one per direction of the rule: Documentation sits in main instead of footer (Decision 1), there is no Flows surface at all (Decision 6 / ADR-110 D4), and AdminSettingsLink hand-rolls the link CnAppNav already prepends (Decision 2). Store and Reports are PRESENT in their right sections in both arms on purpose (Reports in the settings foldout since 2026-10-07; Store carries the footer-order defect): they are on the D8 ratchet, so if they were absent here the arm would still fail for the three real reasons and the fixture would stop proving anything the day the ratchet promotes.",
 	"menu": [
 		{
 			"id": "DashboardMenu",
@@ -27,17 +27,17 @@
 			"label": "Store",
 			"icon": "StoreOutline",
 			"route": "Store",
-			"order": 92,
-			"section": "footer"
+			"order": 200,
+			"section": "footer",
+			"_note": "DEFECT 4: Store sits BELOW Features & roadmap, so the footer group reads in a different order from every other app. ADR-114 Decision 1 fixes the sequence: Documentation, Store, Features & roadmap. The RELATIVE order is the rule, which is why 200 fails here while pipelinq's 160/200/230 passes on the live fleet. Until 2026-10-07 this defect was planted on Reports; Reports has since left the footer for the settings foldout."
 		},
 		{
 			"id": "ReportsMenu",
 			"label": "Reports",
 			"icon": "ChartBoxOutline",
 			"route": "Reports",
-			"order": 200,
-			"section": "footer",
-			"_note": "DEFECT 4: Reports sits BELOW Features & roadmap, so the footer group reads in a different order from every other app. ADR-114 Decision 1 fixes the sequence: Documentation, Store, Reports, Features & roadmap. The RELATIVE order is the rule, which is why 200 fails here while pipelinq's 160/200/230 passes on the live fleet."
+			"order": 95,
+			"section": "settings"
 		},
 		{
 			"id": "RoadmapMenu",
