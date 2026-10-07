@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.43.0",
+	"version": "2.47.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -97,6 +97,8 @@
 							"suggestFrom": { "type": "string", "description": "choice: the configKey of an earlier choice this step pre-fills a suggestion from. When that value is set and the user has not yet picked here, the option matching suggestMap[parentValue] is auto-selected (still user-overridable)." },
 							"suggestMap": { "type": "object", "description": "choice: map of suggestFrom value → suggested option value. Used to auto-suggest a default (e.g. RGS template suggested from organisation type).", "additionalProperties": { "type": "string" } },
 							"multiple": { "type": "boolean", "default": false, "description": "choice: allow multi-select." },
+							"loadAction": { "type": "string", "minLength": 1, "description": "choice with display cards: an actionId each option card loads itself with. Every card except the one whose value is `none` gets its own Load button, which POSTs { dataset: <value> } to /api/setup/action/{loadAction}, spins while it runs and shows the result on that card. A successful load also selects the card. With loadAction the separate run-action step that loaded the picked dataset is no longer needed; manifests that keep it still work." },
+							"requires": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true, "description": "App ids this step needs. When any of them is not installed and enabled, the wizard skips the step and the summary shows it as skipped, naming the missing apps. Do not combine with required: true; setup status would keep reporting the skipped step as unmet." },
 							"action": { "type": "string", "description": "run-action: actionId POSTed to /api/setup/action/{action}." },
 							"onDemand": { "type": "boolean", "default": false, "description": "run-action: the step runs only when the user clicks Run, never automatically, and is never outstanding work (it does not open the wizard or decide where a resumed wizard starts). The summary ticks it only when its action succeeded in the current session and shows it as not run otherwise, whatever the server reports. For destructive steps an app reports as done on purpose so they never auto-run, such as removing example data." },
 							"healthCheck": { "type": "boolean", "default": false, "description": "summary: render a health recap." },
@@ -236,6 +238,45 @@
 					"type": "string",
 					"description": "Override label for the settings foldout's gear button. Defaults to 'Settings'."
 				},
+				"card": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["title"],
+					"description": "A card above the footer entries, rendered by CnAppNav (zuiddrecht-pixel-gaps): a title, a line of text and one link. Title, text and link label are i18n keys. Omitted, nothing renders there.",
+					"properties": {
+						"title": { "type": "string", "minLength": 1 },
+						"text": { "type": "string" },
+						"link": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": ["label"],
+							"description": "The card's link: a `route` (named page, optional `params`) is a router link, an `href` a plain anchor, an `action` id a button that emits `card-action`.",
+							"properties": {
+								"label": { "type": "string", "minLength": 1 },
+								"route": { "type": "string" },
+								"params": { "type": "object", "additionalProperties": true },
+								"href": { "type": "string" },
+								"action": { "type": "string" }
+							}
+						}
+					}
+				},
+				"help": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["label"],
+					"description": "A help entry with a help icon in the navigation footer, above the settings foldout (zuiddrecht-pixel-gaps): `route` (named page) or `href` (opens in a new tab).",
+					"properties": {
+						"label": { "type": "string", "minLength": 1 },
+						"route": { "type": "string" },
+						"href": { "type": "string" }
+					}
+				},
+				"footer": {
+					"type": "array",
+					"items": { "type": "string", "minLength": 1 },
+					"description": "Declare the navigation footer (zuiddrecht-pixel-gaps-2): an ordered list of `section: \"footer\"` menu entry ids, plus the reserved ids `help` (the `nav.help` entry) and `settings` (the settings foldout). Only the named footer entries render there, in that order; footer entries left out move into the settings foldout so their pages stay reachable. `settings` first puts the foldout above the list (the board's `[\"settings\", \"help\"]`). Omitted, the footer renders as before: help, every footer entry, then the foldout."
+				},
 				"primaryAction": {
 					"$ref": "#/$defs/primaryAction",
 					"description": "App-wide default primary action rendered as an NcAppNavigationNew button above the main menu list. A page-scoped pages[].primaryAction for the current route wins over this default."
@@ -248,6 +289,10 @@
 						"logo": {
 							"type": "string",
 							"description": "URL of the logo image. Decorative when `name` is set."
+						},
+						"emblem": {
+							"type": ["string", "boolean"],
+							"description": "An emblem drawn in place of the logo (zuiddrecht-pixel-gaps): the municipality's mark beside the app name, distinct from the wordmark in the top bar. A URL, or `true` to draw the theme's emblem from the `--nldesign-emblem-url` custom property. Decorative when `name` is set."
 						},
 						"name": {
 							"type": "string",
@@ -1156,6 +1201,23 @@
 				},
 				"payload": {
 					"description": "Free-form payload echoed back to the host inside the @primary-action-click event."
+				},
+				"action": {
+					"$ref": "#/$defs/action",
+					"description": "A page action to run on click (zuiddrecht-pixel-gaps): CnAppNav then renders the button through CnActionButtons, so `type: \"open-form\"` (with `register` + `schema`) opens the create dialog without a create page, `navigate` pushes a route, `api-call` calls an endpoint. Drawn as one solid full-width primary button. `route` / `href` on the primary action itself are ignored while `action` is set."
+				},
+				"solid": {
+					"type": "boolean",
+					"default": false,
+					"description": "Draw the primary action as a solid, full-width primary button whatever its form (zuiddrecht-pixel-gaps). Default: a link action is already a primary button; a plain one is NcAppNavigationNew."
+				},
+				"permission": {
+					"type": "string",
+					"description": "Permission the reader must hold for the action to render, checked like `menuItem.permission` (zuiddrecht-pixel-gaps)."
+				},
+				"visibleIf": {
+					"$ref": "#/$defs/visibleIfCondition",
+					"description": "Display condition evaluated at render time, like `menuItem.visibleIf` (zuiddrecht-pixel-gaps). A gated-out page-scoped action falls back to `nav.primaryAction`."
 				}
 			}
 		},
@@ -1173,6 +1235,11 @@
 					"type": "string",
 					"description": "i18n translation key resolved by the consuming app's t() function at render time."
 				},
+				"translateLabel": {
+					"type": "boolean",
+					"default": true,
+					"description": "Whether CnAppNav runs `label` through the translate function. Set false for a user-authored title (e.g. a catalog name) that must render as written even when it equals a translation key such as 'Search'. Rendered as text either way, never as HTML."
+				},
 				"icon": {
 					"type": "string",
 					"description": "CSS class for the icon (e.g. 'icon-checkmark') or MDI component name."
@@ -1185,6 +1252,11 @@
 					"type": "object",
 					"additionalProperties": { "type": ["string", "number", "boolean"] },
 					"description": "Optional vue-router query parameters merged into the target route link (e.g. a filter like { caseType: '<uuid>' }). Deep-links a nav entry to a pre-filtered index page."
+				},
+				"params": {
+					"type": "object",
+					"additionalProperties": { "type": ["string", "number"], "minLength": 1 },
+					"description": "Optional vue-router route params for a parameterised route (e.g. { catalogSlug: 'news' } for a page at '/catalogs/:catalogSlug'). String values must be non-empty. CnAppNav links to { name: route, params, query }. The entry is active only while every declared param equals the current route's param (compared as strings), so sibling entries on one route that differ in params are never marked together. On pages whose path sits below its page path with these params filled in, it is active too: by the same params check when those routes carry the same param names, otherwise as the one entry marked below its route."
 				},
 				"order": {
 					"type": "integer",
@@ -1209,9 +1281,20 @@
 				"count": {
 					"oneOf": [
 						{ "type": "integer", "minimum": 0 },
-						{ "type": "string", "enum": ["auto"] }
+						{ "type": "string", "enum": ["auto"] },
+						{
+							"type": "object",
+							"additionalProperties": false,
+							"required": ["register", "schema"],
+							"description": "A FILTERED count (zuiddrecht-pixel-gaps): the total of this register and schema with `filter` applied (filter-value tokens such as `@me` and `@today` resolve at fetch time), fetched by CnAppRoot under the entry's own key so an index page's whole-schema total is untouched. Renders \"My work 6\" beside \"All cases 48\".",
+							"properties": {
+								"register": { "type": "string", "minLength": 1 },
+								"schema": { "type": "string", "minLength": 1 },
+								"filter": { "type": "object", "additionalProperties": true }
+							}
+						}
 					],
-					"description": "Counter badge in the entry's #counter slot. Positive integer renders as-is; 'auto' resolves from cnMenuCounts (populated by CnAppRoot from useObjectStore totals) for the entry's resolved index-type page (register + schema)."
+					"description": "Counter badge in the entry's #counter slot. Positive integer renders as-is; 'auto' resolves from cnMenuCounts (populated by CnAppRoot from useObjectStore totals) for the entry's resolved index-type page (register + schema); an object `{ register, schema, filter? }` is the total of that filtered list."
 				},
 				"pinned": {
 					"type": "boolean",
@@ -1259,12 +1342,22 @@
 			"properties": {
 				"id": { "type": "string" },
 				"label": { "type": "string" },
+				"translateLabel": {
+					"type": "boolean",
+					"default": true,
+					"description": "Same as menuItem.translateLabel: false renders `label` as written instead of translating it."
+				},
 				"icon": { "type": "string" },
 				"route": { "type": "string" },
 				"query": {
 					"type": "object",
 					"additionalProperties": { "type": ["string", "number", "boolean"] },
 					"description": "Optional vue-router query parameters merged into the target route link (e.g. a filter like { caseType: '<uuid>' }). Deep-links a nav entry to a pre-filtered index page."
+				},
+				"params": {
+					"type": "object",
+					"additionalProperties": { "type": ["string", "number"], "minLength": 1 },
+					"description": "Optional vue-router route params for a parameterised route; string values must be non-empty. Same contract as menuItem.params: part of the link, and the entry is active only while every declared param equals the current route's param."
 				},
 				"order": { "type": "integer" },
 				"permission": { "type": "string" },
@@ -1462,6 +1555,19 @@
 					"type": "integer",
 					"minimum": 1,
 					"description": "Row span (>= 1)."
+				},
+				"headerLink": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["label"],
+					"description": "One text link in the widget header's actions group, before the overflow menu (zuiddrecht-pixel-gaps): \"All deadlines\", \"To the board\". A `route` (named page, optional `params` / `query`) is a router link, an `href` a plain anchor. The label is an i18n key. Rendered by CnWidgetWrapper; CnDashboardPage reads it off the layout entry or the widget definition.",
+					"properties": {
+						"label": { "type": "string", "minLength": 1 },
+						"route": { "type": "string" },
+						"params": { "type": "object", "additionalProperties": true },
+						"query": { "type": "object", "additionalProperties": true },
+						"href": { "type": "string" }
+					}
 				},
 				"sizeToContent": {
 					"type": ["boolean", "integer"],
@@ -3496,6 +3602,53 @@
 						"splitCloseLabel": {
 							"type": "string",
 							"description": "type='index': accessible name and tooltip for the split pane's close button. Defaults to \"Close\". Maps to CnIndexPage `splitCloseLabel`."
+						},
+						"showHeader": {
+							"type": "boolean",
+							"default": true,
+							"description": "type='dashboard': `false` drops the header row (title, description, header actions, edit toggle) for a page that opens with its own heading, such as a greeting widget; the title stays as a visually hidden heading (zuiddrecht-pixel-gaps). Maps to CnDashboardPage `showHeader`."
+						},
+						"showWidgetActions": {
+							"type": "boolean",
+							"default": true,
+							"description": "type='dashboard': `false` drops the overflow Actions menu from every widget that does not set `showActions` itself, for a dashboard whose widget headers carry a header link and nothing else (zuiddrecht-pixel-gaps-2). Maps to CnDashboardPage `showWidgetActions`."
+						},
+						"showTitle": {
+							"type": "boolean",
+							"default": false,
+							"description": "type='index': show the page header (icon, title, description) inline. Default false: the title renders visually hidden and the sidebar names the page. Maps to CnIndexPage `showTitle`."
+						},
+						"countSubtitle": {
+							"type": "string",
+							"description": "type='index': an i18n key for the description line with `{total}` replaced by the collection's total, e.g. \"{total} open cases\" (zuiddrecht-pixel-gaps). Shown in place of `description` once a total is known. Maps to CnIndexPage `countSubtitle`."
+						},
+						"showTypeEyebrow": {
+							"type": "boolean",
+							"default": true,
+							"description": "type='detail': `false` drops the type eyebrow (the type label above the record name) once the record resolves, for a header that says the type in a pill instead (zuiddrecht-pixel-gaps). Maps to CnDetailPage `showTypeEyebrow`."
+						},
+						"breadcrumb": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": ["label"],
+							"description": "type='detail': a breadcrumb line above the header (zuiddrecht-pixel-gaps): this crumb names the list the record belongs to (`route` + optional `params`, or `href`), the record's display name follows as the current crumb. Maps to CnDetailPage `breadcrumb`.",
+							"properties": {
+								"label": { "type": "string", "minLength": 1 },
+								"route": { "type": "string" },
+								"params": { "type": "object", "additionalProperties": true },
+								"href": { "type": "string" },
+								"icon": { "type": "string", "minLength": 1, "description": "Optional MDI icon name (e.g. `Home`) drawn as the first crumb instead of the label, which then becomes its accessible name (zuiddrecht-pixel-gaps-2). Without it the label shows as text." }
+							}
+						},
+						"headerCard": {
+							"type": "boolean",
+							"default": false,
+							"description": "type='detail': draw the header (pills, title, actions) as a bordered card on the surface colour, as the board's case header (zuiddrecht-pixel-gaps-2). Maps to CnDetailPage `headerCard`."
+						},
+						"headerWidget": {
+							"type": "string",
+							"minLength": 1,
+							"description": "type='detail': the id of a widget in `widgets` to render inside the header on its own row under the title, without a card of its own, e.g. the stages bars (zuiddrecht-pixel-gaps-2). The widget leaves the body grid. Maps to CnDetailPage `headerWidget`."
 						},
 						"mapConfig": {
 							"type": "object",
