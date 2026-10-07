@@ -4,7 +4,7 @@
   "menu": [
     { "id": "DashboardMenu", "label": "Dashboard", "route": "Dashboard", "order": 10 },
     { "id": "DocsMenu", "label": "Documentation", "href": "https://example.org", "order": 90, "section": "footer" },
-    { "id": "ReportsMenu", "label": "Reports", "route": "Reports", "order": 95, "section": "footer" },
+    { "id": "ReportsMenu", "label": "Reports", "route": "Reports", "order": 95, "section": "settings" },
     { "id": "RoadmapMenu", "label": "Features & roadmap", "route": "FeaturesRoadmap", "order": 100, "section": "footer" }
   ],
   "pages": [

@@ -11246,14 +11246,15 @@ if [ -f src/manifest.json ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Gate 104: reports-one-page — reports are cards on one page, in the footer.
+# Gate 104: reports-one-page — reports are cards on one page, in the settings
+# foldout labelled Advanced (ADR-112 D3, amended 2026-10-07; was the footer).
 #
 # ADR-112. Reports arrive one at a time, each looks like a menu item, and the
 # menu is where the last one went, so a Reports branch grows an entry per
 # report and never loses one (shillinq reached 96 report types).
 #
 # Checks three STRUCTURAL things against the effective manifest: at most one
-# type:"reports" page; its menu entry is section:"footer"; and no other menu
+# type:"reports" page; its menu entry is section:"settings"; and no other menu
 # entry points at a page that page already carries as a card.
 #
 # NOT APPLICABLE when the app declares no type:"reports" page — ADR-112
@@ -11328,7 +11329,7 @@ if [ -f src/manifest.json ]; then
                 if [ "${_rop_rc}" -eq 0 ]; then
                     _pass 104 "reports-one-page"
                 else
-                    _fail 104 "reports-one-page" "${_rop_reported} finding(s) against ADR-112 (one reports page, in the footer, no report reachable both as a card and as a menu entry) — see ${_rop_log}"
+                    _fail 104 "reports-one-page" "${_rop_reported} finding(s) against ADR-112 (one reports page, its entry in the settings foldout labelled Advanced, no report reachable both as a card and as a menu entry) — see ${_rop_log}"
                 fi
                 ;;
         esac
@@ -11341,8 +11342,9 @@ fi
 #
 # ADR-114. CnAppNav draws Personal settings and Admin settings itself and no
 # app declares them (ADR-079 / ADR-110 D2). The other five are the app's own:
-# Documentation, Store, Reports and Features & roadmap in `footer`, Flows in
-# the settings foldout. Measured 2026-09-03: ONE of 21 apps carries all seven.
+# Documentation, Store and Features & roadmap in `footer`, Reports and Flows in
+# the settings foldout labelled Advanced (Reports moved there from the footer
+# on 2026-10-07, ADR-114 D1 and D3 as amended). Measured 2026-09-03: ONE of 21 apps carries all seven.
 #
 # WHY THIS IS NOT COVERED BY THE FOUR GATES THAT ALREADY READ THIS MENU:
 # every one of them is presence-blind. gate-60 validates the icon on an entry

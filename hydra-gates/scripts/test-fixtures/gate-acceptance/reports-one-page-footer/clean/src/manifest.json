@@ -1,7 +1,7 @@
 {
 	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"version": "2.0.0",
-	"_note": "CLEAN arm for gate-104 (ADR-112). The remedy the gate prescribes, applied to all three findings: one type:\"reports\" page, its entry in the settings foldout labelled Advanced (ADR-112 Decision 3, amended 2026-10-07), and the carded report's own menu entry retired. ThingDetail stays as the anti-widening control: it is not a report and no card names it, and it must not fire.",
+	"_note": "CLEAN arm: the same app with ReportsMenu in section:\"settings\", the foldout labelled Advanced (amended 2026-10-07). Everything else matches the planted arm.",
 	"menu": [
 		{
 			"id": "DashboardMenu",

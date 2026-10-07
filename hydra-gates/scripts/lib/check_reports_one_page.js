@@ -3,8 +3,8 @@
 //
 // check_reports_one_page.js — gate (reports-one-page) checker.
 //
-// Implements ADR-112: "Reports are one page of cards, in the footer, in every
-// app." Reports arrive one at a time, each one is obviously a menu item, and
+// Implements ADR-112: "Reports are one page of cards, in every app." Reports
+// arrive one at a time, each one is obviously a menu item, and
 // the menu is where the last one went — so a Reports branch grows an entry per
 // report and never loses one. shillinq reached 96 report types.
 //
@@ -14,7 +14,10 @@
 //
 //   1. AT MOST ONE `type: "reports"` page. Two reports pages is the submenu
 //      problem again, one level down.
-//   2. The menu entry pointing at it is `section: "footer"` (ADR-112 D3).
+//   2. The menu entry pointing at it is `section: "settings"`, the foldout
+//      the shell labels Advanced (ADR-112 D3, amended 2026-10-07 on Ruben's
+//      decision). It used to be `section: "footer"`; a Reports entry in the
+//      footer or in the main menu is now a finding.
 //   3. No OTHER menu entry points at a page that the reports page already
 //      lists as a card. That is the duplication the ADR exists to remove: the
 //      report is reachable twice, and the menu copy is the one that never
@@ -155,21 +158,29 @@ if (reportsPages.length > 1) {
 
 const reportsPage = reportsPages[0]
 
-// 2. Its menu entry sits in the footer group.
+// 2. Its menu entry sits in the settings foldout, labelled Advanced.
+//
+// ADR-112 Decision 3 as amended 2026-10-07 (Ruben's decision): the shell's
+// settings foldout is renamed Advanced, and Reports is one entry inside it.
+// Before that date the rule was `section: "footer"`, and the footer is now
+// exactly as wrong as the main menu, so the message names both.
+const REPORTS_SECTION = 'settings'
 const reportsEntry = entries.find(({ node }) => node.route === reportsPage.id)
 if (reportsEntry === undefined) {
 	findings.push({
 		severity: 'error',
 		path: rel,
 		pageIds: [reportsPage.id],
-		message: `the type:"reports" page "${reportsPage.id}" has no menu entry, so nothing reaches it. ADR-112 Decision 3 puts one in the footer group.`,
+		message: `the type:"reports" page "${reportsPage.id}" has no menu entry, so nothing reaches it. ADR-112 Decision 3 (amended 2026-10-07) puts one entry in the settings foldout, labelled Advanced.`,
 	})
-} else if (reportsEntry.node.section !== 'footer') {
+} else if (reportsEntry.node.section !== REPORTS_SECTION) {
+	const sec = reportsEntry.node.section
+	const where = sec === 'footer' ? 'the footer' : ((sec === undefined || sec === null || sec === '' || sec === 'main') ? 'the main menu' : `the "${sec}" section`)
 	findings.push({
 		severity: 'error',
 		path: rel,
 		pageIds: [reportsPage.id],
-		message: `the Reports menu entry is section:${JSON.stringify(reportsEntry.node.section ?? null)}, not "footer". ADR-112 Decision 3: Reports is a place you go deliberately, not a place you work, so it belongs with Documentation and Features & roadmap rather than among the operational entries.`,
+		message: `the Reports menu entry is section:${JSON.stringify(reportsEntry.node.section ?? null)}, not "settings", so it renders in ${where}. ADR-112 Decision 3, amended 2026-10-07: Reports is one entry in the settings foldout, labelled Advanced, not in the footer or the main menu. Reports is a place you go deliberately, not a place you work.`,
 	})
 }
 

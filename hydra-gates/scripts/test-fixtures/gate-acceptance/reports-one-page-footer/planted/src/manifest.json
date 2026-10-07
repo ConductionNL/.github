@@ -1,7 +1,7 @@
 {
 	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"version": "2.0.0",
-	"_note": "CLEAN arm for gate-104 (ADR-112). The remedy the gate prescribes, applied to all three findings: one type:\"reports\" page, its entry in the settings foldout labelled Advanced (ADR-112 Decision 3, amended 2026-10-07), and the carded report's own menu entry retired. ThingDetail stays as the anti-widening control: it is not a report and no card names it, and it must not fire.",
+	"_note": "PLANTED arm: identical to the clean arm except that ReportsMenu sits in the footer, which was the rule until 2026-10-07. It must fail on that one placement and nothing else.",
 	"menu": [
 		{
 			"id": "DashboardMenu",
@@ -16,7 +16,8 @@
 			"icon": "ChartBoxOutline",
 			"route": "Reports",
 			"order": 95,
-			"section": "settings"
+			"section": "footer",
+			"_note": "DEFECT: Reports in the footer. ADR-112 Decision 3, amended 2026-10-07: Reports is one entry in the settings foldout, labelled Advanced."
 		},
 		{
 			"id": "DocsMenu",

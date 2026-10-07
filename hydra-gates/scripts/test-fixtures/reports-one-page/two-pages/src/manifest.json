@@ -20,7 +20,7 @@
       "label": "Reports",
       "route": "Reports",
       "order": 95,
-      "section": "footer"
+      "section": "settings"
     },
     {
       "id": "RoadmapMenu",

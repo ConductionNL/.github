@@ -1,7 +1,7 @@
 {
 	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"version": "2.0.0",
-	"_note": "PLANTED arm for gate-104 (ADR-112). Breaks all three rules at once: two type:\"reports\" pages, the Reports entry outside the footer, and a report that is reachable BOTH as a card and as its own menu entry.",
+	"_note": "PLANTED arm for gate-104 (ADR-112). Breaks all three rules at once: two type:\"reports\" pages, the Reports entry in the main menu instead of the settings foldout, and a report that is reachable BOTH as a card and as its own menu entry.",
 	"menu": [
 		{ "id": "DashboardMenu", "label": "Dashboard", "icon": "ViewDashboardOutline", "route": "Dashboard", "order": 10 },
 		{ "id": "ThroughputMenu", "label": "Processing time", "icon": "ChartLine", "route": "Throughput", "order": 50 },
