@@ -5022,8 +5022,8 @@ jobs:
             RAN=$((RAN + 1))
             eval newman run "\"$collection\"" $ENV_ARGS --reporters cli,json --reporter-json-export "\"$RUNNER_TEMP/newman-json/$RAN.json\"" || FAIL=1
           done < <(find . -name '*.postman_collection.json' -print0 | sort -z)
-          # How many exports to expect, so a collection that left none is named
-          # in the counts instead of silently missing from the sum.
+          # How many exports to expect, so a collection that left none is
+          # counted as missing instead of silently dropped from the sum.
           echo "$RAN" > "$RUNNER_TEMP/newman-ran"
 
           # A count nobody reconciles is how the flat glob survived unnoticed
@@ -5062,7 +5062,7 @@ jobs:
       # timeout) or a script that throws, and neither is a failed assertion.
       # Those are recorded as `errors`, so a red job does not sit next to an
       # all-passed count. `expected` is how many collections ran, so one that
-      # left no export is named rather than missing from the sum.
+      # left no export is counted as missing rather than dropped from the sum.
       - name: Record test counts
         id: test-counts-newman
         if: ${{ !cancelled() }}
@@ -9101,12 +9101,14 @@ jobs:
       # Only a run that produced a verdict gets a count. A cancelled, skipped
       # or missing job, or one where no leg left a readable count, keeps
       # exactly the cell it had — a count is never invented. A leg recorded
-      # with `"run": null`, a Newman collection with no export, or a PHPUnit
-      # leg or shard with no file (every leg's file carries the matrix size)
-      # is named in the cell instead of hidden in the tally.
+      # with `"run": null` is named in the cell. A Newman collection with no
+      # export, or a PHPUnit leg or shard with no file (every leg's file
+      # carries the matrix size), is counted there (`counts from n of N`)
+      # instead of hidden in the tally.
       #
       # PHPUnit legs each run the whole suite, so they are not added up: one
-      # line when every leg agrees, otherwise the worst leg by name. Newman
+      # line when every leg agrees, otherwise the worst failing leg by name,
+      # or the range of tests per leg when none failed. Newman
       # collections and Playwright shards each run a part of it, so they are
       # summed.
       #
