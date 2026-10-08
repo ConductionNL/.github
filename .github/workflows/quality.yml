@@ -7092,7 +7092,13 @@ jobs:
       #
       # Playwright's outcomes: `expected` and `flaky` passed (a flaky test
       # failed first and passed on retry), `unexpected` failed, `skipped`
-      # did not run. Each shard records its own part of the suite and the
+      # did not run. `skipped` covers two different things: a deliberate
+      # skip, which carries a `skip` or `fixme` annotation (the
+      # EXCLUSION_TYPES check_e2e_skips.py reads), and a test that was meant
+      # to run and did not (interrupted by globalTimeout or --max-failures,
+      # or left over when a serial suite stopped). Only the first is counted
+      # as skipped; the second is `not_run`, and the report does not read a
+      # shard with such tests as complete. Each shard records its own part of the suite and the
       # number of shards (`total`); the report job adds them up.
       - name: Record test counts
         if: ${{ !cancelled() }}
@@ -7120,7 +7126,14 @@ jobs:
                   json.dump({"leg": f"shard {os.environ['SHARD']}", "run": None, "total": int(os.environ["TOTAL"])}, fh)
               print("No Playwright HTML report with an embedded result blob, so this shard is recorded without counts.")
               raise SystemExit(0)
-          tally = {"passed": 0, "failed": 0, "skipped": 0}
+          def deliberate(test):
+              notes = list(test.get("annotations") or [])
+              for result in test.get("results") or []:
+                  if result.get("status") == "interrupted":
+                      return False
+                  notes.extend(result.get("annotations") or [])
+              return any(n.get("type") in ("skip", "fixme") for n in notes)
+          tally = {"passed": 0, "failed": 0, "skipped": 0, "not_run": 0}
           for name in archive.namelist():
               if not name.endswith(".json") or name == "report.json":
                   continue
@@ -7134,14 +7147,14 @@ jobs:
                       if outcome in ("expected", "flaky"):
                           tally["passed"] += 1
                       elif outcome == "skipped":
-                          tally["skipped"] += 1
+                          tally["skipped" if deliberate(test) else "not_run"] += 1
                       else:
                           tally["failed"] += 1
           counts = {"leg": f"shard {os.environ['SHARD']}", "run": tally["passed"] + tally["failed"], **tally,
                     "total": int(os.environ["TOTAL"])}
           with open(f"test-counts/playwright-shard-{os.environ['SHARD']}.json", "w", encoding="utf-8") as fh:
               json.dump(counts, fh)
-          print(f"{counts['passed']}/{counts['run']} passed, {counts['skipped']} skipped.")
+          print(f"{counts['passed']}/{counts['run']} passed, {counts['skipped']} skipped, {counts['not_run']} did not run.")
           PYEOF
 
       - name: Upload test counts
@@ -9049,6 +9062,8 @@ jobs:
       # newman and playwright jobs write in their "Record test counts" step:
       # `✅ 412/412`, `❌ 94/103`. Skipped tests are left out of both numbers
       # and named after them, so a suite with skips does not read as a failure.
+      # A Playwright test that was meant to run and did not is not a skip: it
+      # is shown as `· N did not run`, and that cell never reads as complete.
       # Exported as PHPUNIT_COUNTS / NEWMAN_COUNTS / PLAYWRIGHT_COUNTS for
       # "Generate report", which appends them to the row.
       #
@@ -9100,6 +9115,7 @@ jobs:
                           continue
                       row = {k: int(leg[k]) for k in ("run", "passed", "failed", "skipped")}
                       row["errors"] = int(leg.get("errors") or 0)
+                      row["not_run"] = int(leg.get("not_run") or 0)
                       row["reported"] = int(leg.get("reported") or 0)
                       row["expected"] = int(leg.get("expected") or 0)
                       row["leg"] = str(leg["leg"])
@@ -9112,6 +9128,8 @@ jobs:
               text = f"{leg['passed']}/{leg['run']}"
               if leg["skipped"]:
                   text += f" · {leg['skipped']} skipped"
+              if leg["not_run"]:
+                  text += f" · {leg['not_run']} did not run"
               if leg["errors"]:
                   text += f" · {leg['errors']} request/script errors"
               return text
@@ -9123,7 +9141,7 @@ jobs:
               if not legs:
                   return ""
               notes = []
-              complete = not missing and len(legs) >= expected
+              complete = not missing and len(legs) >= expected and not any(l["not_run"] for l in legs)
               if suite == "phpunit":
                   shapes = {(l["passed"], l["run"], l["skipped"]) for l in legs}
                   worst = max(legs, key=lambda l: (l["failed"], -l["passed"]))
@@ -9139,7 +9157,7 @@ jobs:
                       text = fmt(max(legs, key=lambda l: l["run"]))
                       notes.append(f"{len(legs)} legs, {runs[0]}–{runs[-1]} tests per leg")
               else:
-                  text = fmt({k: sum(l[k] for l in legs) for k in ("run", "passed", "skipped", "errors")})
+                  text = fmt({k: sum(l[k] for l in legs) for k in ("run", "passed", "skipped", "not_run", "errors")})
                   if suite == "newman" and legs[0]["reported"] < legs[0]["expected"]:
                       complete = False
                       notes.append(f"counts from {legs[0]['reported']} of {legs[0]['expected']} collections")
