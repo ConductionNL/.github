@@ -4452,8 +4452,11 @@ jobs:
       # every leg's file and renders `passed/run`. `!cancelled()`, not
       # `success()`: a red suite is exactly the run whose count matters.
       #
-      # A missing or unreadable JUnit file writes NOTHING, and the report then
-      # shows the bare verdict it always showed. A count is never invented.
+      # A missing or unreadable JUnit file records the leg with `"run": null`.
+      # A count is never invented, but the leg is not dropped either: a leg
+      # that died before PHPUnit wrote its report (a fatal, an OOM) would
+      # otherwise vanish from the tally, and three green legs would read as
+      # the whole matrix.
       - name: Record test counts
         if: ${{ !cancelled() }}
         env:
@@ -4469,7 +4472,9 @@ jobs:
           try:
               root = ET.parse(sys.argv[1]).getroot()
           except (OSError, ET.ParseError):
-              print("No readable JUnit report, so no test counts for this leg.")
+              with open(os.environ["OUT"], "w", encoding="utf-8") as fh:
+                  json.dump({"leg": os.environ["LEG"], "run": None}, fh)
+              print("No readable JUnit report, so this leg is recorded without counts.")
               raise SystemExit(0)
           suites = [s for s in (list(root) if root.tag == "testsuites" else [root]) if s.tag == "testsuite"]
           def tally(key):
@@ -4490,7 +4495,7 @@ jobs:
 
       - name: Upload test counts
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-counts-phpunit-${{ matrix.php-version }}-${{ matrix.nextcloud-ref }}-${{ matrix.database }}
           path: test-counts/
@@ -5007,6 +5012,9 @@ jobs:
             RAN=$((RAN + 1))
             eval newman run "\"$collection\"" $ENV_ARGS --reporters cli,json --reporter-json-export "\"$RUNNER_TEMP/newman-json/$RAN.json\"" || FAIL=1
           done < <(find . -name '*.postman_collection.json' -print0 | sort -z)
+          # How many exports to expect, so a collection that left none is named
+          # in the counts instead of silently missing from the sum.
+          echo "$RAN" > "$RUNNER_TEMP/newman-ran"
 
           # A count nobody reconciles is how the flat glob survived unnoticed
           # for as long as it did. Compare what ran with what the validate step
@@ -5035,36 +5043,53 @@ jobs:
       # step of the same name. Newman's "tests" are the assertions in the
       # collections (`pm.test`), summed over every collection that ran;
       # `pending` is Newman's word for a skipped one.
+      #
+      # Newman also exits non-zero on a failed request (ECONNREFUSED, a
+      # timeout) or a script that throws, and neither is a failed assertion.
+      # Those are recorded as `errors`, so a red job does not sit next to an
+      # all-passed count. `expected` is how many collections ran, so one that
+      # left no export is named rather than missing from the sum.
       - name: Record test counts
         if: ${{ !cancelled() }}
         run: |
           mkdir -p test-counts
-          python3 - "$RUNNER_TEMP/newman-json" <<'PYEOF'
+          python3 - "$RUNNER_TEMP/newman-json" "$RUNNER_TEMP/newman-ran" <<'PYEOF'
           import json, pathlib, sys
           files = sorted(pathlib.Path(sys.argv[1]).glob("*.json"))
-          total = failed = pending = read = 0
+          try:
+              expected = int(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8").strip())
+          except (OSError, ValueError):
+              expected = None
+          total = failed = pending = errors = read = 0
           for path in files:
               try:
-                  stats = json.loads(path.read_text(encoding="utf-8"))["run"]["stats"]["assertions"]
+                  stats = json.loads(path.read_text(encoding="utf-8"))["run"]["stats"]
+                  assertions = stats["assertions"]
               except (OSError, ValueError, KeyError, TypeError):
                   continue
-              total += int(stats.get("total") or 0)
-              failed += int(stats.get("failed") or 0)
-              pending += int(stats.get("pending") or 0)
+              total += int(assertions.get("total") or 0)
+              failed += int(assertions.get("failed") or 0)
+              pending += int(assertions.get("pending") or 0)
+              for key in ("requests", "testScripts", "prerequestScripts"):
+                  errors += int((stats.get(key) or {}).get("failed") or 0)
               read += 1
           if read == 0:
-              print("No readable Newman JSON export, so no test counts.")
+              with open("test-counts/newman.json", "w", encoding="utf-8") as fh:
+                  json.dump({"leg": "newman", "run": None}, fh)
+              print("No readable Newman JSON export, so Newman is recorded without counts.")
               raise SystemExit(0)
           run = total - pending
-          counts = {"leg": "newman", "run": run, "passed": run - failed, "failed": failed, "skipped": pending}
+          counts = {"leg": "newman", "run": run, "passed": run - failed, "failed": failed, "skipped": pending,
+                    "errors": errors, "reported": read, "expected": expected if expected is not None else read}
           with open("test-counts/newman.json", "w", encoding="utf-8") as fh:
               json.dump(counts, fh)
-          print(f"{counts['passed']}/{run} assertions passed over {read} collection(s), {pending} skipped.")
+          print(f"{counts['passed']}/{run} assertions passed over {read} of {counts['expected']} collection(s), "
+                f"{pending} skipped, {errors} request/script errors.")
           PYEOF
 
       - name: Upload test counts
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-counts-newman
           path: test-counts/
@@ -7078,7 +7103,9 @@ jobs:
                   archive = zipfile.ZipFile(io.BytesIO(base64.b64decode(match.group(1))))
                   break
           if archive is None:
-              print("No Playwright HTML report with an embedded result blob, so no test counts.")
+              with open(f"test-counts/playwright-shard-{os.environ['SHARD']}.json", "w", encoding="utf-8") as fh:
+                  json.dump({"leg": f"shard {os.environ['SHARD']}", "run": None}, fh)
+              print("No Playwright HTML report with an embedded result blob, so this shard is recorded without counts.")
               raise SystemExit(0)
           tally = {"passed": 0, "failed": 0, "skipped": 0}
           for name in archive.namelist():
@@ -7105,7 +7132,7 @@ jobs:
 
       - name: Upload test counts
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-counts-playwright-shard-${{ matrix.shard }}
           path: test-counts/
@@ -8916,7 +8943,7 @@ jobs:
       # Newman, written by each job's "Record test counts" step. Every file
       # name carries its leg, so merging the downloads cannot overwrite one.
       - name: Download test counts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: test-counts-*
           path: test-counts/
@@ -9003,6 +9030,118 @@ jobs:
           else
             echo "::notice::${RUN_REF} is at ${TIP:0:7}, this run is ${RUN_SHA:0:7}: superseded=${SUPERSEDED}."
           fi
+
+      # Test counts behind a test row's verdict, from the files the phpunit,
+      # newman and playwright jobs write in their "Record test counts" step:
+      # `✅ 412/412`, `❌ 94/103`. Skipped tests are left out of both numbers
+      # and named after them, so a suite with skips does not read as a failure.
+      # Exported as PHPUNIT_COUNTS / NEWMAN_COUNTS / PLAYWRIGHT_COUNTS for
+      # "Generate report", which appends them to the row.
+      #
+      # Its own step, not inline in "Generate report": that block is already
+      # near the 16 KiB `run:` limit (scripts/assert-run-steps-resolvable.py).
+      # `continue-on-error`, because a count is an annotation — failing here
+      # must never cost the report or the gates below it.
+      #
+      # Only a run that produced a verdict gets a count. A cancelled, skipped
+      # or missing job, or one where no leg left a readable count, keeps
+      # exactly the cell it had — a count is never invented. A leg recorded
+      # with `"run": null`, a Newman collection with no export, or a shard
+      # with no file is named in the cell instead of hidden in the tally.
+      #
+      # PHPUnit legs each run the whole suite, so they are not added up: one
+      # line when every leg agrees, otherwise the worst leg by name. Newman
+      # collections and Playwright shards each run a part of it, so they are
+      # summed.
+      #
+      # The ❌ is the job's result and the numbers are the tests', and a job
+      # can fail with every test green (the coverage ratchet, the E2E skip
+      # gate in enforce mode, the shard-partition check). When every leg
+      # reported and none failed, the cell says so instead of `❌ 412/412`.
+      - name: Compute test counts
+        continue-on-error: true
+        env:
+          PHPUNIT_RESULT: ${{ needs.phpunit.result }}
+          NEWMAN_RESULT: ${{ needs.newman.result }}
+          PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
+          # Raw input, resolved below exactly as the playwright job's matrix
+          # resolves it: 1 to 8 as given, anything else one leg.
+          E2E_SHARDS: ${{ inputs.e2e-shards }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os
+          from pathlib import Path
+
+          def load(suite):
+              legs, missing = [], []
+              for path in sorted(Path("test-counts").glob(f"{suite}*.json")):
+                  try:
+                      leg = json.loads(path.read_text(encoding="utf-8"))
+                      if leg.get("run") is None:
+                          missing.append(str(leg.get("leg") or path.stem))
+                          continue
+                      row = {k: int(leg[k]) for k in ("run", "passed", "failed", "skipped")}
+                      row["errors"] = int(leg.get("errors") or 0)
+                      row["reported"] = int(leg.get("reported") or 0)
+                      row["expected"] = int(leg.get("expected") or 0)
+                      row["leg"] = str(leg["leg"])
+                      legs.append(row)
+                  except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                      missing.append(path.stem)
+              return legs, missing
+
+          def fmt(leg):
+              text = f"{leg['passed']}/{leg['run']}"
+              if leg["skipped"]:
+                  text += f" · {leg['skipped']} skipped"
+              if leg["errors"]:
+                  text += f" · {leg['errors']} request/script errors"
+              return text
+
+          def cell(suite, result, shards):
+              if result not in ("success", "failure"):
+                  return ""
+              legs, missing = load(suite)
+              if not legs:
+                  return ""
+              notes = []
+              complete = not missing
+              if suite == "phpunit":
+                  shapes = {(l["passed"], l["run"], l["skipped"]) for l in legs}
+                  worst = max(legs, key=lambda l: (l["failed"], -l["passed"]))
+                  if len(shapes) == 1:
+                      text = fmt(legs[0])
+                      if len(legs) > 1:
+                          notes.append(f"{len(legs)} legs")
+                  elif worst["failed"]:
+                      text = fmt(worst)
+                      notes.append(f"worst of {len(legs)} legs: {worst['leg']}")
+                  else:
+                      runs = sorted(l["run"] for l in legs)
+                      text = fmt(max(legs, key=lambda l: l["run"]))
+                      notes.append(f"{len(legs)} legs, {runs[0]}–{runs[-1]} tests per leg")
+              else:
+                  text = fmt({k: sum(l[k] for l in legs) for k in ("run", "passed", "skipped", "errors")})
+                  if suite == "newman" and legs[0]["reported"] < legs[0]["expected"]:
+                      complete = False
+                      notes.append(f"counts from {legs[0]['reported']} of {legs[0]['expected']} collections")
+                  if suite == "playwright" and len(legs) < shards:
+                      complete = False
+                      notes.append(f"counts from {len(legs)} of {shards} shards")
+              if missing:
+                  notes.append("no counts from " + ", ".join(f"`{m}`" for m in missing))
+              if result == "failure" and complete and not any(l["failed"] or l["errors"] for l in legs):
+                  notes.append("tests passed, the job failed in another step")
+              return text + (f" ({'; '.join(notes)})" if notes else "")
+
+          raw = os.environ.get("E2E_SHARDS", "")
+          shards = int(raw) if raw in [str(n) for n in range(1, 9)] else 1
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              for suite in ("phpunit", "newman", "playwright"):
+                  value = cell(suite, os.environ.get(f"{suite.upper()}_RESULT", ""), shards)
+                  print(f"{suite}: {value or '(no counts)'}")
+                  env.write(f"{suite.upper()}_COUNTS={' '.join(value.split())}\n")
+          PYEOF
 
       - name: Generate report
         env:
@@ -9096,71 +9235,6 @@ jobs:
               fi
             else
               icon "$1"
-            fi
-          }
-
-          # Test counts behind a test row's verdict, from the files the
-          # phpunit, newman and playwright jobs write in their "Record test
-          # counts" step: `✅ 412/412`, `❌ 94/103`. Skipped tests are left out
-          # of both numbers and named after them, so a suite with skips does
-          # not read as a failure.
-          #
-          # Only a run that produced a verdict gets a count. A cancelled,
-          # skipped or missing job, or one whose legs left no readable file,
-          # keeps exactly the cell it had — a count is never invented.
-          #
-          # PHPUnit legs each run the whole suite, so they are not added up:
-          # one line when every leg agrees, otherwise the worst leg by name.
-          # Playwright shards each run a part of it, so they are summed, and a
-          # shard with no file is said out loud rather than hidden in the sum.
-          #
-          # $1 = the cell from test_icon, $2 = phpunit|newman|playwright,
-          # $3 = needs.<job>.result
-          with_counts() {
-            local counts=""
-            case "$3" in
-              success|failure)
-                counts="$(python3 - "$2" '${{ inputs.e2e-shards }}' <<'PYEOF' || true
-          import json, sys
-          from pathlib import Path
-          suite, shards = sys.argv[1], sys.argv[2]
-          legs = []
-          for path in sorted(Path("test-counts").glob(f"{suite}*.json")):
-              try:
-                  leg = json.loads(path.read_text(encoding="utf-8"))
-                  legs.append({k: leg[k] for k in ("leg", "run", "passed", "failed", "skipped")})
-              except (OSError, ValueError, KeyError, TypeError):
-                  continue
-          if not legs:
-              raise SystemExit(0)
-          def fmt(leg):
-              text = f"{leg['passed']}/{leg['run']}"
-              return text + (f" · {leg['skipped']} skipped" if leg["skipped"] else "")
-          if suite == "phpunit":
-              shapes = {(l["passed"], l["run"], l["skipped"]) for l in legs}
-              worst = max(legs, key=lambda l: (l["failed"], -l["passed"]))
-              biggest = max(legs, key=lambda l: l["run"])
-              if len(shapes) == 1:
-                  text = fmt(legs[0]) + (f" ({len(legs)} legs)" if len(legs) > 1 else "")
-              elif worst["failed"]:
-                  text = f"{fmt(worst)} (worst of {len(legs)} legs: {worst['leg']})"
-              else:
-                  runs = sorted(l["run"] for l in legs)
-                  text = f"{fmt(biggest)} ({len(legs)} legs, {runs[0]}–{runs[-1]} tests per leg)"
-          else:
-              total = {k: sum(l[k] for l in legs) for k in ("run", "passed", "skipped")}
-              text = fmt(total)
-              if suite == "playwright" and shards.isdigit() and len(legs) < int(shards):
-                  text += f" (counts from {len(legs)} of {shards} shards)"
-          print(text)
-          PYEOF
-                )"
-                ;;
-            esac
-            if [ -n "$counts" ]; then
-              echo "$1 $counts"
-            else
-              echo "$1"
             fi
           }
 
@@ -9273,10 +9347,11 @@ jobs:
             # PHPUnit and Playwright carry a declared-skip reason; Newman is
             # not gated by the changed-path filter or the promotion rule, so a
             # skipped-while-enabled Newman really is a missing verdict.
-            # `with_counts` adds the passed/run tally when the job left one.
-            echo "| PHPUnit | | | | | $(with_counts "$(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}' "$PHPUNIT_SKIP_REASON")" phpunit '${{ needs.phpunit.result }}') |"
-            echo "| Newman | | | | | $(with_counts "$(test_icon '${{ needs.newman.result }}' '${{ inputs.enable-newman }}')" newman '${{ needs.newman.result }}') |"
-            echo "| Playwright | | | | | $(with_counts "$(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}' "$PLAYWRIGHT_SKIP_REASON")" playwright '${{ needs.playwright.result }}') |"
+            # The *_COUNTS tallies come from the "Compute test counts" step and
+            # are empty when the job left none.
+            echo "| PHPUnit | | | | | $(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}' "$PHPUNIT_SKIP_REASON")${PHPUNIT_COUNTS:+ $PHPUNIT_COUNTS} |"
+            echo "| Newman | | | | | $(test_icon '${{ needs.newman.result }}' '${{ inputs.enable-newman }}')${NEWMAN_COUNTS:+ $NEWMAN_COUNTS} |"
+            echo "| Playwright | | | | | $(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}' "$PLAYWRIGHT_SKIP_REASON")${PLAYWRIGHT_COUNTS:+ $PLAYWRIGHT_COUNTS} |"
             if [ '${{ inputs.enable-journeydoc-capture }}' = 'true' ]; then
               echo "| Journeydoc capture | | | | | $(test_icon '${{ needs.journeydoc-capture.result }}' 'true') |"
             fi
