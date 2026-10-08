@@ -305,6 +305,102 @@ class Application {
         )
 
 
+# portaliq's lib/AppInfo/OpenRegisterAutoloader.php after portaliq#1241, cut
+# down. %(ns)s, %(app)s and %(register)s let each control break ONE condition.
+SPL_AUTOLOADER = """<?php
+namespace OCA\\Leaf\\AppInfo;
+final class OpenRegisterAutoloader {
+    private const OPENREGISTER_APP_ID = %(app)s;
+    private const OPENREGISTER_NAMESPACE = %(ns)s;
+    private static ?\\Closure $loader = null;
+    public static function register(?\\OCP\\App\\IAppManager $appManager = null): bool {
+        try {
+            $appManager ??= \\OCP\\Server::get(\\OCP\\App\\IAppManager::class);
+            $path = rtrim($appManager->getAppPath(self::OPENREGISTER_APP_ID), '/');
+            self::$loader = static function (string $class) use ($path): void {
+                if (str_starts_with($class, self::OPENREGISTER_NAMESPACE) === true) {
+                    require_once $path . '/lib/' . str_replace('\\\\', '/', substr($class, 19)) . '.php';
+                }
+            };
+            %(register)s
+            return true;
+        } catch (\\Throwable) {
+            return false;
+        }
+    }
+}
+"""
+
+SPL_CALLER = """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    public function register($context): void {
+        OpenRegisterAutoloader::register();
+        if (class_exists(Bootstrap::class) === true) {
+            Bootstrap::register($context, 'leaf', []);
+        }
+    }
+}
+"""
+
+
+class Nextcloud35PreludeTest(GateCase):
+    """Nextcloud 35 removed OC_App::registerAutoloading().
+
+    The public-API prelude is the app's own spl_autoload_register() loader for
+    the OCA\\OpenRegister\\ prefix. portaliq#1241 shipped it and every portaliq
+    PR after it was red on this gate. Each control below breaks exactly one of
+    the three conditions has_spl_prelude() requires and must stay RED.
+    """
+
+    GOOD = {
+        "app": "'openregister'",
+        "ns": "'OCA\\\\OpenRegister\\\\'",
+        "register": "spl_autoload_register(self::$loader);",
+    }
+
+    def _plant(self, **override) -> int:
+        self.app("OpenRegisterAutoloader.php", SPL_AUTOLOADER % {**self.GOOD, **override})
+        self.app("Application.php", SPL_CALLER)
+        return _run(self.dir)[0]
+
+    def test_the_portaliq_shape_is_a_prelude(self):
+        self.assertEqual(self._plant(), 0, "the NC35 spl loader is the prelude")
+
+    def test_the_app_id_may_be_a_literal_in_the_getAppPath_call(self):
+        loader = (SPL_AUTOLOADER % self.GOOD).replace(
+            "getAppPath(self::OPENREGISTER_APP_ID)", "getAppPath('openregister')"
+        )
+        self.app("OpenRegisterAutoloader.php", loader)
+        self.app("Application.php", SPL_CALLER)
+        self.assertEqual(_run(self.dir)[0], 0)
+
+    def test_a_loader_for_ANOTHER_namespace_is_not_a_prelude(self):
+        self.assertEqual(self._plant(ns="'OCA\\\\OpenCatalogi\\\\'"), 1)
+
+    def test_a_loader_reading_ANOTHER_app_path_is_not_a_prelude(self):
+        self.assertEqual(self._plant(app="'opencatalogi'"), 1)
+
+    def test_no_spl_autoload_register_call_is_not_a_prelude(self):
+        self.assertEqual(self._plant(register="// spl_autoload_register(self::$loader);"), 1)
+
+    def test_the_namespace_inside_a_sentence_is_not_a_prelude(self):
+        self.assertEqual(
+            self._plant(ns="\"we map 'OCA\\\\OpenRegister\\\\' here\""), 1,
+            "a string QUOTING the prefix is not the prefix",
+        )
+
+    def test_the_three_parts_spread_over_files_are_not_a_prelude(self):
+        """One file has the loader; the prefix sits in an unrelated file."""
+        loader = SPL_AUTOLOADER % {**self.GOOD, "ns": "'OCA\\\\Leaf\\\\'"}
+        self.app("OpenRegisterAutoloader.php", loader)
+        self.app("Names.php", "<?php\nnamespace OCA\\Leaf\\AppInfo;\n"
+                 "final class Names { const OR = 'OCA\\\\OpenRegister\\\\'; }\n")
+        self.app("Application.php", SPL_CALLER)
+        self.assertEqual(_run(self.dir)[0], 1)
+
+
 class StringLiteralsAreNotCodeTest(GateCase):
     """#424 — a SENTENCE quoting the prelude is not the prelude.
 
