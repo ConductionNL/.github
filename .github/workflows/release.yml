@@ -1136,9 +1136,12 @@ jobs:
           #
           # `allow_auto_merge` must be true on the repository or this errors —
           # it was false fleet-wide until 2026-08-24 and is now enabled on all
-          # 17 core apps. A failure here must not fail the release -- the bump
-          # PR staying open is a backlog item, and the package below has not
-          # been built yet, so an unhandled failure costs the release itself.
+          # 17 core apps. So must `allow_merge_commit`, because the merge below
+          # is a merge commit; it is true on every caller of this workflow
+          # whose settings are readable (2026-10-08). A failure here must not
+          # fail the release -- the bump PR staying open is a backlog item, and
+          # the package below has not been built yet, so an unhandled failure
+          # costs the release itself.
           #
           # BUT NEVER AUTO-MERGE A BUMP THAT GOES BACKWARDS.
           #
@@ -1191,7 +1194,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --merge \
             --auto \
-            || echo "::warning::Could not set auto-merge on the version-bump PR for $BR — it stays open and ${{ github.ref_name }} remains one version behind the tag. Check that allow_auto_merge is enabled on this repository."
+            || echo "::warning::Could not set auto-merge on the version-bump PR for $BR — it stays open and ${{ github.ref_name }} remains one version behind the tag. Check that allow_auto_merge and allow_merge_commit are enabled on this repository, then merge it with a MERGE COMMIT, not a squash."
 
       # ── SYNC THE RELEASE BRANCH BACK INTO `development` ────────────────
       #
