@@ -7094,11 +7094,18 @@ jobs:
 
       # Test counts for the Quality Report — see the note on the phpunit job's
       # step of the same name. Read from the HTML report the suite already
-      # writes, the same way hydra-gates' check_e2e_skips.py reads it: the
+      # writes, with a copy of the parser in hydra-gates' check_e2e_skips.py
+      # (most apps do not vendor the gate, so it cannot be imported): the
       # zip embedded in index.html, one JSON entry per spec file, skipping
-      # the `report.json` roll-up that repeats them. The test command is not
-      # touched — a reporter added on the command line would REPLACE the
-      # app's configured reporters, html included.
+      # the `report.json` roll-up that repeats them. Where the copy differs:
+      # it opens only the two candidate index.html paths below, not every
+      # index.html under the directory; it counts an unknown outcome as
+      # failed, where the gate counts it as executed; and it splits the
+      # gate's `skipped` into deliberate skips and tests that did not run.
+      # scripts/test-quality-test-counts.py runs both on one report and
+      # requires executed = run and skipped = skipped + not_run. The test
+      # command is not touched — a reporter added on the command line would
+      # REPLACE the app's configured reporters, html included.
       #
       # Playwright's outcomes: `expected` and `flaky` passed (a flaky test
       # failed first and passed on retry), `unexpected` failed, `skipped`

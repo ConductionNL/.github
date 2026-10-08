@@ -37,6 +37,10 @@ each one re-introducing a known defect, and requires the case named for it to
 go red. A suite whose clean pass survives a mutation is not reading the
 programs' output.
 
+The Playwright step carries a copy of hydra-gates' check_e2e_skips.py report
+parser. The case `playwright-agrees-with-gate` runs the gate's own collect()
+on the same report and requires the two to agree.
+
 Usage:  test-quality-test-counts.py [--positive-control] [workflow.yml]
 Needs:  python3 with PyYAML.
 Exit:   0 all assertions hold, 1 at least one failed.
@@ -46,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import importlib.util
 import io
 import json
 import re
@@ -60,6 +65,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "scripts" / "fixtures" / "test-counts"
+GATE = ROOT / "hydra-gates" / "scripts" / "lib" / "check_e2e_skips.py"
 HEREDOC_OPEN = "<<'PYEOF'"
 HEREDOC_CLOSE = "PYEOF"
 STEPS = {
@@ -84,6 +90,8 @@ MUTATIONS = [
      "playwright-interrupted", "an interrupted result read as a deliberate skip"),
     ("playwright", "except (binascii.Error, zipfile.BadZipFile):", "except ImportError:",
      "playwright-truncated", "a truncated blob crashes the step"),
+    ("playwright", 'elif outcome == "skipped":', 'elif outcome in ("skipped", "unexpected"):',
+     "playwright-agrees-with-gate", "the copied parser drifts from check_e2e_skips.py on what executed"),
     ("compute", "if missing:", "if False:",
      "cell-null-leg", "a leg recorded without counts is dropped from the cell"),
 ]
@@ -260,6 +268,23 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
         code, got, log = playwright(r, case, report_html(blob_text=text), shard="2", total="2")
         check(case, code == 0 and got == {"leg": "shard 2", "run": None, "total": 2},
               f"want exit 0 and run null, got exit {code} {got}\n{log}")
+
+    # The shard step carries a copy of check_e2e_skips.py's report parser.
+    # Run the gate's own collect() on the same report: the two must agree on
+    # what executed and on what did not (the copy splits the gate's skipped
+    # into deliberate skips and tests that did not run).
+    if not GATE.is_file():
+        failures["playwright-agrees-with-gate"] = f"{GATE} is missing, so the copy cannot be compared."
+    else:
+        spec = importlib.util.spec_from_file_location("check_e2e_skips", GATE)
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        files = gate.collect(gate._load_report(FIXTURES / "playwright-report"))
+        executed = sum(f["executed"] for f in files.values())
+        skipped = sum(f["skipped"] for f in files.values())
+        ours = (playwright_real.get("run"), (playwright_real.get("skipped") or 0) + (playwright_real.get("not_run") or 0))
+        check("playwright-agrees-with-gate", files and ours == (executed, skipped),
+              f"gate executed {executed}, skipped {skipped}; shard step run, skipped + not_run = {ours}")
 
     code, got, log = playwright(r, "playwright-no-report", None)
     check("playwright-no-report", code == 0 and got.get("run", "x") is None, f"want run null, got exit {code} {got}\n{log}")
