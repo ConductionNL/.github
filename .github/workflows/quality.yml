@@ -4081,7 +4081,8 @@ jobs:
           ./vendor/bin/phpunit \
             -c phpunit.xml \
             --colors=always \
-            --coverage-clover=coverage/clover.xml
+            --coverage-clover=coverage/clover.xml \
+            --log-junit="$RUNNER_TEMP/phpunit-junit.xml"
 
       # ── The ratchet's floor is MEASURED, not typed ────────────────────────
       #
@@ -4440,6 +4441,59 @@ jobs:
         with:
           name: coverage-report
           path: server/apps/${{ inputs.app-name }}/coverage/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # ── Test counts for the Quality Report ────────────────────────────────
+      #
+      # The report's Tests column said ✅ or ❌ and nothing else, so "3 of 412
+      # failed" and "412 of 412 failed" read the same. This leg records its own
+      # tally from the JUnit file the run step writes; the report job reads
+      # every leg's file and renders `passed/run`. `!cancelled()`, not
+      # `success()`: a red suite is exactly the run whose count matters.
+      #
+      # A missing or unreadable JUnit file writes NOTHING, and the report then
+      # shows the bare verdict it always showed. A count is never invented.
+      - name: Record test counts
+        if: ${{ !cancelled() }}
+        env:
+          LEG: "PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }}"
+          OUT: "test-counts/phpunit-${{ matrix.php-version }}-${{ matrix.nextcloud-ref }}-${{ matrix.database }}.json"
+        run: |
+          mkdir -p test-counts
+          # The heredoc body sits at the run block's own indentation, so the
+          # shell sees `PYEOF` in column 0 — same shape as the Newman job.
+          python3 - "$RUNNER_TEMP/phpunit-junit.xml" <<'PYEOF'
+          import json, os, sys
+          import xml.etree.ElementTree as ET
+          try:
+              root = ET.parse(sys.argv[1]).getroot()
+          except (OSError, ET.ParseError):
+              print("No readable JUnit report, so no test counts for this leg.")
+              raise SystemExit(0)
+          suites = [s for s in (list(root) if root.tag == "testsuites" else [root]) if s.tag == "testsuite"]
+          def tally(key):
+              total = 0
+              for suite in suites:
+                  try:
+                      total += int(float(suite.get(key) or 0))
+                  except ValueError:
+                      pass
+              return total
+          tests, skipped = tally("tests"), tally("skipped")
+          failed = tally("failures") + tally("errors")
+          counts = {"leg": os.environ["LEG"], "run": tests - skipped, "passed": tests - skipped - failed, "failed": failed, "skipped": skipped}
+          with open(os.environ["OUT"], "w", encoding="utf-8") as fh:
+              json.dump(counts, fh)
+          print(f"{counts['passed']}/{counts['run']} passed, {skipped} skipped.")
+          PYEOF
+
+      - name: Upload test counts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-counts-phpunit-${{ matrix.php-version }}-${{ matrix.nextcloud-ref }}-${{ matrix.database }}
+          path: test-counts/
           retention-days: 14
           if-no-files-found: ignore
 
@@ -4919,6 +4973,9 @@ jobs:
           FAIL=0
           RAN=0
           SKIPPED=0
+          # One JSON export per collection that runs, for the test counts in
+          # the Quality Report (see "Record test counts" below).
+          mkdir -p "$RUNNER_TEMP/newman-json"
           while IFS= read -r -d '' collection; do
             # The heredoc body is indented to the YAML block level and no
             # further: this is a literal block scalar, so YAML strips exactly
@@ -4948,7 +5005,7 @@ jobs:
             echo ""
             echo "=== Running: ${collection#./} ==="
             RAN=$((RAN + 1))
-            eval newman run "\"$collection\"" $ENV_ARGS --reporters cli || FAIL=1
+            eval newman run "\"$collection\"" $ENV_ARGS --reporters cli,json --reporter-json-export "\"$RUNNER_TEMP/newman-json/$RAN.json\"" || FAIL=1
           done < <(find . -name '*.postman_collection.json' -print0 | sort -z)
 
           # A count nobody reconciles is how the flat glob survived unnoticed
@@ -4973,6 +5030,46 @@ jobs:
         run: |
           echo "=== Last 50 lines of Nextcloud log ==="
           tail -50 server/data/nextcloud.log 2>/dev/null | python3 -m json.tool --no-ensure-ascii 2>/dev/null || tail -50 server/data/nextcloud.log 2>/dev/null || echo "No log found"
+
+      # Test counts for the Quality Report — see the note on the phpunit job's
+      # step of the same name. Newman's "tests" are the assertions in the
+      # collections (`pm.test`), summed over every collection that ran;
+      # `pending` is Newman's word for a skipped one.
+      - name: Record test counts
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p test-counts
+          python3 - "$RUNNER_TEMP/newman-json" <<'PYEOF'
+          import json, pathlib, sys
+          files = sorted(pathlib.Path(sys.argv[1]).glob("*.json"))
+          total = failed = pending = read = 0
+          for path in files:
+              try:
+                  stats = json.loads(path.read_text(encoding="utf-8"))["run"]["stats"]["assertions"]
+              except (OSError, ValueError, KeyError, TypeError):
+                  continue
+              total += int(stats.get("total") or 0)
+              failed += int(stats.get("failed") or 0)
+              pending += int(stats.get("pending") or 0)
+              read += 1
+          if read == 0:
+              print("No readable Newman JSON export, so no test counts.")
+              raise SystemExit(0)
+          run = total - pending
+          counts = {"leg": "newman", "run": run, "passed": run - failed, "failed": failed, "skipped": pending}
+          with open("test-counts/newman.json", "w", encoding="utf-8") as fh:
+              json.dump(counts, fh)
+          print(f"{counts['passed']}/{run} assertions passed over {read} collection(s), {pending} skipped.")
+          PYEOF
+
+      - name: Upload test counts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-counts-newman
+          path: test-counts/
+          retention-days: 14
+          if-no-files-found: ignore
 
   playwright:
     # `needs.security.result != 'failure'` was removed here by #194. E2E is the
@@ -6948,6 +7045,73 @@ jobs:
           if [ "${{ inputs.e2e-skip-blocking }}" = "true" ]; then MODE=enforce; fi
           python3 "${GATE}" --report "${REPORT}" --mode "${MODE}" --summary "${GITHUB_STEP_SUMMARY}"
 
+      # Test counts for the Quality Report — see the note on the phpunit job's
+      # step of the same name. Read from the HTML report the suite already
+      # writes, the same way hydra-gates' check_e2e_skips.py reads it: the
+      # zip embedded in index.html, one JSON entry per spec file, skipping
+      # the `report.json` roll-up that repeats them. The test command is not
+      # touched — a reporter added on the command line would REPLACE the
+      # app's configured reporters, html included.
+      #
+      # Playwright's outcomes: `expected` and `flaky` passed (a flaky test
+      # failed first and passed on retry), `unexpected` failed, `skipped`
+      # did not run. Each shard records its own part of the suite; the report
+      # job adds them up.
+      - name: Record test counts
+        if: ${{ !cancelled() }}
+        env:
+          SHARD: ${{ matrix.shard }}
+          APP_DIR: server/apps/${{ inputs.app-name }}
+        run: |
+          mkdir -p test-counts
+          python3 - <<'PYEOF'
+          import base64, io, json, os, re, zipfile
+          from pathlib import Path
+          blob = re.compile(r'id="playwrightReportBase64"[^>]*>\s*data:application/zip;base64,([A-Za-z0-9+/=]+)')
+          archive = None
+          for candidate in ("playwright-report", "tests/e2e/playwright-report"):
+              html = Path(os.environ["APP_DIR"]) / candidate / "index.html"
+              if not html.is_file():
+                  continue
+              match = blob.search(html.read_text(encoding="utf-8", errors="replace"))
+              if match:
+                  archive = zipfile.ZipFile(io.BytesIO(base64.b64decode(match.group(1))))
+                  break
+          if archive is None:
+              print("No Playwright HTML report with an embedded result blob, so no test counts.")
+              raise SystemExit(0)
+          tally = {"passed": 0, "failed": 0, "skipped": 0}
+          for name in archive.namelist():
+              if not name.endswith(".json") or name == "report.json":
+                  continue
+              try:
+                  payload = json.loads(archive.read(name))
+              except (ValueError, KeyError):
+                  continue
+              for entry in payload.get("files") or ([payload] if "tests" in payload else []):
+                  for test in entry.get("tests") or []:
+                      outcome = test.get("outcome") or test.get("status")
+                      if outcome in ("expected", "flaky"):
+                          tally["passed"] += 1
+                      elif outcome == "skipped":
+                          tally["skipped"] += 1
+                      else:
+                          tally["failed"] += 1
+          counts = {"leg": f"shard {os.environ['SHARD']}", "run": tally["passed"] + tally["failed"], **tally}
+          with open(f"test-counts/playwright-shard-{os.environ['SHARD']}.json", "w", encoding="utf-8") as fh:
+              json.dump(counts, fh)
+          print(f"{counts['passed']}/{counts['run']} passed, {counts['skipped']} skipped.")
+          PYEOF
+
+      - name: Upload test counts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-counts-playwright-shard-${{ matrix.shard }}
+          path: test-counts/
+          retention-days: 14
+          if-no-files-found: ignore
+
       - name: Upload Playwright report
         if: always()
         # `tests/e2e/…` is included because that is where the scaffolded config
@@ -8748,6 +8912,17 @@ jobs:
           merge-multiple: true
         continue-on-error: true
 
+      # One small JSON file per PHPUnit leg, per Playwright shard and for
+      # Newman, written by each job's "Record test counts" step. Every file
+      # name carries its leg, so merging the downloads cannot overwrite one.
+      - name: Download test counts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-counts-*
+          path: test-counts/
+          merge-multiple: true
+        continue-on-error: true
+
       # A PACKAGE INSTALL MUST NOT BE ABLE TO DISABLE THE GATE.
       #
       # Measured on decidesk run 32158299327 and shillinq run 32158364133,
@@ -8924,6 +9099,71 @@ jobs:
             fi
           }
 
+          # Test counts behind a test row's verdict, from the files the
+          # phpunit, newman and playwright jobs write in their "Record test
+          # counts" step: `✅ 412/412`, `❌ 94/103`. Skipped tests are left out
+          # of both numbers and named after them, so a suite with skips does
+          # not read as a failure.
+          #
+          # Only a run that produced a verdict gets a count. A cancelled,
+          # skipped or missing job, or one whose legs left no readable file,
+          # keeps exactly the cell it had — a count is never invented.
+          #
+          # PHPUnit legs each run the whole suite, so they are not added up:
+          # one line when every leg agrees, otherwise the worst leg by name.
+          # Playwright shards each run a part of it, so they are summed, and a
+          # shard with no file is said out loud rather than hidden in the sum.
+          #
+          # $1 = the cell from test_icon, $2 = phpunit|newman|playwright,
+          # $3 = needs.<job>.result
+          with_counts() {
+            local counts=""
+            case "$3" in
+              success|failure)
+                counts="$(python3 - "$2" '${{ inputs.e2e-shards }}' <<'PYEOF' || true
+          import json, sys
+          from pathlib import Path
+          suite, shards = sys.argv[1], sys.argv[2]
+          legs = []
+          for path in sorted(Path("test-counts").glob(f"{suite}*.json")):
+              try:
+                  leg = json.loads(path.read_text(encoding="utf-8"))
+                  legs.append({k: leg[k] for k in ("leg", "run", "passed", "failed", "skipped")})
+              except (OSError, ValueError, KeyError, TypeError):
+                  continue
+          if not legs:
+              raise SystemExit(0)
+          def fmt(leg):
+              text = f"{leg['passed']}/{leg['run']}"
+              return text + (f" · {leg['skipped']} skipped" if leg["skipped"] else "")
+          if suite == "phpunit":
+              shapes = {(l["passed"], l["run"], l["skipped"]) for l in legs}
+              worst = max(legs, key=lambda l: (l["failed"], -l["passed"]))
+              biggest = max(legs, key=lambda l: l["run"])
+              if len(shapes) == 1:
+                  text = fmt(legs[0]) + (f" ({len(legs)} legs)" if len(legs) > 1 else "")
+              elif worst["failed"]:
+                  text = f"{fmt(worst)} (worst of {len(legs)} legs: {worst['leg']})"
+              else:
+                  runs = sorted(l["run"] for l in legs)
+                  text = f"{fmt(biggest)} ({len(legs)} legs, {runs[0]}–{runs[-1]} tests per leg)"
+          else:
+              total = {k: sum(l[k] for l in legs) for k in ("run", "passed", "skipped")}
+              text = fmt(total)
+              if suite == "playwright" and shards.isdigit() and len(legs) < int(shards):
+                  text += f" (counts from {len(legs)} of {shards} shards)"
+          print(text)
+          PYEOF
+                )"
+                ;;
+            esac
+            if [ -n "$counts" ]; then
+              echo "$1 $counts"
+            else
+              echo "$1"
+            fi
+          }
+
           # The declared-skip reasons, mirrored from `classify()` in the gate
           # step below — same precedence: the promotion rule names the E2E skip
           # first, the changed-path filter covers whatever it gates. Computed
@@ -9033,9 +9273,10 @@ jobs:
             # PHPUnit and Playwright carry a declared-skip reason; Newman is
             # not gated by the changed-path filter or the promotion rule, so a
             # skipped-while-enabled Newman really is a missing verdict.
-            echo "| PHPUnit | | | | | $(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}' "$PHPUNIT_SKIP_REASON") |"
-            echo "| Newman | | | | | $(test_icon '${{ needs.newman.result }}' '${{ inputs.enable-newman }}') |"
-            echo "| Playwright | | | | | $(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}' "$PLAYWRIGHT_SKIP_REASON") |"
+            # `with_counts` adds the passed/run tally when the job left one.
+            echo "| PHPUnit | | | | | $(with_counts "$(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}' "$PHPUNIT_SKIP_REASON")" phpunit '${{ needs.phpunit.result }}') |"
+            echo "| Newman | | | | | $(with_counts "$(test_icon '${{ needs.newman.result }}' '${{ inputs.enable-newman }}')" newman '${{ needs.newman.result }}') |"
+            echo "| Playwright | | | | | $(with_counts "$(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}' "$PLAYWRIGHT_SKIP_REASON")" playwright '${{ needs.playwright.result }}') |"
             if [ '${{ inputs.enable-journeydoc-capture }}' = 'true' ]; then
               echo "| Journeydoc capture | | | | | $(test_icon '${{ needs.journeydoc-capture.result }}' 'true') |"
             fi
