@@ -1,0 +1,424 @@
+{
+  "collection": {
+    "item": [
+      {
+        "id": "fa8a04c0-5e5e-425a-9949-df42169f3c17",
+        "name": "status",
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "18766",
+            "path": [
+              ""
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "193bb2aa-d3cb-474b-9781-1996e86eb5a0",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('passes', function () { pm.expect(pm.response.code).to.equal(200); });",
+                "pm.test.skip('skipped on purpose', function () { pm.expect(true).to.equal(false); });",
+                "pm.test('fails', function () { pm.expect(pm.response.code).to.equal(201); });"
+              ],
+              "_lastExecutionId": "af169b73-1d34-4ecd-9a48-9291b4fa9fd9"
+            }
+          }
+        ]
+      }
+    ],
+    "event": [],
+    "variable": [],
+    "info": {
+      "_postman_id": "fbef1291-881d-45b9-b450-91ba617f54b8",
+      "name": "test-counts fixture",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    }
+  },
+  "environment": {
+    "id": "1546a146-915d-44e3-831e-fe806ba395a8",
+    "values": []
+  },
+  "globals": {
+    "id": "b2af0fac-11b3-494b-9819-2793a13ab1ed",
+    "values": []
+  },
+  "run": {
+    "stats": {
+      "iterations": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "items": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "scripts": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequests": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "requests": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "tests": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "assertions": {
+        "total": 3,
+        "pending": 0,
+        "failed": 1
+      },
+      "testScripts": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequestScripts": {
+        "total": 0,
+        "pending": 0,
+        "failed": 0
+      }
+    },
+    "timings": {
+      "responseAverage": 29,
+      "responseMin": 29,
+      "responseMax": 29,
+      "responseSd": 0,
+      "dnsAverage": 0,
+      "dnsMin": 0,
+      "dnsMax": 0,
+      "dnsSd": 0,
+      "firstByteAverage": 0,
+      "firstByteMin": 0,
+      "firstByteMax": 0,
+      "firstByteSd": 0,
+      "started": 1791454653699,
+      "completed": 1791454653770
+    },
+    "executions": [
+      {
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 1,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "eb82a652-c4c0-480b-a8cf-ddffa672a329",
+          "httpRequestId": "437dfb8f-e63a-41bb-8b81-f3bdc5defaf7"
+        },
+        "item": {
+          "id": "fa8a04c0-5e5e-425a-9949-df42169f3c17",
+          "name": "status",
+          "request": {
+            "url": {
+              "protocol": "http",
+              "port": "18766",
+              "path": [
+                ""
+              ],
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "193bb2aa-d3cb-474b-9781-1996e86eb5a0",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('passes', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "pm.test.skip('skipped on purpose', function () { pm.expect(true).to.equal(false); });",
+                  "pm.test('fails', function () { pm.expect(pm.response.code).to.equal(201); });"
+                ],
+                "_lastExecutionId": "af169b73-1d34-4ecd-9a48-9291b4fa9fd9"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "18766",
+            "path": [
+              ""
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "2b6ae303-9482-4f34-b9aa-a076aab0678f",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:18766",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "7e0f5593-efa5-47a0-99be-0236f71c2865",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Server",
+              "value": "SimpleHTTP/0.6 Python/3.12.3"
+            },
+            {
+              "key": "Date",
+              "value": "Thu, 08 Oct 2026 10:17:33 GMT"
+            },
+            {
+              "key": "Content-type",
+              "value": "text/html"
+            },
+            {
+              "key": "Content-Length",
+              "value": "3"
+            },
+            {
+              "key": "Last-Modified",
+              "value": "Thu, 08 Oct 2026 10:17:32 GMT"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              111,
+              107,
+              10
+            ]
+          },
+          "cookie": [],
+          "responseTime": 29,
+          "responseSize": 3
+        },
+        "id": "fa8a04c0-5e5e-425a-9949-df42169f3c17",
+        "assertions": [
+          {
+            "assertion": "passes",
+            "skipped": false
+          },
+          {
+            "assertion": "skipped on purpose",
+            "skipped": true
+          },
+          {
+            "assertion": "fails",
+            "skipped": false,
+            "error": {
+              "name": "AssertionError",
+              "index": 2,
+              "test": "fails",
+              "message": "expected 200 to equal 201",
+              "stack": "AssertionError: expected 200 to equal 201\n   at Object.eval sandbox-script.js:3:1)"
+            }
+          }
+        ]
+      }
+    ],
+    "transfers": {
+      "responseTotal": 3
+    },
+    "failures": [
+      {
+        "error": {
+          "name": "AssertionError",
+          "index": 2,
+          "test": "fails",
+          "message": "expected 200 to equal 201",
+          "stack": "AssertionError: expected 200 to equal 201\n   at Object.eval sandbox-script.js:3:1)",
+          "checksum": "2e6cde6ae8927d8d47fb6bed3e22abbb",
+          "id": "4e7b3747-251d-4e58-a5d1-1a2d754a8e77",
+          "timestamp": 1791454653758,
+          "stacktrace": [
+            {
+              "fileName": "sandbox-script.js",
+              "lineNumber": 3,
+              "functionName": "Object.eval",
+              "typeName": "Object",
+              "methodName": "eval",
+              "columnNumber": 1,
+              "native": false
+            }
+          ]
+        },
+        "at": "assertion:2 in test-script",
+        "source": {
+          "id": "fa8a04c0-5e5e-425a-9949-df42169f3c17",
+          "name": "status",
+          "request": {
+            "url": {
+              "protocol": "http",
+              "port": "18766",
+              "path": [
+                ""
+              ],
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "193bb2aa-d3cb-474b-9781-1996e86eb5a0",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('passes', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "pm.test.skip('skipped on purpose', function () { pm.expect(true).to.equal(false); });",
+                  "pm.test('fails', function () { pm.expect(pm.response.code).to.equal(201); });"
+                ],
+                "_lastExecutionId": "af169b73-1d34-4ecd-9a48-9291b4fa9fd9"
+              }
+            }
+          ]
+        },
+        "parent": {
+          "item": [
+            {
+              "id": "fa8a04c0-5e5e-425a-9949-df42169f3c17",
+              "name": "status",
+              "request": {
+                "url": {
+                  "protocol": "http",
+                  "port": "18766",
+                  "path": [
+                    ""
+                  ],
+                  "host": [
+                    "127",
+                    "0",
+                    "0",
+                    "1"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "193bb2aa-d3cb-474b-9781-1996e86eb5a0",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('passes', function () { pm.expect(pm.response.code).to.equal(200); });",
+                      "pm.test.skip('skipped on purpose', function () { pm.expect(true).to.equal(false); });",
+                      "pm.test('fails', function () { pm.expect(pm.response.code).to.equal(201); });"
+                    ],
+                    "_lastExecutionId": "af169b73-1d34-4ecd-9a48-9291b4fa9fd9"
+                  }
+                }
+              ]
+            }
+          ],
+          "event": [],
+          "variable": [],
+          "info": {
+            "_postman_id": "fbef1291-881d-45b9-b450-91ba617f54b8",
+            "name": "test-counts fixture",
+            "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+          }
+        },
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 1,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "eb82a652-c4c0-480b-a8cf-ddffa672a329",
+          "httpRequestId": "437dfb8f-e63a-41bb-8b81-f3bdc5defaf7",
+          "scriptId": "193bb2aa-d3cb-474b-9781-1996e86eb5a0",
+          "execution": "af169b73-1d34-4ecd-9a48-9291b4fa9fd9"
+        }
+      }
+    ],
+    "error": null
+  }
+}

@@ -4461,6 +4461,7 @@ jobs:
       # carries the matrix size as `total`, so the report job knows how many
       # legs to expect.
       - name: Record test counts
+        id: test-counts-phpunit
         if: ${{ !cancelled() }}
         # An annotation for the report: it must never fail the job it counts.
         continue-on-error: true
@@ -5063,6 +5064,7 @@ jobs:
       # all-passed count. `expected` is how many collections ran, so one that
       # left no export is named rather than missing from the sum.
       - name: Record test counts
+        id: test-counts-newman
         if: ${{ !cancelled() }}
         # An annotation for the report: it must never fail the job it counts.
         continue-on-error: true
@@ -7109,6 +7111,7 @@ jobs:
       # shard with such tests as complete. Each shard records its own part of the suite and the
       # number of shards (`total`); the report job adds them up.
       - name: Record test counts
+        id: test-counts-playwright
         if: ${{ !cancelled() }}
         # An annotation for the report: it must never fail the job it counts.
         continue-on-error: true
@@ -9108,6 +9111,7 @@ jobs:
       # every leg reported and none failed, the cell says so instead of
       # `❌ 412/412`, without claiming which step failed.
       - name: Compute test counts
+        id: test-counts
         continue-on-error: true
         env:
           PHPUNIT_RESULT: ${{ needs.phpunit.result }}
