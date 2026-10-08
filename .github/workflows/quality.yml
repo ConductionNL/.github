@@ -9071,8 +9071,11 @@ jobs:
       #
       # The ❌ is the job's result and the numbers are the tests', and a job
       # can fail with every test green (the coverage ratchet, the E2E skip
-      # gate in enforce mode, the shard-partition check). When every leg
-      # reported and none failed, the cell says so instead of `❌ 412/412`.
+      # gate in enforce mode, the shard-partition check), or in the test step
+      # itself with no failed test in the counts (PHPUnit's failOnRisky,
+      # Playwright's globalTimeout, Newman's collection-count check). When
+      # every leg reported and none failed, the cell says so instead of
+      # `❌ 412/412`, without claiming which step failed.
       - name: Compute test counts
         continue-on-error: true
         env:
@@ -9146,7 +9149,7 @@ jobs:
               if missing:
                   notes.append("no counts from " + ", ".join(f"`{m}`" for m in missing))
               if result == "failure" and complete and not any(l["failed"] or l["errors"] for l in legs):
-                  notes.append("tests passed, the job failed in another step")
+                  notes.append("no test failed, the job failed for another reason — see its log")
               return text + (f" ({'; '.join(notes)})" if notes else "")
 
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
