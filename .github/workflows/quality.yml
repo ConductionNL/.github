@@ -5041,8 +5041,12 @@ jobs:
 
       # Test counts for the Quality Report — see the note on the phpunit job's
       # step of the same name. Newman's "tests" are the assertions in the
-      # collections (`pm.test`), summed over every collection that ran;
-      # `pending` is Newman's word for a skipped one.
+      # collections (`pm.test`), summed over every collection that ran. A
+      # skipped one (`pm.test.skip`) is in the export's `total` and never in
+      # its `failed`, so it is counted from the per-request assertion records
+      # (`executions[].assertions[].skipped`) and taken out of both. Not from
+      # `stats.assertions.pending`: that is Newman's in-flight counter, which
+      # reads 0 at the end of every run.
       #
       # Newman also exits non-zero on a failed request (ECONNREFUSED, a
       # timeout) or a script that throws, and neither is a failed assertion.
@@ -5060,16 +5064,19 @@ jobs:
               expected = int(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8").strip())
           except (OSError, ValueError):
               expected = None
-          total = failed = pending = errors = read = 0
+          total = failed = skipped = errors = read = 0
           for path in files:
               try:
-                  stats = json.loads(path.read_text(encoding="utf-8"))["run"]["stats"]
+                  run_data = json.loads(path.read_text(encoding="utf-8"))["run"]
+                  stats = run_data["stats"]
                   assertions = stats["assertions"]
-              except (OSError, ValueError, KeyError, TypeError):
+                  skipped_here = sum(bool(a.get("skipped")) for ex in run_data.get("executions") or []
+                                     for a in ex.get("assertions") or [])
+              except (OSError, ValueError, KeyError, TypeError, AttributeError):
                   continue
               total += int(assertions.get("total") or 0)
               failed += int(assertions.get("failed") or 0)
-              pending += int(assertions.get("pending") or 0)
+              skipped += skipped_here
               for key in ("requests", "testScripts", "prerequestScripts"):
                   errors += int((stats.get(key) or {}).get("failed") or 0)
               read += 1
@@ -5078,13 +5085,13 @@ jobs:
                   json.dump({"leg": "newman", "run": None}, fh)
               print("No readable Newman JSON export, so Newman is recorded without counts.")
               raise SystemExit(0)
-          run = total - pending
-          counts = {"leg": "newman", "run": run, "passed": run - failed, "failed": failed, "skipped": pending,
+          run = total - skipped
+          counts = {"leg": "newman", "run": run, "passed": run - failed, "failed": failed, "skipped": skipped,
                     "errors": errors, "reported": read, "expected": expected if expected is not None else read}
           with open("test-counts/newman.json", "w", encoding="utf-8") as fh:
               json.dump(counts, fh)
           print(f"{counts['passed']}/{run} assertions passed over {read} of {counts['expected']} collection(s), "
-                f"{pending} skipped, {errors} request/script errors.")
+                f"{skipped} skipped, {errors} request/script errors.")
           PYEOF
 
       - name: Upload test counts
