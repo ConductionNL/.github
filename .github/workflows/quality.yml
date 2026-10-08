@@ -4462,6 +4462,8 @@ jobs:
       # legs to expect.
       - name: Record test counts
         if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
         env:
           LEG: "PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }}"
           TOTAL: ${{ strategy.job-total }}
@@ -4500,6 +4502,8 @@ jobs:
 
       - name: Upload test counts
         if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-counts-phpunit-${{ matrix.php-version }}-${{ matrix.nextcloud-ref }}-${{ matrix.database }}
@@ -5060,6 +5064,8 @@ jobs:
       # left no export is named rather than missing from the sum.
       - name: Record test counts
         if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
         run: |
           mkdir -p test-counts
           python3 - "$RUNNER_TEMP/newman-json" "$RUNNER_TEMP/newman-ran" <<'PYEOF'
@@ -5101,6 +5107,8 @@ jobs:
 
       - name: Upload test counts
         if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-counts-newman
@@ -7102,6 +7110,8 @@ jobs:
       # number of shards (`total`); the report job adds them up.
       - name: Record test counts
         if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
         env:
           SHARD: ${{ matrix.shard }}
           TOTAL: ${{ strategy.job-total }}
@@ -7109,7 +7119,7 @@ jobs:
         run: |
           mkdir -p test-counts
           python3 - <<'PYEOF'
-          import base64, io, json, os, re, zipfile
+          import base64, binascii, io, json, os, re, zipfile
           from pathlib import Path
           blob = re.compile(r'id="playwrightReportBase64"[^>]*>\s*data:application/zip;base64,([A-Za-z0-9+/=]+)')
           archive = None
@@ -7119,12 +7129,16 @@ jobs:
                   continue
               match = blob.search(html.read_text(encoding="utf-8", errors="replace"))
               if match:
-                  archive = zipfile.ZipFile(io.BytesIO(base64.b64decode(match.group(1))))
-                  break
+                  # A truncated or corrupt blob reads as no report, not as a crash.
+                  try:
+                      archive = zipfile.ZipFile(io.BytesIO(base64.b64decode(match.group(1))))
+                      break
+                  except (binascii.Error, zipfile.BadZipFile):
+                      continue
           if archive is None:
               with open(f"test-counts/playwright-shard-{os.environ['SHARD']}.json", "w", encoding="utf-8") as fh:
                   json.dump({"leg": f"shard {os.environ['SHARD']}", "run": None, "total": int(os.environ["TOTAL"])}, fh)
-              print("No Playwright HTML report with an embedded result blob, so this shard is recorded without counts.")
+              print("No Playwright HTML report with a readable embedded result blob, so this shard is recorded without counts.")
               raise SystemExit(0)
           def deliberate(test):
               notes = list(test.get("annotations") or [])
@@ -7159,6 +7173,8 @@ jobs:
 
       - name: Upload test counts
         if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-counts-playwright-shard-${{ matrix.shard }}
