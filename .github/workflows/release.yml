@@ -1136,9 +1136,12 @@ jobs:
           #
           # `allow_auto_merge` must be true on the repository or this errors —
           # it was false fleet-wide until 2026-08-24 and is now enabled on all
-          # 17 core apps. A failure here must not fail the release -- the bump
-          # PR staying open is a backlog item, and the package below has not
-          # been built yet, so an unhandled failure costs the release itself.
+          # 17 core apps. So must `allow_merge_commit`, because the merge below
+          # is a merge commit; it is true on every caller of this workflow
+          # whose settings are readable (2026-10-08). A failure here must not
+          # fail the release -- the bump PR staying open is a backlog item, and
+          # the package below has not been built yet, so an unhandled failure
+          # costs the release itself.
           #
           # BUT NEVER AUTO-MERGE A BUMP THAT GOES BACKWARDS.
           #
@@ -1171,11 +1174,27 @@ jobs:
             exit 0
           fi
 
+          # A MERGE COMMIT, NEVER A SQUASH (2026-10-06, Remko Huisman). The tag
+          # names the bump commit on release/v*. A squash lands a new single-
+          # parent commit with the same files and leaves the tagged commit out
+          # of the branch, so no release tag is an ancestor of the branch it
+          # was cut from. Measured on openregister: v2.1.33-beta.20260919104605
+          # is `diverged, ahead 1, behind 597` against development, and every
+          # tag since #566 (2026-08-24) is "ahead 1" the same way. GitHub's
+          # generated release notes fall back to the newest tag that IS an
+          # ancestor — v1.1.5-unstable.20260821054342, the last release before
+          # #566 — which is how the notes reached 125,760 characters and every
+          # openregister release failed on the 125,000-character limit from
+          # 2026-10-05 (#820 fixed the symptom). A merge commit keeps the
+          # tagged commit as its second parent, so `git describe` and tag
+          # comparisons work again. The skip guard at the top of this job
+          # already matches a merge commit — its message names `/release/v` —
+          # which is what the sync-back merge below has relied on all along.
           gh pr merge "$BR" \
             --repo "${{ github.repository }}" \
-            --squash \
+            --merge \
             --auto \
-            || echo "::warning::Could not set auto-merge on the version-bump PR for $BR — it stays open and ${{ github.ref_name }} remains one version behind the tag. Check that allow_auto_merge is enabled on this repository."
+            || echo "::warning::Could not set auto-merge on the version-bump PR for $BR — it stays open and ${{ github.ref_name }} remains one version behind the tag. Check that allow_auto_merge and allow_merge_commit are enabled on this repository, then merge it with a MERGE COMMIT, not a squash."
 
       # ── SYNC THE RELEASE BRANCH BACK INTO `development` ────────────────
       #
