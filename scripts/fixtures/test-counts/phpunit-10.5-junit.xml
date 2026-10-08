@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="CLI Arguments" tests="4" assertions="3" errors="0" failures="1" skipped="1" time="0.005214">
+    <testsuite name="CountsTest" file="tests/CountsTest.php" tests="4" assertions="3" errors="0" failures="1" skipped="1" time="0.005214">
+      <testcase name="testPasses" file="tests/CountsTest.php" line="4" class="CountsTest" classname="CountsTest" assertions="1" time="0.001680"/>
+      <testcase name="testAlsoPasses" file="tests/CountsTest.php" line="5" class="CountsTest" classname="CountsTest" assertions="1" time="0.000222"/>
+      <testcase name="testSkipped" file="tests/CountsTest.php" line="6" class="CountsTest" classname="CountsTest" assertions="0" time="0.000268">
+        <skipped/>
+      </testcase>
+      <testcase name="testFails" file="tests/CountsTest.php" line="7" class="CountsTest" classname="CountsTest" assertions="1" time="0.003044">
+        <failure type="PHPUnit\Framework\ExpectationFailedException">CountsTest::testFails
+Failed asserting that 2 is identical to 1.
+
+tests/CountsTest.php:7</failure>
+      </testcase>
+    </testsuite>
+  </testsuite>
+</testsuites>

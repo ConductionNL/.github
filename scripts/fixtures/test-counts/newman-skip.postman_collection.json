@@ -1,0 +1,12 @@
+{
+  "info": {"name": "test-counts fixture", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+  "item": [{
+    "name": "status",
+    "request": {"method": "GET", "url": "http://127.0.0.1:18766/"},
+    "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+      "pm.test('passes', function () { pm.expect(pm.response.code).to.equal(200); });",
+      "pm.test.skip('skipped on purpose', function () { pm.expect(true).to.equal(false); });",
+      "pm.test('fails', function () { pm.expect(pm.response.code).to.equal(201); });"
+    ]}}]
+  }]
+}
