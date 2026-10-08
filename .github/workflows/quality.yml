@@ -4317,7 +4317,17 @@ jobs:
           #
           # The canonical copy now lives at quality-config/coverage-guard.php
           # in this repository, so the path below resolves.
-          php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx against \
+          # Read the capabilities ONCE, then match without a pipe. Under
+          # `set -o pipefail`, `php … | grep -qx` is a race: grep exits on the
+          # first match and closes the pipe, so the php process can die of
+          # SIGPIPE while writing the remaining lines (exit 255), and pipefail
+          # reports the probe as failed — "predates merge-base comparison" on a
+          # guard that is the canonical copy. Measured: 5 of 20 runs red locally
+          # (stackiq#1275, openregister#4496, 2026-10-08). The two probes below
+          # reused the pipe inside `if`, where the same race silently dropped
+          # --changed-files and --deletion-neutral instead of failing.
+          CG_CAPS="$(php scripts/coverage-guard.php --capabilities 2>/dev/null || true)"
+          grep -qx against <<< "$CG_CAPS" \
             || { echo "::error::scripts/coverage-guard.php predates merge-base comparison (it does not report the 'against' capability). Copy the canonical version from ConductionNL/.github at quality-config/coverage-guard.php into scripts/coverage-guard.php, or set enable-coverage-guard: false until you do."; exit 1; }
           # Scope the ratchet to the PHP this change actually touches.
           #
@@ -4379,7 +4389,7 @@ jobs:
             exit 1
           fi
 
-          if php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx changed-files; then
+          if grep -qx changed-files <<< "$CG_CAPS"; then
             MERGE_BASE="$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)"
             # `|| true`: an empty diff is a legitimate answer (docs-only, or a
             # merge commit), and the guard treats an empty list as "no PHP
@@ -4421,7 +4431,7 @@ jobs:
             # existing check, it is not the difference between a check running and
             # not running.
             CG_MODE=()
-            if php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx deletion-neutral; then
+            if grep -qx deletion-neutral <<< "$CG_CAPS"; then
               CG_MODE+=(--deletion-neutral)
             else
               echo "::notice::scripts/coverage-guard.php predates --deletion-neutral, so deleting well-tested dead code will still read as a coverage drop. Copy the canonical version from ConductionNL/.github at quality-config/coverage-guard.php to pick it up."
