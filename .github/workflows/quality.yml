@@ -4456,11 +4456,15 @@ jobs:
       # A count is never invented, but the leg is not dropped either: a leg
       # that died before PHPUnit wrote its report (a fatal, an OOM) would
       # otherwise vanish from the tally, and three green legs would read as
-      # the whole matrix.
+      # the whole matrix. A leg that leaves no file at all (cancelled at its
+      # timeout, a failed upload) is caught the other way round: every file
+      # carries the matrix size as `total`, so the report job knows how many
+      # legs to expect.
       - name: Record test counts
         if: ${{ !cancelled() }}
         env:
           LEG: "PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }}"
+          TOTAL: ${{ strategy.job-total }}
           OUT: "test-counts/phpunit-${{ matrix.php-version }}-${{ matrix.nextcloud-ref }}-${{ matrix.database }}.json"
         run: |
           mkdir -p test-counts
@@ -4473,7 +4477,7 @@ jobs:
               root = ET.parse(sys.argv[1]).getroot()
           except (OSError, ET.ParseError):
               with open(os.environ["OUT"], "w", encoding="utf-8") as fh:
-                  json.dump({"leg": os.environ["LEG"], "run": None}, fh)
+                  json.dump({"leg": os.environ["LEG"], "run": None, "total": int(os.environ["TOTAL"])}, fh)
               print("No readable JUnit report, so this leg is recorded without counts.")
               raise SystemExit(0)
           suites = [s for s in (list(root) if root.tag == "testsuites" else [root]) if s.tag == "testsuite"]
@@ -4487,7 +4491,8 @@ jobs:
               return total
           tests, skipped = tally("tests"), tally("skipped")
           failed = tally("failures") + tally("errors")
-          counts = {"leg": os.environ["LEG"], "run": tests - skipped, "passed": tests - skipped - failed, "failed": failed, "skipped": skipped}
+          counts = {"leg": os.environ["LEG"], "run": tests - skipped, "passed": tests - skipped - failed, "failed": failed, "skipped": skipped,
+                    "total": int(os.environ["TOTAL"])}
           with open(os.environ["OUT"], "w", encoding="utf-8") as fh:
               json.dump(counts, fh)
           print(f"{counts['passed']}/{counts['run']} passed, {skipped} skipped.")
@@ -7087,12 +7092,13 @@ jobs:
       #
       # Playwright's outcomes: `expected` and `flaky` passed (a flaky test
       # failed first and passed on retry), `unexpected` failed, `skipped`
-      # did not run. Each shard records its own part of the suite; the report
-      # job adds them up.
+      # did not run. Each shard records its own part of the suite and the
+      # number of shards (`total`); the report job adds them up.
       - name: Record test counts
         if: ${{ !cancelled() }}
         env:
           SHARD: ${{ matrix.shard }}
+          TOTAL: ${{ strategy.job-total }}
           APP_DIR: server/apps/${{ inputs.app-name }}
         run: |
           mkdir -p test-counts
@@ -7111,7 +7117,7 @@ jobs:
                   break
           if archive is None:
               with open(f"test-counts/playwright-shard-{os.environ['SHARD']}.json", "w", encoding="utf-8") as fh:
-                  json.dump({"leg": f"shard {os.environ['SHARD']}", "run": None}, fh)
+                  json.dump({"leg": f"shard {os.environ['SHARD']}", "run": None, "total": int(os.environ["TOTAL"])}, fh)
               print("No Playwright HTML report with an embedded result blob, so this shard is recorded without counts.")
               raise SystemExit(0)
           tally = {"passed": 0, "failed": 0, "skipped": 0}
@@ -7131,7 +7137,8 @@ jobs:
                           tally["skipped"] += 1
                       else:
                           tally["failed"] += 1
-          counts = {"leg": f"shard {os.environ['SHARD']}", "run": tally["passed"] + tally["failed"], **tally}
+          counts = {"leg": f"shard {os.environ['SHARD']}", "run": tally["passed"] + tally["failed"], **tally,
+                    "total": int(os.environ["TOTAL"])}
           with open(f"test-counts/playwright-shard-{os.environ['SHARD']}.json", "w", encoding="utf-8") as fh:
               json.dump(counts, fh)
           print(f"{counts['passed']}/{counts['run']} passed, {counts['skipped']} skipped.")
@@ -9053,8 +9060,9 @@ jobs:
       # Only a run that produced a verdict gets a count. A cancelled, skipped
       # or missing job, or one where no leg left a readable count, keeps
       # exactly the cell it had — a count is never invented. A leg recorded
-      # with `"run": null`, a Newman collection with no export, or a shard
-      # with no file is named in the cell instead of hidden in the tally.
+      # with `"run": null`, a Newman collection with no export, or a PHPUnit
+      # leg or shard with no file (every leg's file carries the matrix size)
+      # is named in the cell instead of hidden in the tally.
       #
       # PHPUnit legs each run the whole suite, so they are not added up: one
       # line when every leg agrees, otherwise the worst leg by name. Newman
@@ -9071,19 +9079,19 @@ jobs:
           PHPUNIT_RESULT: ${{ needs.phpunit.result }}
           NEWMAN_RESULT: ${{ needs.newman.result }}
           PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
-          # Raw input, resolved below exactly as the playwright job's matrix
-          # resolves it: 1 to 8 as given, anything else one leg.
-          E2E_SHARDS: ${{ inputs.e2e-shards }}
         run: |
           python3 - <<'PYEOF'
           import json, os
           from pathlib import Path
 
           def load(suite):
-              legs, missing = [], []
+              # `expected` is the matrix size the legs recorded themselves, so a
+              # leg that left no file at all still shows as one that is missing.
+              legs, missing, expected = [], [], 0
               for path in sorted(Path("test-counts").glob(f"{suite}*.json")):
                   try:
                       leg = json.loads(path.read_text(encoding="utf-8"))
+                      expected = max(expected, int(leg.get("total") or 0))
                       if leg.get("run") is None:
                           missing.append(str(leg.get("leg") or path.stem))
                           continue
@@ -9095,7 +9103,7 @@ jobs:
                       legs.append(row)
                   except (OSError, ValueError, KeyError, TypeError, AttributeError):
                       missing.append(path.stem)
-              return legs, missing
+              return legs, missing, expected
 
           def fmt(leg):
               text = f"{leg['passed']}/{leg['run']}"
@@ -9105,20 +9113,20 @@ jobs:
                   text += f" · {leg['errors']} request/script errors"
               return text
 
-          def cell(suite, result, shards):
+          def cell(suite, result):
               if result not in ("success", "failure"):
                   return ""
-              legs, missing = load(suite)
+              legs, missing, expected = load(suite)
               if not legs:
                   return ""
               notes = []
-              complete = not missing
+              complete = not missing and len(legs) >= expected
               if suite == "phpunit":
                   shapes = {(l["passed"], l["run"], l["skipped"]) for l in legs}
                   worst = max(legs, key=lambda l: (l["failed"], -l["passed"]))
                   if len(shapes) == 1:
                       text = fmt(legs[0])
-                      if len(legs) > 1:
+                      if len(legs) > 1 and len(legs) >= expected:
                           notes.append(f"{len(legs)} legs")
                   elif worst["failed"]:
                       text = fmt(worst)
@@ -9132,20 +9140,18 @@ jobs:
                   if suite == "newman" and legs[0]["reported"] < legs[0]["expected"]:
                       complete = False
                       notes.append(f"counts from {legs[0]['reported']} of {legs[0]['expected']} collections")
-                  if suite == "playwright" and len(legs) < shards:
-                      complete = False
-                      notes.append(f"counts from {len(legs)} of {shards} shards")
+              if len(legs) < expected:
+                  unit = {"phpunit": "legs", "playwright": "shards"}.get(suite, "legs")
+                  notes.append(f"counts from {len(legs)} of {expected} {unit}")
               if missing:
                   notes.append("no counts from " + ", ".join(f"`{m}`" for m in missing))
               if result == "failure" and complete and not any(l["failed"] or l["errors"] for l in legs):
                   notes.append("tests passed, the job failed in another step")
               return text + (f" ({'; '.join(notes)})" if notes else "")
 
-          raw = os.environ.get("E2E_SHARDS", "")
-          shards = int(raw) if raw in [str(n) for n in range(1, 9)] else 1
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
               for suite in ("phpunit", "newman", "playwright"):
-                  value = cell(suite, os.environ.get(f"{suite.upper()}_RESULT", ""), shards)
+                  value = cell(suite, os.environ.get(f"{suite.upper()}_RESULT", ""))
                   print(f"{suite}: {value or '(no counts)'}")
                   env.write(f"{suite.upper()}_COUNTS={' '.join(value.split())}\n")
           PYEOF
