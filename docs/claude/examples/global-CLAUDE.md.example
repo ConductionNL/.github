@@ -52,6 +52,22 @@ Deliver exactly the thing requested. When something else looks wrong along the w
 - Present every command I am expected to run as a **fenced code block** on its own line, never inline-backticked inside prose. A fenced block is a clean copy target.
 - Exactly **one** final, copy-ready command block per handover. Decide everything — commit type, wording, file list — *before* writing it. Never a block with a correction further down: the first block is what gets copied.
 
+## Closing block: PR overview + next steps
+
+Every answer in a chat where a PR or issue has come up ends with, in this order: (1) a table **PRs around `<topic>`**, (2) a numbered list **Next steps, in order**, (3) only then the single copy-ready command block (see "Commands handed over"). Without PRs in the chat the table is dropped; the step list stays as long as work is open.
+
+**Table.** Columns `PR | What | Status`. PR as a link (`repo#nr`); What ≤ 6 words; Status one of: ✅ merged · 🔨 in progress · 🔴 changes requested / waiting on `<who>` · open · ❌ not yet (with reason) · ⏳ later. Order: done → in progress → not yet → later. Merge status and date always come from `gh pr view --json state,mergedAt`, never from memory.
+
+**Size.**
+- 1–3 PRs: one PR per row.
+- 4 PRs: group PRs that share the same kind **and** the same status into one row `a / b / c | kind | status`.
+- ≥ 5 PRs: always group where possible (same kind + status).
+- Never more than 10 rows. Above that, prune in this order: first drop PRs merged more than 7 days ago, except release/promotion PRs (beta, main, store) and the issue's main PR; then group further; then drop the oldest merged ones.
+
+**Next steps.** Numbered, in pick-up order; every step starts with the owner in bold (**You** / **Me** / **Me + you**), one line per step, max 8. A step that is a command gets that command in the single command block below the list.
+
+**Why:** at the end of a long chat, "where are we and what is next" is otherwise only recoverable from the scrollback; the thresholds keep the table readable once an issue collects ten or more PRs.
+
 ## Audience of written text
 
 README and docs are for users and contributors; commit messages are for future maintainers. Notes meant for me — tool quirks, verification reports, "what I checked and how", upgrade findings — go in the chat response only, **never** in docs or commit messages. In-repo reasoning belongs in the designated justification fields (`@spec exclude {reason}`, a `_note`, an ADR) or in a workflow header comment.
