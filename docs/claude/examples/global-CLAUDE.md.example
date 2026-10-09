@@ -54,19 +54,18 @@ Deliver exactly the thing requested. When something else looks wrong along the w
 
 ## Closing block: PR overview + next steps
 
-Every answer in a chat where a PR or issue has come up ends with, in this order: (1) a table **PRs around `<topic>`**, (2) a numbered list **Next steps, in order**, (3) only then the single copy-ready command block (see "Commands handed over"). Without PRs in the chat the table is dropped; the step list stays as long as work is open.
+Every answer in a chat where a PR or issue came up ends with: (1) a table **PRs around `<topic>`**, (2) a numbered list **Next steps, in order**, (3) only then the single command block. Without PRs the table is dropped; the steps stay as long as work is open.
 
-**Table.** Columns `PR | What | Status`. PR as a link (`repo#nr`); What ≤ 6 words; Status one of: ✅ merged · 🔨 in progress · 🔴 changes requested / waiting on `<who>` · open · ❌ not yet (with reason) · ⏳ later. Order: done → in progress → not yet → later. Merge status and date always come from `gh pr view --json state,mergedAt`, never from memory.
+**Table** `PR | What | Status` (add a `Kind` column once issues are listed too). PR as a link `repo#nr`; What ≤ 6 words; Status = exactly one icon from the list + free detail (who, date, reason), never without an icon; if none fits, use the closest one and propose an addition in the chat. Status and merge date come from `gh pr view --json state,mergedAt`, never from memory. Row order: done → open → not yet → issue.
+- Done: ✅ merged (date) · 🚀 released / in the store · 🚫 closed without merge · ↪️ superseded by `<PR>`
+- Open: 📝 draft · 👀 awaiting review (by whom) · 🔴 changes requested (by whom) · 👍 approved, awaiting merge · 🚧 CI red · ⚠️ merge conflict · ⛔ blocked by `<PR/issue>`
+- Not yet: 🔨 in progress (no PR yet) · ⏭️ next (follows `<step>`) · ⏳ later
+- Issue: 📋 open · 💬 communicated · 🗒️ still to file
+- Precedence when more than one applies: merged/released wins; otherwise conflict > CI red > changes requested > approved > awaiting review > draft.
 
-**Size.**
-- 1–3 PRs: one PR per row.
-- 4 PRs: group PRs that share the same kind **and** the same status into one row `a / b / c | kind | status`.
-- ≥ 5 PRs: always group where possible (same kind + status).
-- Never more than 10 rows. Above that, prune in this order: first drop PRs merged more than 7 days ago, except release/promotion PRs (beta, main, store) and the issue's main PR; then group further; then drop the oldest merged ones.
+**Size.** ≤ 3 PRs: one per row. 4: group equal kind **and** status into one row `a / b / c`. ≥ 5: always group that way. Max 10 rows; above that, prune in this order: drop PRs merged > 7 days ago (except release/promotion PRs and the issue's main PR), group further, drop the oldest merged.
 
-**Next steps.** Numbered, in pick-up order; every step starts with the owner in bold (**You** / **Me** / **Me + you**), one line per step, max 8. A step that is a command gets that command in the single command block below the list.
-
-**Why:** at the end of a long chat, "where are we and what is next" is otherwise only recoverable from the scrollback; the thresholds keep the table readable once an issue collects ten or more PRs.
+**Next steps.** Numbered in pick-up order, owner in bold first (**You** / **Me** / **Me + you**), one line per step, max 8; a command step gets its command in the single block below.
 
 ## Audience of written text
 
