@@ -52,6 +52,21 @@ Deliver exactly the thing requested. When something else looks wrong along the w
 - Present every command I am expected to run as a **fenced code block** on its own line, never inline-backticked inside prose. A fenced block is a clean copy target.
 - Exactly **one** final, copy-ready command block per handover. Decide everything — commit type, wording, file list — *before* writing it. Never a block with a correction further down: the first block is what gets copied.
 
+## Closing block: PR overview + next steps
+
+Every answer in a chat where a PR or issue came up ends with: (1) a table **PRs around `<topic>`**, (2) a numbered list **Next steps, in order**, (3) only then the single command block. Without PRs the table is dropped; the steps stay as long as work is open.
+
+**Table** `PR | What | Status` (add a `Kind` column once issues are listed too). PR as a link `repo#nr`; What ≤ 6 words; Status = exactly one icon from the list + free detail (who, date, reason), never without an icon; if none fits, use the closest one and propose an addition in the chat. Status and merge date come from `gh pr view --json state,mergedAt`, never from memory. Row order: done → open → not yet → issue.
+- Done: ✅ merged (date) · 🚀 released / in the store · 🚫 closed without merge · ↪️ superseded by `<PR>`
+- Open: 📝 draft · 👀 awaiting review (by whom) · 🔴 changes requested (by whom) · 👍 approved, awaiting merge · 🚧 CI red · ⚠️ merge conflict · ⛔ blocked by `<PR/issue>`
+- Not yet: 🔨 in progress (no PR yet) · ⏭️ next (follows `<step>`) · ⏳ later
+- Issue: 📋 open · 💬 communicated · 🗒️ still to file
+- Precedence when more than one applies: merged/released wins; otherwise conflict > CI red > changes requested > approved > awaiting review > draft.
+
+**Size.** ≤ 3 PRs: one per row. 4: group equal kind **and** status into one row `a / b / c`. ≥ 5: always group that way. Max 10 rows; above that, prune in this order: drop PRs merged > 7 days ago (except release/promotion PRs and the issue's main PR), group further, drop the oldest merged.
+
+**Next steps.** Numbered in pick-up order, owner in bold first (**You** / **Me** / **Me + you**), one line per step, max 8; a command step gets its command in the single block below.
+
 ## Audience of written text
 
 README and docs are for users and contributors; commit messages are for future maintainers. Notes meant for me — tool quirks, verification reports, "what I checked and how", upgrade findings — go in the chat response only, **never** in docs or commit messages. In-repo reasoning belongs in the designated justification fields (`@spec exclude {reason}`, a `_note`, an ADR) or in a workflow header comment.

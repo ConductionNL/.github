@@ -4081,7 +4081,8 @@ jobs:
           ./vendor/bin/phpunit \
             -c phpunit.xml \
             --colors=always \
-            --coverage-clover=coverage/clover.xml
+            --coverage-clover=coverage/clover.xml \
+            --log-junit="$RUNNER_TEMP/phpunit-junit.xml"
 
       # ── The ratchet's floor is MEASURED, not typed ────────────────────────
       #
@@ -4316,7 +4317,17 @@ jobs:
           #
           # The canonical copy now lives at quality-config/coverage-guard.php
           # in this repository, so the path below resolves.
-          php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx against \
+          # Read the capabilities ONCE, then match without a pipe. Under
+          # `set -o pipefail`, `php … | grep -qx` is a race: grep exits on the
+          # first match and closes the pipe, so the php process can die of
+          # SIGPIPE while writing the remaining lines (exit 255), and pipefail
+          # reports the probe as failed — "predates merge-base comparison" on a
+          # guard that is the canonical copy. Measured: 5 of 20 runs red locally
+          # (stackiq#1275, openregister#4496, 2026-10-08). The two probes below
+          # reused the pipe inside `if`, where the same race silently dropped
+          # --changed-files and --deletion-neutral instead of failing.
+          CG_CAPS="$(php scripts/coverage-guard.php --capabilities 2>/dev/null || true)"
+          grep -qx against <<< "$CG_CAPS" \
             || { echo "::error::scripts/coverage-guard.php predates merge-base comparison (it does not report the 'against' capability). Copy the canonical version from ConductionNL/.github at quality-config/coverage-guard.php into scripts/coverage-guard.php, or set enable-coverage-guard: false until you do."; exit 1; }
           # Scope the ratchet to the PHP this change actually touches.
           #
@@ -4378,7 +4389,7 @@ jobs:
             exit 1
           fi
 
-          if php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx changed-files; then
+          if grep -qx changed-files <<< "$CG_CAPS"; then
             MERGE_BASE="$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)"
             # `|| true`: an empty diff is a legitimate answer (docs-only, or a
             # merge commit), and the guard treats an empty list as "no PHP
@@ -4420,7 +4431,7 @@ jobs:
             # existing check, it is not the difference between a check running and
             # not running.
             CG_MODE=()
-            if php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx deletion-neutral; then
+            if grep -qx deletion-neutral <<< "$CG_CAPS"; then
               CG_MODE+=(--deletion-neutral)
             else
               echo "::notice::scripts/coverage-guard.php predates --deletion-neutral, so deleting well-tested dead code will still read as a coverage drop. Copy the canonical version from ConductionNL/.github at quality-config/coverage-guard.php to pick it up."
@@ -4440,6 +4451,74 @@ jobs:
         with:
           name: coverage-report
           path: server/apps/${{ inputs.app-name }}/coverage/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # ── Test counts for the Quality Report ────────────────────────────────
+      #
+      # The report's Tests column said ✅ or ❌ and nothing else, so "3 of 412
+      # failed" and "412 of 412 failed" read the same. This leg records its own
+      # tally from the JUnit file the run step writes; the report job reads
+      # every leg's file and renders `passed/run`. `!cancelled()`, not
+      # `success()`: a red suite is exactly the run whose count matters.
+      #
+      # A missing or unreadable JUnit file records the leg with `"run": null`.
+      # A count is never invented, but the leg is not dropped either: a leg
+      # that died before PHPUnit wrote its report (a fatal, an OOM) would
+      # otherwise vanish from the tally, and three green legs would read as
+      # the whole matrix. A leg that leaves no file at all (cancelled at its
+      # timeout, a failed upload) is caught the other way round: every file
+      # carries the matrix size as `total`, so the report job knows how many
+      # legs to expect.
+      - name: Record test counts
+        id: test-counts-phpunit
+        if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
+        env:
+          LEG: "PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }}"
+          TOTAL: ${{ strategy.job-total }}
+          OUT: "test-counts/phpunit-${{ matrix.php-version }}-${{ matrix.nextcloud-ref }}-${{ matrix.database }}.json"
+        run: |
+          mkdir -p test-counts
+          # The heredoc body sits at the run block's own indentation, so the
+          # shell sees `PYEOF` in column 0 — same shape as the Newman job.
+          python3 - "$RUNNER_TEMP/phpunit-junit.xml" <<'PYEOF'
+          import json, os, sys
+          import xml.etree.ElementTree as ET
+          try:
+              root = ET.parse(sys.argv[1]).getroot()
+          except (OSError, ET.ParseError):
+              with open(os.environ["OUT"], "w", encoding="utf-8") as fh:
+                  json.dump({"leg": os.environ["LEG"], "run": None, "total": int(os.environ["TOTAL"])}, fh)
+              print("No readable JUnit report, so this leg is recorded without counts.")
+              raise SystemExit(0)
+          suites = [s for s in (list(root) if root.tag == "testsuites" else [root]) if s.tag == "testsuite"]
+          def tally(key):
+              total = 0
+              for suite in suites:
+                  try:
+                      total += int(float(suite.get(key) or 0))
+                  except ValueError:
+                      pass
+              return total
+          tests, skipped = tally("tests"), tally("skipped")
+          failed = tally("failures") + tally("errors")
+          counts = {"leg": os.environ["LEG"], "run": tests - skipped, "passed": tests - skipped - failed, "failed": failed, "skipped": skipped,
+                    "total": int(os.environ["TOTAL"])}
+          with open(os.environ["OUT"], "w", encoding="utf-8") as fh:
+              json.dump(counts, fh)
+          print(f"{counts['passed']}/{counts['run']} passed, {skipped} skipped.")
+          PYEOF
+
+      - name: Upload test counts
+        if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-counts-phpunit-${{ matrix.php-version }}-${{ matrix.nextcloud-ref }}-${{ matrix.database }}
+          path: test-counts/
           retention-days: 14
           if-no-files-found: ignore
 
@@ -4919,6 +4998,9 @@ jobs:
           FAIL=0
           RAN=0
           SKIPPED=0
+          # One JSON export per collection that runs, for the test counts in
+          # the Quality Report (see "Record test counts" below).
+          mkdir -p "$RUNNER_TEMP/newman-json"
           while IFS= read -r -d '' collection; do
             # The heredoc body is indented to the YAML block level and no
             # further: this is a literal block scalar, so YAML strips exactly
@@ -4948,8 +5030,11 @@ jobs:
             echo ""
             echo "=== Running: ${collection#./} ==="
             RAN=$((RAN + 1))
-            eval newman run "\"$collection\"" $ENV_ARGS --reporters cli || FAIL=1
+            eval newman run "\"$collection\"" $ENV_ARGS --reporters cli,json --reporter-json-export "\"$RUNNER_TEMP/newman-json/$RAN.json\"" || FAIL=1
           done < <(find . -name '*.postman_collection.json' -print0 | sort -z)
+          # How many exports to expect, so a collection that left none is
+          # counted as missing instead of silently dropped from the sum.
+          echo "$RAN" > "$RUNNER_TEMP/newman-ran"
 
           # A count nobody reconciles is how the flat glob survived unnoticed
           # for as long as it did. Compare what ran with what the validate step
@@ -4973,6 +5058,75 @@ jobs:
         run: |
           echo "=== Last 50 lines of Nextcloud log ==="
           tail -50 server/data/nextcloud.log 2>/dev/null | python3 -m json.tool --no-ensure-ascii 2>/dev/null || tail -50 server/data/nextcloud.log 2>/dev/null || echo "No log found"
+
+      # Test counts for the Quality Report — see the note on the phpunit job's
+      # step of the same name. Newman's "tests" are the assertions in the
+      # collections (`pm.test`), summed over every collection that ran. A
+      # skipped one (`pm.test.skip`) is in the export's `total` and never in
+      # its `failed`, so it is counted from the per-request assertion records
+      # (`executions[].assertions[].skipped`) and taken out of both. Not from
+      # `stats.assertions.pending`: that is Newman's in-flight counter, which
+      # reads 0 at the end of every run.
+      #
+      # Newman also exits non-zero on a failed request (ECONNREFUSED, a
+      # timeout) or a script that throws, and neither is a failed assertion.
+      # Those are recorded as `errors`, so a red job does not sit next to an
+      # all-passed count. `expected` is how many collections ran, so one that
+      # left no export is counted as missing rather than dropped from the sum.
+      - name: Record test counts
+        id: test-counts-newman
+        if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
+        run: |
+          mkdir -p test-counts
+          python3 - "$RUNNER_TEMP/newman-json" "$RUNNER_TEMP/newman-ran" <<'PYEOF'
+          import json, pathlib, sys
+          files = sorted(pathlib.Path(sys.argv[1]).glob("*.json"))
+          try:
+              expected = int(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8").strip())
+          except (OSError, ValueError):
+              expected = None
+          total = failed = skipped = errors = read = 0
+          for path in files:
+              try:
+                  run_data = json.loads(path.read_text(encoding="utf-8"))["run"]
+                  stats = run_data["stats"]
+                  assertions = stats["assertions"]
+                  skipped_here = sum(bool(a.get("skipped")) for ex in run_data.get("executions") or []
+                                     for a in ex.get("assertions") or [])
+              except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                  continue
+              total += int(assertions.get("total") or 0)
+              failed += int(assertions.get("failed") or 0)
+              skipped += skipped_here
+              for key in ("requests", "testScripts", "prerequestScripts"):
+                  errors += int((stats.get(key) or {}).get("failed") or 0)
+              read += 1
+          if read == 0:
+              with open("test-counts/newman.json", "w", encoding="utf-8") as fh:
+                  json.dump({"leg": "newman", "run": None}, fh)
+              print("No readable Newman JSON export, so Newman is recorded without counts.")
+              raise SystemExit(0)
+          run = total - skipped
+          counts = {"leg": "newman", "run": run, "passed": run - failed, "failed": failed, "skipped": skipped,
+                    "errors": errors, "reported": read, "expected": expected if expected is not None else read}
+          with open("test-counts/newman.json", "w", encoding="utf-8") as fh:
+              json.dump(counts, fh)
+          print(f"{counts['passed']}/{run} assertions passed over {read} of {counts['expected']} collection(s), "
+                f"{skipped} skipped, {errors} request/script errors.")
+          PYEOF
+
+      - name: Upload test counts
+        if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-counts-newman
+          path: test-counts/
+          retention-days: 14
+          if-no-files-found: ignore
 
   playwright:
     # `needs.security.result != 'failure'` was removed here by #194. E2E is the
@@ -5186,11 +5340,30 @@ jobs:
           # session does not survive between requests on this instance …
           # this harness has no cache backend".
           #
-          # `apc.enable_cli=1` matters because `php -S` IS the CLI SAPI: without
-          # it APCu loads but stays inert, which looks exactly like not having
-          # installed it.
+          # `apc.enable_cli=1` is what lets APCu work for the `occ` and `php -r`
+          # CLI processes (the APCu check in "Configure the Nextcloud cache
+          # backend" runs under `php -r`). The `cli-server` SAPI does not read
+          # it: measured on PHP 8.5 with apc.enable_cli=0, a script served by
+          # `php -S` reports APCu enabled while the `cli` SAPI reports it off.
+          #
+          # OPcache and `php -S`: the built-in server runs as the `cli-server`
+          # SAPI, not `cli`, and OPcache is already on there by default.
+          # `opcache.enable_cli` switches it on only for `cli` and `phpdbg`, and
+          # is not set: each `occ` call is its own short process, so a CLI cache
+          # would be thrown away at its exit. The three size settings are the
+          # part the server uses: they are set above the PHP defaults (128 MB /
+          # 8 MB / 10000 files, which PHP rounds up to 16,229 slots). Nextcloud's
+          # shipped core, lib, 3rdparty and apps alone are 13,044 PHP files,
+          # before the app under test and its siblings with their vendor/ trees,
+          # so a full cache, which stops caching new scripts, is plausible. Not
+          # timed on this job; "Report the server's OPcache" after the suite
+          # shows whether it filled up.
+          #
+          # `opcache.revalidate_freq=0`, because specs and seed commands change
+          # config/config.php through `occ` while the server runs, and the
+          # default lets the server read the old file for up to 2 s.
           extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json, apcu
-          ini-values: apc.enable_cli=1
+          ini-values: apc.enable_cli=1, opcache.memory_consumption=256, opcache.interned_strings_buffer=16, opcache.max_accelerated_files=20000, opcache.revalidate_freq=0
           tools: composer:v2
 
       - name: Checkout additional apps
@@ -5363,6 +5536,60 @@ jobs:
             npm ci
           fi
 
+      # ── The sibling apps' compiled frontends, cached per commit ──────────
+      #
+      # The build below is a cold `npm ci` plus a production webpack build of
+      # openregister on every run: 87 s of thematiq run 37305793889, and again
+      # on every shard leg. Its output depends only on the sibling's commit and
+      # the Node version, so it is cached under exactly that key and nothing
+      # looser: no restore-keys, so a cache can only ever hold the bundle of
+      # the commit that was checked out.
+      #
+      # Only apps the build step would build are keyed, with the same three
+      # checks it makes, and only their `js/` is cached, which is where every
+      # fleet app's webpack writes (openregister's .gitignore carries `/js/`).
+      # A build writes `js/.ci-bundle.sha256`, a checksum of every file it
+      # emitted, and a restored `js/` is used only when that checksum still
+      # matches; anything else, a partial restore included, is rebuilt. The
+      # build step's evidence check then still counts the JavaScript on disk,
+      # so an empty cache fails as loudly as an empty build.
+      # Purging: an entry keeps its first writer's content, so a poisoned bundle
+      # outlives a revert. Bump `v1` in `sibling-frontends-v1`, or run
+      # `gh cache list --key sibling-frontends-` and `gh cache delete <id>`.
+      - name: Key the additional app frontends
+        id: sibling-frontends
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
+        env:
+          ADDITIONAL_APPS: ${{ inputs.additional-apps }}
+          E2E_ADDITIONAL_APPS: ${{ inputs.e2e-additional-apps }}
+        run: |
+          set -euo pipefail
+          IDS=""
+          PATHS=""
+          for name in $(printf '%s\n%s\n' "$ADDITIONAL_APPS" "$E2E_ADDITIONAL_APPS" | jq -r -s 'add // [] | .[].app'); do
+            dir="server/apps/$name"
+            [ -f "$dir/package.json" ] && [ -f "$dir/package-lock.json" ] || continue
+            node -e "const s = require('./$dir/package.json').scripts || {}; process.exit(s.build ? 0 : 1)" || continue
+            IDS="${IDS}${name}@$(git -C "$dir" rev-parse HEAD);"
+            PATHS="${PATHS}${dir}/js"$'\n'
+          done
+          if [ -z "$IDS" ]; then
+            echo "additional-app-frontend cache: no sibling app has a frontend to build."
+            echo "paths=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "key=sibling-frontends-v1-${RUNNER_OS}-node$(node --version)-$(printf '%s' "$IDS" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          { echo "paths<<PATHS_EOF"; printf '%s' "$PATHS"; echo "PATHS_EOF"; } >> "$GITHUB_OUTPUT"
+          echo "additional-app-frontend cache key covers: ${IDS}"
+
+      - name: Restore additional app frontends
+        id: sibling-frontends-cache
+        if: ${{ steps.sibling-frontends.outputs.paths != '' }}
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.sibling-frontends.outputs.paths }}
+          key: ${{ steps.sibling-frontends.outputs.key }}
+
       - name: Build additional app frontends
         # A SIBLING APP WAS INSTALLED WITH NO COMPILED FRONTEND, IN EVERY
         # BROWSER JOB THIS WORKFLOW HAS EVER RUN.
@@ -5405,6 +5632,8 @@ jobs:
         # A cold `npm ci` plus a production webpack build of the largest app in
         # the fleet (openregister) measures well inside this.
         timeout-minutes: 20
+        env:
+          FRONTENDS_RESTORED: ${{ steps.sibling-frontends-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
           BUILT=0
@@ -5431,9 +5660,25 @@ jobs:
               SKIPPED=$((SKIPPED + 1))
               continue
             fi
-            echo "additional-app-frontend: building $name ..."
-            # A subshell, so the cd cannot leak into the next iteration.
-            (cd "$dir" && npm ci --no-audit --no-fund && npm run build)
+            if [ "${FRONTENDS_RESTORED:-}" = "true" ] \
+              && [ -f "$dir/js/.ci-bundle.sha256" ] \
+              && (cd "$dir" && sha256sum --quiet --check js/.ci-bundle.sha256); then
+              echo "additional-app-frontend: $name restored from the cache for commit $(git -C "$dir" rev-parse --short HEAD), checksums match, not rebuilt."
+            else
+              if [ "${FRONTENDS_RESTORED:-}" = "true" ]; then
+                echo "::warning::additional-app-frontend: the cached bundle of '$name' does not match its checksum file, so it is rebuilt."
+              fi
+              echo "additional-app-frontend: building $name ..."
+              # A subshell, so the cd cannot leak into the next iteration.
+              (cd "$dir" && npm ci --no-audit --no-fund && npm run build)
+              # The checksum a later restore is verified against. Written only
+              # after a build, so it can only ever describe a build's output.
+              # Skipped when there is no js/, so the evidence check below is
+              # still the step that reports an empty build.
+              if [ -d "$dir/js" ]; then
+                (cd "$dir" && find js -type f ! -name .ci-bundle.sha256 -print0 | sort -z | xargs -0 -r sha256sum > js/.ci-bundle.sha256)
+              fi
+            fi
             BUILT=$((BUILT + 1))
             # EVIDENCE, NOT A CLAIM. A build that exits 0 and emits nothing is
             # precisely the state this step exists to remove, and it must not
@@ -5458,6 +5703,48 @@ jobs:
           done
           echo "additional-app-frontend: built ${BUILT}, skipped ${SKIPPED}."
 
+      # Saved explicitly, right after a successful build. The post-job save of
+      # `actions/cache` only runs when the WHOLE job succeeds, so a suite with a
+      # single red spec would never have stored the bundle it built.
+      - name: Save additional app frontends
+        if: ${{ steps.sibling-frontends.outputs.paths != '' && steps.sibling-frontends-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.sibling-frontends.outputs.paths }}
+          key: ${{ steps.sibling-frontends.outputs.key }}
+
+      # ── Chromium, cached per Playwright version ──────────────────────────
+      #
+      # `npx playwright install chromium` downloads the browser on every run.
+      # The binary depends only on the Playwright version, which is known once
+      # the package is installed, so that install moves into its own step and
+      # the browser cache is keyed on the version it resolved. With the browser
+      # restored, `playwright install` finds it in place and downloads nothing.
+      #
+      # Purging: an entry keeps its first writer's content, so a poisoned
+      # browser outlives a revert. Bump `v1` in `playwright-browsers-v1`, or run
+      # `gh cache list --key playwright-browsers-` and `gh cache delete <id>`.
+      - name: Resolve the Playwright version
+        id: playwright-version
+        # The same bound as `Install Playwright`, for the same reason.
+        timeout-minutes: 10
+        env:
+          APP_NAME: ${{ inputs.app-name }}
+        run: |
+          set -euo pipefail
+          cd "server/apps/${APP_NAME}"
+          npm install --save-dev @playwright/test
+          PW_VERSION=$(node -p "require('@playwright/test/package.json').version")
+          [ -n "$PW_VERSION" ] || { echo "::error::could not resolve the @playwright/test version"; exit 1; }
+          echo "version=${PW_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Playwright browsers
+        id: playwright-browsers
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-v1-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright
         # A STALLED SETUP STEP EATS THE JOB'S WHOLE CAP AND LEAVES NO VERDICT.
         #
@@ -5481,7 +5768,8 @@ jobs:
         timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
-          npm install --save-dev @playwright/test
+          # @playwright/test itself is installed by `Resolve the Playwright
+          # version` above, so the browser cache can be keyed on it.
 
           # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
           #
@@ -5522,6 +5810,13 @@ jobs:
           else
             echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
           fi
+
+      - name: Save the Playwright browsers
+        if: ${{ steps.playwright-browsers.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-v1-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       # ── Reuse the bundle the `frontend-build` job already compiled ─────────
       #
@@ -5944,6 +6239,40 @@ jobs:
             echo "::error::The php -S front-controller router is swallowing Nextcloud's OCS entry point — /ocs/v2.php/cloud/user returned 404 instead of reaching ocs/v2.php. Every OCS call (current user, groups, user_status, dashboard layout) will 404, and specs will report it as a missing element."
             exit 1
           fi
+          # Is OPcache on in the process that serves the specs? Ask the server,
+          # not a `php -r`: that would run in the `cli` SAPI, where the answer
+          # follows `opcache.enable_cli` and says nothing about `cli-server`.
+          # A real file on disk is served as-is by ci-router.php (rule 1), so a
+          # throwaway script under server/ is reached the same way status.php is.
+          # A warning, not a failure: without OPcache the suite is slower, not
+          # wrong. No answer from the probe is "unknown", not "off", and nothing
+          # here can fail the step. This branch is not covered by the repo's
+          # self-tests.
+          OPCACHE_STATE=""
+          if printf '%s\n' '<?php header("Content-Type: text/plain"); $s = function_exists("opcache_get_status") ? opcache_get_status(false) : false; echo (is_array($s) && !empty($s["opcache_enabled"])) ? "opcache=on" : "opcache=off";' > ci-opcache-probe.php; then
+            OPCACHE_STATE="$(curl -s --max-time 10 http://localhost:8080/ci-opcache-probe.php || true)"
+          else
+            echo "::warning::could not write the OPcache probe; state unknown"
+            OPCACHE_STATE="skipped"
+          fi
+          rm -f ci-opcache-probe.php
+          case "$OPCACHE_STATE" in
+            "opcache=on")
+              echo "OPcache is enabled in the php -S server."
+              ;;
+            "opcache=off")
+              echo "::warning::OPcache is not enabled in the php -S server, so Nextcloud's PHP is compiled on every request and every spec waits for it. Check opcache.enable and the opcache size settings in Setup PHP."
+              ;;
+            "skipped")
+              ;;
+            "")
+              echo "::warning::The OPcache probe could not reach the php -S server, so whether OPcache is enabled there is unknown."
+              ;;
+            *)
+              SHOWN="$(printf '%s' "$OPCACHE_STATE" | tr -d '\n' | cut -c1-40 || true)"
+              echo "::warning::The OPcache probe gave an unexpected answer ('${SHOWN}'), so whether OPcache is enabled in the php -S server is unknown."
+              ;;
+          esac
           echo "PHP built-in server alive (pid=${PHP_PID})."
 
       - name: Seed test data
@@ -6054,6 +6383,61 @@ jobs:
           # partition step before this one, so it never reaches here.
           E2E_SHARD_INDEX: ${{ matrix.shard }}
           E2E_SHARD_TOTAL: ${{ (inputs.e2e-shards >= 1 && inputs.e2e-shards <= 8) && inputs.e2e-shards || 1 }}
+
+      # ── How full the server's OPcache got under the suite ──────────────────
+      #
+      # "Start PHP built-in server" asks whether OPcache is on. This asks the
+      # same server, the same way (a throwaway script under server/, served by
+      # ci-router.php on :8080), what the suite left in it: whether the sizes
+      # in Setup PHP were big enough is only visible once the suite has loaded
+      # what it loads. Written to the step summary, so a run is its own
+      # measurement.
+      #
+      # Reports, never fails. No answer is "unknown" and an answer that is not
+      # the expected JSON is "unexpected", never read as "off". No self-test in
+      # this repository covers this step.
+      - name: Report the server's OPcache
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          PROBE="server/ci-opcache-report.php"
+          cat > "$PROBE" <<'PHP'
+          <?php
+          $s = function_exists('opcache_get_status') ? opcache_get_status(false) : false;
+          $mb = static fn ($bytes, $precision = 0) => $bytes === null ? null : round($bytes / 1048576, $precision);
+          header('Content-Type: application/json');
+          echo json_encode([
+              'enabled' => is_array($s) && !empty($s['opcache_enabled']),
+              'cache_full' => is_array($s) && !empty($s['cache_full']),
+              'scripts' => $s['opcache_statistics']['num_cached_scripts'] ?? null,
+              'max_scripts' => $s['opcache_statistics']['max_cached_keys'] ?? null,
+              'oom_restarts' => $s['opcache_statistics']['oom_restarts'] ?? null,
+              'hit_rate' => isset($s['opcache_statistics']['opcache_hit_rate']) ? round($s['opcache_statistics']['opcache_hit_rate'], 1) : null,
+              'memory_used_mb' => $mb($s['memory_usage']['used_memory'] ?? null),
+              'memory_free_mb' => $mb($s['memory_usage']['free_memory'] ?? null),
+              'strings_used_mb' => $mb($s['interned_strings_usage']['used_memory'] ?? null, 1),
+              'strings_free_mb' => $mb($s['interned_strings_usage']['free_memory'] ?? null, 1),
+          ]);
+          PHP
+          REPORT="$(curl -s --max-time 10 http://localhost:8080/ci-opcache-report.php || true)"
+          rm -f "$PROBE"
+          if [ -z "$REPORT" ]; then
+            echo "::warning::The OPcache report could not reach the php -S server, so how full its cache got is unknown."
+            exit 0
+          fi
+          if ! printf '%s' "$REPORT" | jq -e 'type == "object" and has("enabled")' > /dev/null 2>&1; then
+            SHOWN="$(printf '%s' "$REPORT" | tr -d '\n' | cut -c1-40 || true)"
+            echo "::warning::The OPcache report gave an unexpected answer ('${SHOWN}'), so how full the cache got is unknown."
+            exit 0
+          fi
+          echo "php -S OPcache after the suite: ${REPORT}"
+          { echo "### php -S OPcache after the suite"; echo; echo '```json'; printf '%s' "$REPORT" | jq .; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$(printf '%s' "$REPORT" | jq -r .enabled)" != "true" ]; then
+            echo "::warning::OPcache was not enabled in the php -S server, so Nextcloud's PHP was compiled on every request."
+          elif [ "$(printf '%s' "$REPORT" | jq -r .cache_full)" = "true" ]; then
+            echo "::warning::The php -S server's OPcache filled up during the suite, so scripts loaded after that were compiled on every request. Raise the sizes in Setup PHP."
+          fi
 
       # ── THE SERVER'S OWN ACCOUNT OF A 5xx, WHICH THIS JOB USED TO DISCARD ───
       #
@@ -6717,6 +7101,106 @@ jobs:
           MODE=report
           if [ "${{ inputs.e2e-skip-blocking }}" = "true" ]; then MODE=enforce; fi
           python3 "${GATE}" --report "${REPORT}" --mode "${MODE}" --summary "${GITHUB_STEP_SUMMARY}"
+
+      # Test counts for the Quality Report — see the note on the phpunit job's
+      # step of the same name. Read from the HTML report the suite already
+      # writes, with a copy of the parser in hydra-gates' check_e2e_skips.py
+      # (most apps do not vendor the gate, so it cannot be imported): the
+      # zip embedded in index.html, one JSON entry per spec file, skipping
+      # the `report.json` roll-up that repeats them. Where the copy differs:
+      # it opens only the two candidate index.html paths below, not every
+      # index.html under the directory; it counts an unknown outcome as
+      # failed, where the gate counts it as executed; and it splits the
+      # gate's `skipped` into deliberate skips and tests that did not run.
+      # scripts/test-quality-test-counts.py runs both on one report and
+      # requires executed = run and skipped = skipped + not_run. The test
+      # command is not touched — a reporter added on the command line would
+      # REPLACE the app's configured reporters, html included.
+      #
+      # Playwright's outcomes: `expected` and `flaky` passed (a flaky test
+      # failed first and passed on retry), `unexpected` failed, `skipped`
+      # did not run. `skipped` covers two different things: a deliberate
+      # skip, which carries a `skip` or `fixme` annotation (the
+      # EXCLUSION_TYPES check_e2e_skips.py reads), and a test that was meant
+      # to run and did not (interrupted by globalTimeout or --max-failures,
+      # or left over when a serial suite stopped). Only the first is counted
+      # as skipped; the second is `not_run`, and the report does not read a
+      # shard with such tests as complete. Each shard records its own part of the suite and the
+      # number of shards (`total`); the report job adds them up.
+      - name: Record test counts
+        id: test-counts-playwright
+        if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
+        env:
+          SHARD: ${{ matrix.shard }}
+          TOTAL: ${{ strategy.job-total }}
+          APP_DIR: server/apps/${{ inputs.app-name }}
+        run: |
+          mkdir -p test-counts
+          python3 - <<'PYEOF'
+          import base64, binascii, io, json, os, re, zipfile
+          from pathlib import Path
+          blob = re.compile(r'id="playwrightReportBase64"[^>]*>\s*data:application/zip;base64,([A-Za-z0-9+/=]+)')
+          archive = None
+          for candidate in ("playwright-report", "tests/e2e/playwright-report"):
+              html = Path(os.environ["APP_DIR"]) / candidate / "index.html"
+              if not html.is_file():
+                  continue
+              match = blob.search(html.read_text(encoding="utf-8", errors="replace"))
+              if match:
+                  # A truncated or corrupt blob reads as no report, not as a crash.
+                  try:
+                      archive = zipfile.ZipFile(io.BytesIO(base64.b64decode(match.group(1))))
+                      break
+                  except (binascii.Error, zipfile.BadZipFile):
+                      continue
+          if archive is None:
+              with open(f"test-counts/playwright-shard-{os.environ['SHARD']}.json", "w", encoding="utf-8") as fh:
+                  json.dump({"leg": f"shard {os.environ['SHARD']}", "run": None, "total": int(os.environ["TOTAL"])}, fh)
+              print("No Playwright HTML report with a readable embedded result blob, so this shard is recorded without counts.")
+              raise SystemExit(0)
+          def deliberate(test):
+              notes = list(test.get("annotations") or [])
+              for result in test.get("results") or []:
+                  if result.get("status") == "interrupted":
+                      return False
+                  notes.extend(result.get("annotations") or [])
+              return any(n.get("type") in ("skip", "fixme") for n in notes)
+          tally = {"passed": 0, "failed": 0, "skipped": 0, "not_run": 0}
+          for name in archive.namelist():
+              if not name.endswith(".json") or name == "report.json":
+                  continue
+              try:
+                  payload = json.loads(archive.read(name))
+              except (ValueError, KeyError):
+                  continue
+              for entry in payload.get("files") or ([payload] if "tests" in payload else []):
+                  for test in entry.get("tests") or []:
+                      outcome = test.get("outcome") or test.get("status")
+                      if outcome in ("expected", "flaky"):
+                          tally["passed"] += 1
+                      elif outcome == "skipped":
+                          tally["skipped" if deliberate(test) else "not_run"] += 1
+                      else:
+                          tally["failed"] += 1
+          counts = {"leg": f"shard {os.environ['SHARD']}", "run": tally["passed"] + tally["failed"], **tally,
+                    "total": int(os.environ["TOTAL"])}
+          with open(f"test-counts/playwright-shard-{os.environ['SHARD']}.json", "w", encoding="utf-8") as fh:
+              json.dump(counts, fh)
+          print(f"{counts['passed']}/{counts['run']} passed, {counts['skipped']} skipped, {counts['not_run']} did not run.")
+          PYEOF
+
+      - name: Upload test counts
+        if: ${{ !cancelled() }}
+        # An annotation for the report: it must never fail the job it counts.
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-counts-playwright-shard-${{ matrix.shard }}
+          path: test-counts/
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Upload Playwright report
         if: always()
@@ -8518,6 +9002,17 @@ jobs:
           merge-multiple: true
         continue-on-error: true
 
+      # One small JSON file per PHPUnit leg, per Playwright shard and for
+      # Newman, written by each job's "Record test counts" step. Every file
+      # name carries its leg, so merging the downloads cannot overwrite one.
+      - name: Download test counts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: test-counts-*
+          path: test-counts/
+          merge-multiple: true
+        continue-on-error: true
+
       # A PACKAGE INSTALL MUST NOT BE ABLE TO DISABLE THE GATE.
       #
       # Measured on decidesk run 32158299327 and shillinq run 32158364133,
@@ -8562,8 +9057,169 @@ jobs:
           echo "available=false" >> "$GITHUB_OUTPUT"
           echo "::warning::pandoc/wkhtmltopdf could not be installed after 3 bounded attempts. The PDF rendering of the quality report is skipped; the report, the step summary and every gate below still run. This is infrastructure, not a finding about this app."
 
+      # A run superseded by a newer commit is cancelled by `concurrency`, and its
+      # cancelled legs are NO VERDICT, not a failure. "Gate — fail when an
+      # upstream job was cancelled mid-run" already tells the two apart by
+      # asking whether this run's head SHA is still the tip of its ref; the
+      # report table and the PR comment ask the same question here, so the table
+      # stops stamping a superseded Playwright leg ❌ while the gate beside it
+      # correctly passes.
+      #
+      # Its own step so the token reaches this one lookup only, not the report
+      # script that reads every job's artifacts. A failed lookup leaves
+      # superseded=false, so a cancelled leg renders as no verdict rather than
+      # being waved through. The ref is looked up in the PR head repository, so
+      # a fork PR asks about its own branch, not a base branch of the same name;
+      # a private fork 404s and reads as not superseded.
+      - name: Is this run superseded?
+        id: superseded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_REF: ${{ github.head_ref || github.ref_name }}
+          RUN_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+        run: |
+          set -uo pipefail
+
+          TIP="$(gh api "repos/${RUN_REPO}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
+          SUPERSEDED=false
+          if [ -n "$TIP" ] && [ "$TIP" != "$RUN_SHA" ]; then
+            SUPERSEDED=true
+          fi
+          echo "superseded=${SUPERSEDED}" >> "$GITHUB_OUTPUT"
+          echo "tip=${TIP:0:7}" >> "$GITHUB_OUTPUT"
+          if [ -z "$TIP" ]; then
+            echo "::notice::Could not read the tip of ${RUN_REF}; treating this run as not superseded."
+          else
+            echo "::notice::${RUN_REF} is at ${TIP:0:7}, this run is ${RUN_SHA:0:7}: superseded=${SUPERSEDED}."
+          fi
+
+      # Test counts behind a test row's verdict, from the files the phpunit,
+      # newman and playwright jobs write in their "Record test counts" step:
+      # `✅ 412/412`, `❌ 94/103`. Skipped tests are left out of both numbers
+      # and named after them, so a suite with skips does not read as a failure.
+      # A Playwright test that was meant to run and did not is not a skip: it
+      # is shown as `· N did not run`, and that cell never reads as complete.
+      # Exported as PHPUNIT_COUNTS / NEWMAN_COUNTS / PLAYWRIGHT_COUNTS for
+      # "Generate report", which appends them to the row.
+      #
+      # Its own step, not inline in "Generate report": that block is already
+      # near the 16 KiB `run:` limit (scripts/assert-run-steps-resolvable.py).
+      # `continue-on-error`, because a count is an annotation — failing here
+      # must never cost the report or the gates below it.
+      #
+      # Only a run that produced a verdict gets a count. A cancelled, skipped
+      # or missing job, or one where no leg left a readable count, keeps
+      # exactly the cell it had — a count is never invented. A leg recorded
+      # with `"run": null` is named in the cell. A Newman collection with no
+      # export, or a PHPUnit leg or shard with no file (every leg's file
+      # carries the matrix size), is counted there (`counts from n of N`)
+      # instead of hidden in the tally.
+      #
+      # PHPUnit legs each run the whole suite, so they are not added up: one
+      # line when every leg agrees, otherwise the worst failing leg by name,
+      # or the range of tests per leg when none failed. Newman
+      # collections and Playwright shards each run a part of it, so they are
+      # summed.
+      #
+      # The ❌ is the job's result and the numbers are the tests', and a job
+      # can fail with every test green (the coverage ratchet, the E2E skip
+      # gate in enforce mode, the shard-partition check), or in the test step
+      # itself with no failed test in the counts (PHPUnit's failOnRisky,
+      # Playwright's globalTimeout, Newman's collection-count check). When
+      # every leg reported and none failed, the cell says so instead of
+      # `❌ 412/412`, without claiming which step failed.
+      - name: Compute test counts
+        id: test-counts
+        continue-on-error: true
+        env:
+          PHPUNIT_RESULT: ${{ needs.phpunit.result }}
+          NEWMAN_RESULT: ${{ needs.newman.result }}
+          PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os
+          from pathlib import Path
+
+          def load(suite):
+              # `expected` is the matrix size the legs recorded themselves, so a
+              # leg that left no file at all still shows as one that is missing.
+              legs, missing, expected = [], [], 0
+              for path in sorted(Path("test-counts").glob(f"{suite}*.json")):
+                  try:
+                      leg = json.loads(path.read_text(encoding="utf-8"))
+                      expected = max(expected, int(leg.get("total") or 0))
+                      if leg.get("run") is None:
+                          missing.append(str(leg.get("leg") or path.stem))
+                          continue
+                      row = {k: int(leg[k]) for k in ("run", "passed", "failed", "skipped")}
+                      row["errors"] = int(leg.get("errors") or 0)
+                      row["not_run"] = int(leg.get("not_run") or 0)
+                      row["reported"] = int(leg.get("reported") or 0)
+                      row["expected"] = int(leg.get("expected") or 0)
+                      row["leg"] = str(leg["leg"])
+                      legs.append(row)
+                  except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                      missing.append(path.stem)
+              return legs, missing, expected
+
+          def fmt(leg):
+              text = f"{leg['passed']}/{leg['run']}"
+              if leg["skipped"]:
+                  text += f" · {leg['skipped']} skipped"
+              if leg["not_run"]:
+                  text += f" · {leg['not_run']} did not run"
+              if leg["errors"]:
+                  text += f" · {leg['errors']} request/script errors"
+              return text
+
+          def cell(suite, result):
+              if result not in ("success", "failure"):
+                  return ""
+              legs, missing, expected = load(suite)
+              if not legs:
+                  return ""
+              notes = []
+              complete = not missing and len(legs) >= expected and not any(l["not_run"] for l in legs)
+              if suite == "phpunit":
+                  shapes = {(l["passed"], l["run"], l["skipped"]) for l in legs}
+                  worst = max(legs, key=lambda l: (l["failed"], -l["passed"]))
+                  if len(shapes) == 1:
+                      text = fmt(legs[0])
+                      if len(legs) > 1 and len(legs) >= expected:
+                          notes.append(f"{len(legs)} legs")
+                  elif worst["failed"]:
+                      text = fmt(worst)
+                      notes.append(f"worst of {len(legs)} legs: {worst['leg']}")
+                  else:
+                      runs = sorted(l["run"] for l in legs)
+                      text = fmt(max(legs, key=lambda l: l["run"]))
+                      notes.append(f"{len(legs)} legs, {runs[0]}–{runs[-1]} tests per leg")
+              else:
+                  text = fmt({k: sum(l[k] for l in legs) for k in ("run", "passed", "skipped", "not_run", "errors")})
+                  if suite == "newman" and legs[0]["reported"] < legs[0]["expected"]:
+                      complete = False
+                      notes.append(f"counts from {legs[0]['reported']} of {legs[0]['expected']} collections")
+              if len(legs) < expected:
+                  unit = {"phpunit": "legs", "playwright": "shards"}.get(suite, "legs")
+                  notes.append(f"counts from {len(legs)} of {expected} {unit}")
+              if missing:
+                  notes.append("no counts from " + ", ".join(f"`{m}`" for m in missing))
+              if result == "failure" and complete and not any(l["failed"] or l["errors"] for l in legs):
+                  notes.append("no test failed, the job failed for another reason — see its log")
+              return text + (f" ({'; '.join(notes)})" if notes else "")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              for suite in ("phpunit", "newman", "playwright"):
+                  value = cell(suite, os.environ.get(f"{suite.upper()}_RESULT", ""))
+                  print(f"{suite}: {value or '(no counts)'}")
+                  env.write(f"{suite.upper()}_COUNTS={' '.join(value.split())}\n")
+          PYEOF
+
       - name: Generate report
         env:
+          SUPERSEDED: ${{ steps.superseded.outputs.superseded }}
+          SUPERSEDED_BY: ${{ steps.superseded.outputs.tip }}
           # The SAME three facts the "Gate — a test job that was ENABLED but
           # never ran" step below reads, so the table and the gate classify one
           # skip one way. Before this, the gate knew a deferred E2E run and
@@ -8607,6 +9263,13 @@ jobs:
             case "$1" in
               success|Success) echo "✅" ;;
               skipped|Skipped) echo "⏭️" ;;
+              cancelled|Cancelled)
+                if [ "${SUPERSEDED:-}" = "true" ]; then
+                  echo "⏹️ cancelled — superseded by \`${SUPERSEDED_BY:-}\`"
+                else
+                  echo "❌ cancelled — no verdict"
+                fi
+                ;;
               *) echo "❌" ;;
             esac
           }
@@ -8757,9 +9420,11 @@ jobs:
             # PHPUnit and Playwright carry a declared-skip reason; Newman is
             # not gated by the changed-path filter or the promotion rule, so a
             # skipped-while-enabled Newman really is a missing verdict.
-            echo "| PHPUnit | | | | | $(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}' "$PHPUNIT_SKIP_REASON") |"
-            echo "| Newman | | | | | $(test_icon '${{ needs.newman.result }}' '${{ inputs.enable-newman }}') |"
-            echo "| Playwright | | | | | $(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}' "$PLAYWRIGHT_SKIP_REASON") |"
+            # The *_COUNTS tallies come from the "Compute test counts" step and
+            # are empty when the job left none.
+            echo "| PHPUnit | | | | | $(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}' "$PHPUNIT_SKIP_REASON")${PHPUNIT_COUNTS:+ $PHPUNIT_COUNTS} |"
+            echo "| Newman | | | | | $(test_icon '${{ needs.newman.result }}' '${{ inputs.enable-newman }}')${NEWMAN_COUNTS:+ $NEWMAN_COUNTS} |"
+            echo "| Playwright | | | | | $(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}' "$PLAYWRIGHT_SKIP_REASON")${PLAYWRIGHT_COUNTS:+ $PLAYWRIGHT_COUNTS} |"
             if [ '${{ inputs.enable-journeydoc-capture }}' = 'true' ]; then
               echo "| Journeydoc capture | | | | | $(test_icon '${{ needs.journeydoc-capture.result }}' 'true') |"
             fi
@@ -8887,7 +9552,9 @@ jobs:
           retention-days: 90
 
       - name: Comment PR with results
-        if: github.event_name == 'pull_request'
+        # Not for a superseded run: its table describes a commit the PR no
+        # longer points at, and the newer run posts the report that counts.
+        if: github.event_name == 'pull_request' && steps.superseded.outputs.superseded != 'true'
         # Posting the summary comment needs `pull-requests: write`. A reusable
         # workflow inherits the CALLER's permissions, and most callers declare
         # only `contents: read` + `packages: read` — so this step 403s with
@@ -8957,6 +9624,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           RUN_REF: ${{ github.head_ref || github.ref_name }}
+          RUN_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           SECURITY_RESULT: ${{ needs.security.result }}
           PHPUNIT_ENABLED: ${{ inputs.enable-php && inputs.enable-phpunit }}
           PHPUNIT_RESULT: ${{ needs.phpunit.result }}
@@ -9086,7 +9754,7 @@ jobs:
             exit 0
           fi
 
-          TIP="$(gh api "repos/${{ github.repository }}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
+          TIP="$(gh api "repos/${RUN_REPO}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
           if [ -n "$TIP" ] && [ "$TIP" != "$RUN_SHA" ]; then
             echo "::notice::Test job(s) did not run, but this run has been SUPERSEDED (${RUN_REF} is now at ${TIP:0:7}, this run is ${RUN_SHA:0:7}). The newer run is the one whose verdict counts — staying quiet."
             exit 0
@@ -9204,10 +9872,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           RUN_REF: ${{ github.head_ref || github.ref_name }}
+          RUN_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
         run: |
           set -uo pipefail
 
-          TIP="$(gh api "repos/${{ github.repository }}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
+          TIP="$(gh api "repos/${RUN_REPO}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
 
           if [ -n "$TIP" ] && [ "$TIP" != "$RUN_SHA" ]; then
             echo "::notice::Job(s) cancelled, but this run has been SUPERSEDED (${RUN_REF} is now at ${TIP:0:7}, this run is ${RUN_SHA:0:7}). Concurrency cancellation of an outdated run is not a defect — staying quiet."
