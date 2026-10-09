@@ -194,7 +194,9 @@ jobs:
             --exclude='/docs' \
             --exclude='/website' \
             --exclude='/node_modules' \
-            --exclude='/src' \
+            --include='/src/' \
+            --include='/src/manifest.json' \
+            --exclude='/src/*' \
             --exclude='/phpcs-custom-sniffs' \
             --exclude='/resources' \
             --exclude='/tests' \
