@@ -1,0 +1,31 @@
+{
+  "$comment": [
+    "gate-119 (procedure-code), decision 182: procedures are configuration, code is generic.",
+    "THE ONE FILE that says what counts. Edit the lists here, not in the checker.",
+    "",
+    "A file COUNTS when its path, or a class/interface/trait/enum it declares, names a Dutch procedure.",
+    "  substringTokens  matched anywhere in the lowercased path or class name (long tokens that no other word contains).",
+    "  wordTokens       matched only as a whole word after camelCase/snake/kebab splitting. Short tokens live here,",
+    "                   so 'woo' does not match 'Wood' and 'dso' does not match a word that merely contains it.",
+    "",
+    "A counted file is EXCLUDED when it is a national-standard adapter:",
+    "  allow.words         whole-word (or hyphenated word run, 'dso-adapter') in the path or class name.",
+    "  allow.pathPrefixes  repo-relative prefixes, case-insensitive. This is how an ambiguous token such as 'dso' is",
+    "                      excused: by WHERE the file lives, not by the token alone.",
+    "",
+    "Which source files are read:",
+    "  roots / extensions"
+  ],
+  "roots": ["lib", "src"],
+  "extensions": ["php", "js", "ts", "mjs", "vue"],
+  "substringTokens": [
+    "bezwaar", "beschikking", "subsid", "termijn", "besluit", "leerplicht",
+    "verlof", "melding", "klacht", "jeugd", "bijstand", "omgevings"
+  ],
+  "wordTokens": ["woo", "vth", "dso", "wmo", "leges"],
+  "allow": {
+    "words": ["zgw", "ztc", "zrc", "drc", "stuf", "brp", "kvk", "dso-adapter"],
+    "pathPrefixes": ["lib/Adapter", "lib/Service/Zgw"]
+  },
+  "ignoreDirs": ["node_modules", "vendor", "dist", "build", "coverage", ".git"]
+}
