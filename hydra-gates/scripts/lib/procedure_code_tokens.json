@@ -13,6 +13,8 @@
     "  allow.pathPrefixes  repo-relative prefixes, case-insensitive. This is how an ambiguous token such as 'dso' is",
     "                      excused: by WHERE the file lives, not by the token alone.",
     "",
+    "allow.pathPrefixes also lists exact files of integriq's DSO-LV adapter (STAM koppelvlak, PKIoverheid signatures, DSO-SWF, status push, DSO exceptions and PKI admin). Exact files, because they are not under one directory. The DSO activity-to-zaaktype mapping and samenloop logic is NOT excused: it is procedure logic and stays counted (decision 188).",
+    "",
     "Which source files are read:",
     "  roots / extensions"
   ],
@@ -25,7 +27,35 @@
   "wordTokens": ["woo", "vth", "dso", "wmo", "leges"],
   "allow": {
     "words": ["zgw", "ztc", "zrc", "drc", "stuf", "brp", "kvk", "dso-adapter"],
-    "pathPrefixes": ["lib/Adapter", "lib/Service/Zgw"]
+    "pathPrefixes": [
+      "lib/Adapter", "lib/Service/Zgw",
+      "lib/BackgroundJob/FetchDsoAttachmentsJob.php",
+      "lib/Controller/DSOController.php",
+      "lib/Controller/DsoPkiSettingsController.php",
+      "lib/EventListener/DsoStamConsumerListener.php",
+      "lib/Exception/DsoAttachmentTooLargeException.php",
+      "lib/Exception/DsoConnectionUnavailableException.php",
+      "lib/Exception/DsoProviderException.php",
+      "lib/Exception/DsoSignatureException.php",
+      "lib/Exception/DsoTranslationException.php",
+      "lib/Notification/DsoConnectionNotifier.php",
+      "lib/Repair/MigrateDsoStamConnection.php",
+      "lib/Service/DSOParserService.php",
+      "lib/Service/DSOSamenwerkingService.php",
+      "lib/Service/DSOSignatureVerifierService.php",
+      "lib/Service/DSOStatusService.php",
+      "lib/Service/Dso/DsoAccountRights.php",
+      "lib/Service/Dso/DsoAttachmentFetcher.php",
+      "lib/Service/Dso/DsoClient.php",
+      "lib/Service/Dso/DsoConnection.php",
+      "lib/Service/Dso/DsoConnectionAlerts.php",
+      "lib/Service/Dso/DsoConnectorProviderInterface.php",
+      "lib/Service/Dso/DsoIdentity.php",
+      "lib/Service/Dso/DsoRequestTranslator.php",
+      "lib/Service/Dso/LogDsoConnectorProvider.php",
+      "lib/Service/DsoIngestService.php",
+      "src/views/admin/DsoPkiSettings.vue"
+    ]
   },
   "ignoreDirs": ["node_modules", "vendor", "dist", "build", "coverage", ".git"]
 }
