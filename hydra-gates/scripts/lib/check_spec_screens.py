@@ -36,7 +36,9 @@ this checker asks five things:
      a key of `boards` in the published index preview/screens/screens.json
      (what identity.conduction.nl/screens serves), or a board in the app's own
      registration file screens-src/zuiddrecht/apps/<app>.json, so a board
-     registered but not yet built into the index still counts. Any app's board
+     registered but not yet built into the index still counts. A board whose
+     file screens-src/zuiddrecht/<Board>.dc.html is on main counts too, for
+     a board merged before the index was rebuilt. Any app's board
      may be cited: shared boards live under other ids (launchpad's LpStart is
      `werkplek/LpStart`, the shared integrations page is a pipelinq board).
   3. a `- No screen: <reason>` line carries a real reason. A reason that only
@@ -277,6 +279,35 @@ class BoardSource:
         self.cache[rel] = result
         return result
 
+    def board_file_exists(self, board: str) -> str:
+        """'ok' | 'absent' | 'error' for screens-src/zuiddrecht/<board>.dc.html.
+
+        The fallback for a board drawn and merged on main whose index has not
+        been rebuilt yet and that no apps/<app>.json lists.
+        """
+        rel = f"screens-src/zuiddrecht/{board}.dc.html"
+        if rel in self.cache:
+            return self.cache[rel][0]
+        status = "error"
+        if self.local:
+            status = "ok" if (Path(self.local) / rel).is_file() else "absent"
+        else:
+            req = urllib.request.Request(f"{self.url}/{rel}", method="HEAD",
+                                         headers={"User-Agent": "hydra-gates-spec-screens"})
+            for _ in range(3):
+                try:
+                    with urllib.request.urlopen(req, timeout=30):
+                        status = "ok"
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code == 404:
+                        status = "absent"
+                        break
+                except (urllib.error.URLError, OSError):
+                    pass
+        self.cache[rel] = (status, {})
+        return status
+
     @staticmethod
     def _app_boards(doc: dict) -> set[str]:
         names = {norm_board(k) for k in (doc.get("boards") or {})}
@@ -304,7 +335,12 @@ class BoardSource:
         status, index = self._read(self.INDEX)
         if status == "ok":
             verified = True
-            names |= {norm_board(k) for k in (index.get("boards") or {})}
+            # Keys are not always the board name: the school sets key a board as
+            # `<set>-<Board>` with id `<set>/<Board>`. So the id counts too.
+            for key, meta in (index.get("boards") or {}).items():
+                names.add(norm_board(key))
+                if isinstance(meta, dict) and isinstance(meta.get("id"), str):
+                    names.add(norm_board(meta["id"]))
         elif status == "absent":
             self.errors.append(f"{self.INDEX} is missing on design-system main")
         used = None
@@ -377,10 +413,18 @@ def run(app_dir: Path, dirs: list[str]) -> int:
             if not verified:
                 unverified.append(f"{rel}:{n}: board {board!r} not verified, design-system was unreachable.")
                 continue
+            if board not in boards and "/" not in words[0]:
+                fstatus = source.board_file_exists(board)
+                if fstatus == "ok":
+                    continue
+                if fstatus == "error":
+                    unverified.append(f"{rel}:{n}: board {board!r} not verified, design-system was unreachable.")
+                    continue
             if board not in boards:
                 findings.append(
                     f"{rel}:{n}: board {board!r} is not on design-system main (not in "
-                    f"preview/screens/screens.json, nor in the app's screens-src/zuiddrecht/apps/ file). "
+                    f"preview/screens/screens.json, not in the app's screens-src/zuiddrecht/apps/ file, "
+                    f"and no screens-src/zuiddrecht/{board}.dc.html). "
                     f"Use a board that exists, or add it in a paired design-system PR.")
 
     for f in findings:

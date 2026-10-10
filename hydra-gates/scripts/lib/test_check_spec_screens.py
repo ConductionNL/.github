@@ -50,6 +50,7 @@ INDEX = {
     "boards": {
         "DqZaak": {"id": "dossiq/DqZaak", "app": "dossiq"},
         "LpStart": {"id": "werkplek/LpStart", "app": "werkplek"},
+        "wilgenboom-Artikel": {"id": "wilgenboom/Artikel", "app": "wilgenboom"},
     }
 }
 APP_FILE = {
@@ -261,6 +262,19 @@ class SpecScreensTest(unittest.TestCase):
         self.assertEqual(rc, 1, out)
         self.assertIn("1 finding(s)", out)
         self.assertIn("openspec/specs/b/screens.md:3: board 'DqGone'", out)
+
+    def test_a_school_set_board_is_found_by_its_id(self):
+        # screens.json keys it `wilgenboom-Artikel`; its id is `wilgenboom/Artikel`.
+        self.write(self.app, "openspec/specs/a/screens.md",
+                   "# Screens\n\n- wilgenboom/Artikel https://identity.conduction.nl/screens/board?id=wilgenboom/Artikel\n")
+        rc, out = self.run_check(["openspec/specs/a/screens.md"])
+        self.assertEqual(rc, 0, out)
+
+    def test_a_board_file_on_main_counts_before_the_index_is_rebuilt(self):
+        self.write(self.ds, "screens-src/zuiddrecht/DqVers.dc.html", "<html></html>\n")
+        self.write(self.app, "openspec/specs/a/screens.md", "# Screens\n\n- DqVers\n")
+        rc, out = self.run_check(["openspec/specs/a/screens.md"])
+        self.assertEqual(rc, 0, out)
 
     # -- 10 --------------------------------------------------------------
 
