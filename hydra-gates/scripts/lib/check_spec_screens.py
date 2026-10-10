@@ -21,6 +21,7 @@ change or spec it belongs to:
 
     - DqZaaktypen https://identity.conduction.nl/screens/board?id=dossiq/DqZaaktypen
     - No screen: a background job that sends reminder mail; no page changes
+    - Design backlog: DqZaakTermijnen (decision 157)
 
 For every directory the PR touches, of these three shapes:
 
@@ -28,7 +29,7 @@ For every directory the PR touches, of these three shapes:
     openspec/changes/archive/<dated-change>/   (a change being archived)
     openspec/specs/<spec>/
 
-this checker asks four things:
+this checker asks five things:
 
   1. screens.md exists, and has at least one `- ` line.
   2. every `- <Board>` line names a board that exists on design-system main:
@@ -40,17 +41,25 @@ this checker asks four things:
      `werkplek/LpStart`, the shared integrations page is a pipelinq board).
   3. a `- No screen: <reason>` line carries a real reason. A reason that only
      says the design is not there yet ("not designed yet", "no board",
-     "design session") is not a reason, it is a missing board. The list is
+     "design session") is not a reason, it is a missing board: put it on the
+     design backlog instead (rule 4). The list is
      design-system's own PLACEHOLDER_REASON, from scripts/screens/
      capabilities.py, copied verbatim so the gate and the board index agree on
      what a placeholder is.
-  4. a `- No board found yet` line is a finding. The generator writes that line
+  4. a `- Design backlog: <proposed board> (decision 157)` line passes. It
+     marks real UI whose board is not drawn yet, and names the board it
+     proposes; only a line that names nothing is a finding.
+  5. a `- No board found yet` line is a finding. The generator writes that line
      where it found nothing (decision 150), and a directory a PR touches has to
      settle it: name the board, add one in a paired design-system PR, or give a
      real no-screen reason.
 
 DIFF-SCOPED, AND BLOCKING FROM DAY ONE
 --------------------------------------
+Board names are validated, not URL text: the first word of a board line is
+the board, and the link after it (`https://identity.conduction.nl/screens/
+board?id=<app>/<Board>`) is for the reader.
+
 Only directories the change touches are judged (decision 151). There is no
 warning period: the gate is meant to land after every app's generated
 screens.md has landed, so a red here is always this PR's own directory.
@@ -142,6 +151,9 @@ REASON_MIN_CHARS = 10
 
 NO_SCREEN_RE = re.compile(r"^no screen\s*:\s*(.*)$", re.I)
 NO_BOARD_RE = re.compile(r"^no board found", re.I)
+# Decision 157: real UI whose board is not drawn yet goes on the design backlog,
+# naming the board it proposes. That passes; the board is owed, and named.
+BACKLOG_RE = re.compile(r"^design backlog\s*:\s*(.*)$", re.I)
 
 
 def scope_dir(path: str) -> str | None:
@@ -313,7 +325,7 @@ def run(app_dir: Path, dirs: list[str]) -> int:
 
     findings: list[str] = []
     unverified: list[str] = []
-    counts = {"dirs": 0, "boards": 0, "noscreen": 0}
+    counts = {"dirs": 0, "boards": 0, "noscreen": 0, "backlog": 0}
 
     for d in dirs:
         counts["dirs"] += 1
@@ -332,7 +344,17 @@ def run(app_dir: Path, dirs: list[str]) -> int:
             if NO_BOARD_RE.match(body):
                 findings.append(
                     f"{rel}:{n}: `No board found yet`. This PR touches the directory, so settle it: "
-                    f"name the board, add one in a paired design-system PR, or give a real no-screen reason.")
+                    f"name the board, add one in a paired design-system PR, put it on the design backlog "
+                    f"(`- Design backlog: <proposed board> (decision 157)`), or give a real no-screen reason.")
+                continue
+            bm = BACKLOG_RE.match(body)
+            if bm:
+                counts["backlog"] += 1
+                proposed = re.sub(r"\(decision 157\)\s*$", "", bm.group(1), flags=re.I).strip()
+                if not is_reason_bearing(proposed):
+                    findings.append(
+                        f"{rel}:{n}: `Design backlog` without the board it proposes. "
+                        f"Write `- Design backlog: <proposed board> (decision 157)`.")
                 continue
             m = NO_SCREEN_RE.match(body)
             if m:
@@ -343,7 +365,8 @@ def run(app_dir: Path, dirs: list[str]) -> int:
                 elif PLACEHOLDER_REASON.search(reason):
                     findings.append(
                         f"{rel}:{n}: `No screen: {reason}` only says the design is not there yet. "
-                        f"That is a missing board: draw it in a paired design-system PR.")
+                        f"That is a missing board: draw it in a paired design-system PR, or write "
+                        f"`- Design backlog: <proposed board> (decision 157)`.")
                 continue
             counts["boards"] += 1
             words = body.split()
@@ -368,6 +391,7 @@ def run(app_dir: Path, dirs: list[str]) -> int:
         print(f"  design-system read error: {e}")
     print(f"[gate-{GATE_NUM}] {GATE_NAME}: checked {counts['dirs']} dir(s), "
           f"{counts['boards']} board line(s), {counts['noscreen']} no-screen line(s), "
+          f"{counts['backlog']} design-backlog line(s), "
           f"{len(findings)} finding(s), {len(unverified)} unverified.")
     if findings:
         print(f"[gate-{GATE_NUM}] {GATE_NAME}: FAIL: {len(findings)} finding(s)")

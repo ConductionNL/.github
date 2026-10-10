@@ -17,6 +17,7 @@
 #   ARM 4  archiving a change judges the archive directory, not the old path
 #   ARM 5  no delta base is NOT APPLICABLE, never PASS
 #   ARM 6  an unreachable design-system is SKIPPED (wiring), never PASS
+#   ARM 7  a touched spec on the design backlog (decision 157) PASSES
 #
 # The board list is a local copy (HYDRA_GATE_SCREENS_SOURCE), so no arm needs
 # the network.
@@ -98,6 +99,13 @@ git mv openspec/changes/add-start openspec/changes/archive/2026-10-10-add-start
 git rm --quiet -f openspec/changes/archive/2026-10-10-add-start/screens.md
 git commit --quiet -m "archive add-start, losing screens.md"
 
+# ── backlog: the change puts the spec's UI on the design backlog.
+git checkout --quiet base
+git checkout --quiet -b backlog
+_screens openspec/specs/cases "Design backlog: FxTermijnen (decision 157)"
+echo "backlog" >> openspec/specs/cases/spec.md
+git add -A && git commit --quiet -m "design backlog"
+
 _run() {  # <branch> [extra runner args...]
     local _b="$1"; shift
     git checkout --quiet "${_b}"
@@ -171,6 +179,13 @@ _v="$(_verdict "$(HYDRA_GATE_SCREENS_SOURCE='' HYDRA_GATE_SCREENS_REPO_URL='http
 case "${_v}" in
     *"SKIPPED (wiring)"*) _ok "board lines that could not be checked are not a pass" ;;
     *)                    _bad "expected SKIPPED (wiring) with design-system unreachable, got: ${_v:-<no verdict>}" ;;
+esac
+
+echo "-- ARM 7: the design backlog marker PASSES --"
+_v="$(_verdict "$(_run backlog --base base)")"
+case "${_v}" in
+    *PASS*) _ok "a touched spec on the design backlog passes" ;;
+    *)      _bad "expected PASS on the backlog branch, got: ${_v:-<no verdict>}" ;;
 esac
 
 echo ""

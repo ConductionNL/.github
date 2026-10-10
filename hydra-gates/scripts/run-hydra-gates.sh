@@ -13374,8 +13374,12 @@ fi
 # is real (design-system's own PLACEHOLDER_REASON list decides what only says
 # "not designed yet"); and `- No board found yet`, the line the generator
 # writes where it found nothing, fails. A directory a PR touches has to settle
-# it, by naming the board, drawing one in a paired design-system PR, or giving
-# a real reason.
+# it, by naming the board, drawing one in a paired design-system PR, putting it
+# on the design backlog, or giving a real reason.
+#
+# `- Design backlog: <proposed board> (decision 157)` PASSES. It marks real UI
+# whose board is not drawn yet and names the board it proposes. Board names are
+# validated, not the URL text after them.
 #
 # BLOCKING FROM DAY ONE, deliberately, against the usual warning-first rule
 # for new gates (decision 151). The gate lands after every app's generated

@@ -23,7 +23,13 @@ network or on what design-system main holds today.
   7. NO VERDICT WITHOUT THE BOARD LIST: an unreachable design-system is exit 2,
      never a pass and never a finding. A finding that needs no network still
      fails.
-  8. NOTHING TO JUDGE is exit 3 (empty scope) or 4 (no openspec), never 0.
+  8. THE DESIGN BACKLOG PASSES (decision 157): `- Design backlog: <proposed
+     board>` marks real UI whose board is not drawn yet. It passes, beside an
+     unknown board, a placeholder reason and `No board found yet`, which still
+     fail in the same file. A backlog line naming nothing fails.
+  9. BOARD NAMES ARE VALIDATED, NOT URL TEXT: a real board with a link whose
+     id points elsewhere passes; an unknown board with a real board's link fails.
+ 10. NOTHING TO JUDGE is exit 3 (empty scope) or 4 (no openspec), never 0.
 
 Run: python3 scripts/lib/test_check_spec_screens.py
 """
@@ -99,7 +105,7 @@ class SpecScreensTest(unittest.TestCase):
         self.write(self.app, "openspec/changes/add-x/screens.md", CLEAN)
         rc, out = self.run_check(["openspec/changes/add-x/proposal.md"])
         self.assertEqual(rc, 0, out)
-        self.assertIn("checked 1 dir(s), 4 board line(s), 1 no-screen line(s), 0 finding(s)", out)
+        self.assertIn("checked 1 dir(s), 4 board line(s), 1 no-screen line(s), 0 design-backlog line(s), 0 finding(s)", out)
 
     # -- 2 ---------------------------------------------------------------
 
@@ -215,6 +221,48 @@ class SpecScreensTest(unittest.TestCase):
         self.assertIn("openspec/specs/other/: no screens.md", out)
 
     # -- 8 ---------------------------------------------------------------
+
+    def test_design_backlog_marker_passes(self):
+        self.write(self.app, "openspec/changes/add-x/screens.md",
+                   "# Screens\n\n- DqZaak\n- Design backlog: DqZaakTermijnen (decision 157)\n")
+        rc, out = self.run_check(["openspec/changes/add-x/screens.md"])
+        self.assertEqual(rc, 0, out)
+        self.assertIn("1 design-backlog line(s), 0 finding(s)", out)
+
+    def test_design_backlog_does_not_excuse_the_other_failures(self):
+        self.write(self.app, "openspec/changes/add-x/screens.md",
+                   "# Screens\n\n- Design backlog: DqZaakTermijnen (decision 157)\n"
+                   "- DqNope\n- No screen: not designed yet\n- No board found yet (decision 150)\n")
+        self.write(self.app, "openspec/specs/bare/spec.md", "x\n")
+        rc, out = self.run_check(["openspec/changes/add-x/screens.md", "openspec/specs/bare/spec.md"])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("4 finding(s)", out)
+        self.assertIn("board 'DqNope'", out)
+        self.assertIn("only says the design is not there yet", out)
+        self.assertIn("`No board found yet`", out)
+        self.assertIn("openspec/specs/bare/: no screens.md", out)
+        self.assertNotIn("DqZaakTermijnen", out)
+
+    def test_design_backlog_naming_nothing_fails(self):
+        self.write(self.app, "openspec/changes/add-x/screens.md",
+                   "# Screens\n\n- Design backlog: (decision 157)\n")
+        rc, out = self.run_check(["openspec/changes/add-x/screens.md"])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("without the board it proposes", out)
+
+    # -- 9 ---------------------------------------------------------------
+
+    def test_board_name_is_validated_not_the_url(self):
+        self.write(self.app, "openspec/specs/a/screens.md",
+                   "# Screens\n\n- DqZaak https://identity.conduction.nl/screens/board?id=other/Whatever\n")
+        self.write(self.app, "openspec/specs/b/screens.md",
+                   "# Screens\n\n- DqGone https://identity.conduction.nl/screens/board?id=dossiq/DqZaak\n")
+        rc, out = self.run_check(["openspec/specs/a/screens.md", "openspec/specs/b/screens.md"])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("1 finding(s)", out)
+        self.assertIn("openspec/specs/b/screens.md:3: board 'DqGone'", out)
+
+    # -- 10 --------------------------------------------------------------
 
     def test_empty_scope_is_not_a_pass(self):
         rc, out = self.run_check(["README.md"])
