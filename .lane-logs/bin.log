@@ -1,0 +1,101 @@
+[test] unresolvable base ref
+  ok   — exit 99 (could-not-run), not 0
+  ok   — states plainly that nothing was checked
+  ok   — no green printed for an unresolvable base
+[test] empty diff (base BEHIND head) is stated, not silently green
+  ok   — empty scope is called out explicitly
+  ok   — empty diff still exits 0 (it is a legitimate outcome, just a stated one)
+[test] a NON-empty scope must not claim to be empty
+  ok   — the machine-readable scope size is emitted, once, as a bare integer
+  ok   — a 10-file scope does not claim to be empty
+  ok   — a genuinely empty scope still says SCOPE WAS EMPTY
+[test] a base that IS HEAD is refused, not reported green
+  ok   — scoping a commit against itself exits 99 (configuration error, not a clean tree)
+  ok   — no gate reported PASS: nothing was inspected, and nothing claimed to be
+[test] positive control — violation caught, exit code is the count
+  ok   — gate-1 spdx-headers named the violation
+  ok   — gate-2 forbidden-patterns named the violation
+  ok   — exit code is 2 — the failure COUNT, not a boolean 1
+[test] positive control — reverse direction
+  ok   — same fixture, violations removed — exit 0
+[test] the green states its coverage
+  ok   — coverage line present on a green
+  ok   — waiver accounting present
+[test] a gate that did not run is named, not folded into the green
+  ok   — gate-33 states its own absence instead of emitting nothing
+  ok   — gate-33 is NOT APPLICABLE on a fixture with no src/ (no frontend to analyse)
+  ok   — the summary names the not-applicable gates
+  ok   — no 'all N of them ran' banner while gates did not run
+  ok   — SKIPPED and NOT APPLICABLE gates are excluded from the coverage tally (19 of 97)
+[test] --require-full-coverage passes when every non-reporting gate is NOT APPLICABLE
+  ok   — a run whose only gaps are not-applicable gates PASSES with the flag set
+[test] --require-full-coverage still FAILS on a structural gap
+  ok   — a structural gap (leaves registered, no parity check) exits 98 with the flag set
+  ok   — gate-24 names its gap as structural, and says which half of the pair exists
+  ok   — fixture premise holds: /tmp/claude-1000/-home-rubenlinde-nextcloud-docker-dev-workspace-server-apps-extra/726ab783-c245-417f-a019-4e0b46e189f6/scratchpad/hydra-gates-test.qd53FS/fixture/src supplies 2 .vue file(s), so the .vue-reading gates below have a subject
+  ok   — with src/ present, no gate is excused by the applicability table (it tracks its guards)
+  ok   — gate-45 reported from inside its own guard, not from the applicability table
+[test] an unrecognised skip category is a hard failure, never a silent 'na'
+  ok   — an unrecognised reason category fails the gate instead of resolving to 'na'
+  ok   — reverse control — the unpatched runner reports no category error
+[test] every gate verdict is exactly one line
+  ok   — no orphaned continuation line from a miscounted gate message
+[test] a package with no runner cannot report green
+  ok   — missing runner exits 99
+  ok   — says so in words
+[test] a gate whose helper is absent skips instead of passing
+  ok   — helpers present — gates 6 and 7 still report a verdict
+  ok   — helpers absent — the two authorization gates report SKIPPED
+  ok   — no authorization gate claims PASS without its helper
+  ok   — the summary names gate-6 and gate-7 among the gates that did not run
+  ok   — reverse control — with helpers present they are absent from the DID NOT RUN list
+  ok   — coverage drops by exactly 2 when exactly 2 helpers are removed (22 → 20)
+[test] the capability literals quality.yml probes for still exist
+  ok   — run-hydra-gates.sh still carries _NA_GATES (quality.yml's capability probe)
+  ok   — bin/hydra-gates still emits the NOT APPLICABLE verdict (quality.yml's capability probe)
+  ok   — reverse control — the probe does NOT match the pre-v1.3.0 shape of either file
+[test] push fixture — origin/development IS HEAD (the mainline-push shape)
+  ok   — fixture reproduces the mainline-push shape (origin/development == HEAD)
+[test] mainline push with real violations — scoped to the push, and RED
+  ok   — scope reconciles with git: 1 file(s), matching `git diff before...HEAD`
+  ok   — exit 2 — the failure COUNT, one per real violation the push introduced
+  ok   — both gates name themselves — they read the pushed file
+  ok   — no empty-scope epilogue on a real push scope
+[test] mainline push touching one irrelevant file — honest pass, not a blind one
+  ok   — scope is the ONE file this push touched (1), reconciled against git
+  ok   — exit 0 — the push introduced no gate violation, and said which file it read
+  ok   — same tree, same gate: RED for the push that added the violation, green for the one that did not
+[test] the base is read from the real push event payload, not just the test hook
+  ok   — scope came out of $GITHUB_EVENT_PATH: 1 file(s), reconciled against git
+  ok   — the event payload resolved a usable base (rc=0)
+  ok   — reverse control — the same payload is ignored when the event is not a push, and it says so
+[test] push base = NULL sha (branch created by this push) — refused
+  ok   — exit 99 — cannot scope a branch against a state that never existed
+  ok   — the refusal names the reason (branch creation)
+  ok   — no gate reported PASS after the refusal
+[test] push base == HEAD (a push that moved nothing) — refused
+  ok   — exit 99 — a self-comparison is still a self-comparison when it comes from the event
+[test] push base unreachable (force-push) — refused, not guessed
+  ok   — exit 99 — an unfetchable previous tip has no diff, and we do not invent one
+  ok   — the refusal names the force-push case
+[test] no push event at all, base IS HEAD — still refused (v1.5.0 behaviour preserved)
+  ok   — exit 99 — without a push to take a base from there is nothing to scope to, and it says so
+[test] feature branch (base genuinely behind HEAD) ignores the push event
+  ok   — scoped to origin/development (2 files), the push event ignored
+  ok   — a usable base is never replaced by the event (rc=2)
+
+[test] THE DEFAULT SCOPE IS FULL, AND THE DELTA BASE SURVIVES IT
+  ok   — an argument-free invocation runs at FULL file scope and says so
+  ok   — a full-scope run does not exit 99 over base resolution (rc=0 is a gate count)
+  ok   — full scope FAILS gate-1 on inherited SPDX debt the diff never touched
+  ok   — the same tree, diff-scoped one commit back, does NOT fail gate-1 — the two modes genuinely differ, and only the scope input changed
+  ok   — a full-scope run still resolves and names a DELTA base
+  ok   — delta gates 16/47 still produce a verdict at full scope when a base is present
+  ok   — gate-48 still produces a verdict at full scope when a base is present AND the diff contains a controller
+  ok   — with no delta base, gates 16/47/48 do not report PASS
+  ok   — an unrecognised $HYDRA_GATE_SCOPE is refused with exit 99 rather than silently defaulting
+
+==================================================
+hydra-gates entry-point tests: 70 passed, 0 failed
+==================================================
+bin rc=0
