@@ -13356,6 +13356,104 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 118 · spec-screens
+#
+# Screens first (hydra ADR "screens first", decisions 150 to 152). The drawn
+# boards in ConductionNL/design-system, published at
+# identity.conduction.nl/screens, are the UI canon. Every OpenSpec change and
+# spec says which boards it builds, in a `screens.md` next to it:
+#
+#     # Screens
+#
+#     - DqZaak https://identity.conduction.nl/screens/board?id=dossiq/DqZaak
+#     - No screen: a nightly job that mails reminders; no page changes
+#
+# For each openspec/changes/<c>/, openspec/changes/archive/<c>/ and
+# openspec/specs/<s>/ directory this change touches: screens.md exists; every
+# `- <Board>` line names a board on design-system main; a `- No screen:` reason
+# is real (design-system's own PLACEHOLDER_REASON list decides what only says
+# "not designed yet"); and `- No board found yet`, the line the generator
+# writes where it found nothing, fails. A directory a PR touches has to settle
+# it, by naming the board, drawing one in a paired design-system PR, or giving
+# a real reason.
+#
+# BLOCKING FROM DAY ONE, deliberately, against the usual warning-first rule
+# for new gates (decision 151). The gate lands after every app's generated
+# screens.md has landed, and it judges only directories the change touches, so
+# a red is this PR's own work. There is no _BLOCKING opt-in to set.
+#
+# A DELTA GATE, keyed on HAVE_DELTA_BASE as gates 101, 108 and 116 are. With
+# no base it is NOT APPLICABLE, never PASS. When the base is the empty tree (a
+# push whose previous tip is unknown, so every file is in scope) it audits the
+# live changes and specs and leaves archive/ alone: an archived change written
+# before screens.md existed is history, not a delivery.
+#
+# NETWORK. The board list is read from design-system main over HTTPS, once
+# per run (HYDRA_GATE_SCREENS_SOURCE points it at a local copy). Unreachable
+# is not a finding: board lines go unverified and the gate reports no verdict,
+# unless a finding that needs no network already fails it.
+#
+# See scripts/lib/check_spec_screens.py for the rules and why the published
+# index, not only apps/<app>.json, decides whether a board exists.
+# ---------------------------------------------------------------------------
+if [ -d openspec/changes ] || [ -d openspec/specs ]; then
+    _scr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-spec-screens.log
+    : > "${_scr_log}"
+    _scr_helper="${SCRIPT_DIR}/lib/check_spec_screens.py"
+    if [ ! -f "${_scr_helper}" ]; then
+        _skip 118 "spec-screens" wiring "check_spec_screens.py not found at ${_scr_helper}. This repo has OpenSpec changes or specs and NO screens.md was checked, so whether they name their boards is UNVERIFIED by this run."
+    elif [ "${HAVE_DELTA_BASE}" != "1" ]; then
+        _skip 118 "spec-screens" na "no delta base was resolved, so there is no changed-file set. This gate judges the openspec change and spec directories a change touches. With no base it has nothing to judge, and saying so is not a pass. Give it a base with --base <ref> or HYDRA_GATE_BASE_REF."
+    else
+        set +e
+        if [ -n "${_empty_tree:-}" ] && [ "${BASE_REF}" = "${_empty_tree}" ]; then
+            python3 "${_scr_helper}" . --full-tree > "${_scr_log}" 2>&1
+        else
+            printf '%s\n' "${CHANGED_FILES}" \
+                | python3 "${_scr_helper}" . --changed-stdin > "${_scr_log}" 2>&1
+        fi
+        _scr_rc=$?
+        set +e
+        # The census line prints on every verdict, so a PASS can be shown to
+        # have read the directories.
+        grep -E '^\[gate-118\] spec-screens: checked ' "${_scr_log}" 2>/dev/null | tail -1
+        case "${_scr_rc}" in
+            0)
+                if _helper_finished "${_scr_log}" '^\[gate-118\] spec-screens: checked [0-9]+ dir'; then
+                    _pass 118 "spec-screens"
+                else
+                    _skip 118 "spec-screens" wiring "check_spec_screens.py exited 0 without its census line, so it did not finish and screens.md is UNVERIFIED by this run. See ${_scr_log}."
+                fi
+                ;;
+            1)
+                if _helper_finished "${_scr_log}" '^\[gate-118\] spec-screens: FAIL: [0-9]+ finding'; then
+                    grep -E '^  ' "${_scr_log}" 2>/dev/null
+                    _scr_n=$(sed -n 's/^\[gate-118\] spec-screens: FAIL: \([0-9]*\) finding.*/\1/p' "${_scr_log}" | tail -1)
+                    _fail 118 "spec-screens" "${_scr_n:-1} finding(s) in the screens.md of the openspec directories this change touches. Name the board, draw one in a paired design-system PR, or give a real no-screen reason (hydra ADR screens first). See ${_scr_log}"
+                else
+                    # A CRASH IS NOT A FINDING. A Python traceback also exits 1.
+                    _scr_why=$(tail -3 "${_scr_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                    _skip 118 "spec-screens" wiring "check_spec_screens.py exited 1 without its FAIL summary, so it did not finish and screens.md is UNVERIFIED by this run. Checker output: ${_scr_why:-<empty>}. See ${_scr_log}."
+                fi
+                ;;
+            3)
+                _skip 118 "spec-screens" na "this change touches no openspec/changes/<c>/ or openspec/specs/<s>/ directory, so it introduces no change or spec whose screens could be missing. See ${_scr_log}."
+                ;;
+            4)
+                _skip 118 "spec-screens" na "no openspec/changes or openspec/specs here, so there is no change or spec to name its screens."
+                ;;
+            *)
+                grep -E '^  ' "${_scr_log}" 2>/dev/null
+                _scr_why=$(tail -3 "${_scr_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                _skip 118 "spec-screens" wiring "check_spec_screens.py exited ${_scr_rc} without a verdict (design-system unreachable, or the checker failed), so the board lines are UNVERIFIED by this run. Checker output: ${_scr_why:-<empty>}. See ${_scr_log}."
+                ;;
+        esac
+    fi
+else
+    _skip 118 "spec-screens" na "no openspec/changes or openspec/specs here, so there is no change or spec to name its screens."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
