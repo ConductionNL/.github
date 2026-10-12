@@ -474,10 +474,15 @@ def _contained_widget_ids(widgets):
 
     A container renders other widgets inside its own body, so its children are
     correctly absent from `layout` — a grid cell for one would render it twice.
-    Two shapes are read, because the catalog has two containers:
+    Three shapes are read, because the catalog has three containers:
 
-      - `tabs`      -> content.tabs[]       (entries are {widgetId} or a bare id)
+      - `tabs`      -> content.tabs[]       (entries are {widgetId} or a bare
+                                             id, or {widgetIds: [...]} for a
+                                             stack of cards in one tab)
       - `container` -> content.placements[] (entries carry a widgetId)
+      - `sections`  -> content.sections[]   (entries carry a widgetId, or an
+                                             inline `widget` that is not a
+                                             page widget and needs no cell)
 
     Unknown container types contribute nothing rather than raising: a gate that
     dies on a manifest it has not met yet is worse than one that under-reports.
@@ -492,16 +497,42 @@ def _contained_widget_ids(widgets):
         content = widget.get("content")
         if not isinstance(content, dict):
             continue
-        for key in ("tabs", "placements"):
+        for key in ("tabs", "placements", "sections"):
             entries = content.get(key)
             if not isinstance(entries, list):
                 continue
             for entry in entries:
                 if isinstance(entry, str) and entry:
                     contained.add(entry)
-                elif isinstance(entry, dict) and entry.get("widgetId"):
-                    contained.add(entry["widgetId"])
+                elif isinstance(entry, dict):
+                    if isinstance(entry.get("widgetId"), str) and entry["widgetId"]:
+                        contained.add(entry["widgetId"])
+                    stack = entry.get("widgetIds")
+                    if isinstance(stack, list):
+                        contained.update(
+                            wid for wid in stack if isinstance(wid, str) and wid
+                        )
     return contained
+
+
+def _side_column_widget_ids(cfg):
+    """
+    Widget ids the page places in its side column (`config.sideColumn`).
+
+    A detail page in the v2 shape has two places for a widget: the body grid
+    (`config.layout`) and a column of cards beside it (`config.sideColumn`).
+    CnDetailPage resolves a STRING entry against `config.widgets[].id`, so that
+    widget is placed, and a grid cell for it would render it a second time.
+    An OBJECT entry is an inline widget definition: it is not in
+    `config.widgets`, so it is no concern of the widgets <-> layout check.
+
+    :param cfg: The page's config object.
+    :return: List of widget ids named by sideColumn, in order, duplicates kept.
+    """
+    entries = cfg.get("sideColumn")
+    if not isinstance(entries, list):
+        return []
+    return [entry for entry in entries if isinstance(entry, str) and entry]
 
 
 _APP_REGISTERS_CACHE = {}
@@ -602,8 +633,36 @@ def check_page(path, page, page_ids, findings):
         # once loose on the grid. Rule 8 predates container widgets and read
         # every such child as unplaced.
         contained = _contained_widget_ids(widgets)
-        for wid in set(widget_ids):
+        # THE SIDE COLUMN IS A PLACEMENT TOO. `config.sideColumn` names page
+        # widgets by id and CnDetailPage renders them beside the body, so they
+        # are correctly absent from `layout`. Rule 8 predates the side column
+        # and read every such widget as unplaced (18 findings on portaliq's
+        # five detail pages, 2026-10-12, every one of them rendered).
+        side = _side_column_widget_ids(cfg)
+        side_count = Counter(side)
+        for wid in sorted(set(widget_ids)):
             n = lc.get(wid, 0)
+            if wid in side_count:
+                # Placed by the side column. Still worth saying: a second
+                # placement, which renders the widget twice.
+                if n:
+                    findings.append(
+                        f"{path}: page '{pid}' — widget '{wid}' is in "
+                        f"config.sideColumn AND has {n} layout cell(s), so it "
+                        f"renders twice (ADR-062 rule 8)"
+                    )
+                # NOT a finding: the same widget in the side column AND in a
+                # tab. pipelinq's ContactDetail and shillinq's CustomerDetail
+                # ship a History card beside the body and a History tab, one
+                # of the two out of sight at any time. Whether that is wanted
+                # is a design call, not an integrity defect.
+                if side_count[wid] > 1:
+                    findings.append(
+                        f"{path}: page '{pid}' — widget '{wid}' is named "
+                        f"{side_count[wid]} times in config.sideColumn, so it "
+                        f"renders {side_count[wid]} times (ADR-062 rule 8)"
+                    )
+                continue
             if wid in contained:
                 # Placed by its container. The one thing still worth saying is
                 # if it ALSO has a grid cell, which is the double-render.
@@ -624,6 +683,15 @@ def check_page(path, page, page_ids, findings):
                 findings.append(
                     f"{path}: page '{pid}' — layout cell references widgetId "
                     f"'{lid}' with no matching config.widgets[].id"
+                )
+        # A side column entry that names no declared widget is dropped by
+        # CnDetailPage without a word: the card is simply not there.
+        for sid in sorted(set(side)):
+            if wc.get(sid, 0) == 0:
+                findings.append(
+                    f"{path}: page '{pid}' — config.sideColumn names widget "
+                    f"'{sid}' with no matching config.widgets[].id, so the "
+                    f"card is never rendered"
                 )
         # overlap on the 12-col grid.
         cells = []
