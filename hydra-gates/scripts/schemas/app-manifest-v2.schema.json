@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.76.0",
+	"version": "2.89.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -760,8 +760,8 @@
 		},
 		"sentinelFilterToken": {
 			"type": "string",
-			"pattern": "^@(?:me(?:\\.(?:displayName|email))?|myGroups|now|today|monthStart|quarterStart|yearStart)$|^@today[+-][0-9]+d$",
-			"description": "Filter-value context: relative fetch-time tokens resolved by resolveFilterTokens (@me, @me.displayName, @me.email, @myGroups (the current user's group ids, an IN list), @now, @today, @today±Nd, @monthStart, @quarterStart, @yearStart). Mirrors SENTINEL_TOKEN_PATTERNS.filter in src/utils/sentinelTokens.js (byte-equality enforced by a unit test)."
+			"pattern": "^@(?:me(?:\\.(?:displayName|email))?|myGroups|now|today|monthStart|monthEnd|nextMonthStart|quarterStart|yearStart)$|^@today[+-][0-9]+d$",
+			"description": "Filter-value context: relative fetch-time tokens resolved by resolveFilterTokens (@me, @me.displayName, @me.email, @myGroups (the current user's group ids, an IN list), @now, @today, @today±Nd, @monthStart, @monthEnd, @nextMonthStart, @quarterStart, @yearStart). Mirrors SENTINEL_TOKEN_PATTERNS.filter in src/utils/sentinelTokens.js (byte-equality enforced by a unit test)."
 		},
 		"sentinelConfigToken": {
 			"type": "string",
@@ -803,6 +803,16 @@
 			"pattern": "^@answer\\.[A-Za-z][A-Za-z0-9_]*$",
 			"description": "form-live-values: another answer in the same form (@answer.<field>), read by a form field's assign rule and resolved client-side by CnFormPage / CnFormDialog. Mirrors SENTINEL_TOKEN_PATTERNS.answer."
 		},
+		"sentinelRowToken": {
+			"type": "string",
+			"pattern": "^@row\\.[A-Za-z][A-Za-z0-9_.@]*$",
+			"description": "Row context: a field of the row a row action runs on (@row.<field>, dot path allowed), read by the field-list widget's rowActions request url and payload (payload values resolve at any depth). Mirrors SENTINEL_TOKEN_PATTERNS.row."
+		},
+		"sentinelSubjectToken": {
+			"type": "string",
+			"pattern": "^@subject\\.[A-Za-z][A-Za-z0-9_.]*$",
+			"description": "Subject context: a field of the record an attention card names (the first row of its ordered `visibleWhen` source query), read by the banner widget's action route params and query (@subject.<field>, dot path allowed). Mirrors SENTINEL_TOKEN_PATTERNS.subject."
+		},
 		"sentinelTokenAny": {
 			"$comment": "Union of every canonical context plus the deprecated-during-window overlay. Single source the shared resolver + gate import.",
 			"anyOf": [
@@ -814,6 +824,8 @@
 				{ "$ref": "#/$defs/sentinelDeclarativeToken" },
 				{ "$ref": "#/$defs/sentinelVisibleWhenToken" },
 				{ "$ref": "#/$defs/sentinelAnswerToken" },
+				{ "$ref": "#/$defs/sentinelRowToken" },
+				{ "$ref": "#/$defs/sentinelSubjectToken" },
 				{ "$ref": "#/$defs/sentinelDeprecatedToken" }
 			]
 		},
@@ -1132,13 +1144,42 @@
 		"headerPill": {
 			"type": "object",
 			"additionalProperties": false,
-			"required": ["field"],
-			"description": "A pill in a detail page header, rendered through CnStatusBadge from one field of the record. Nothing renders while the field is empty.",
+			"anyOf": [
+				{ "required": ["field"] },
+				{ "required": ["text"] },
+				{ "required": ["countFrom"] }
+			],
+			"description": "A pill in a detail page header, rendered through CnStatusBadge: from one field of the record (`field`; nothing renders while it is empty), a constant (`text`), or a count of a related list (`countFrom` with `countLabel`; nothing renders at 0, while counting or after a failed count). screens-relation-pages, 2.85.0.",
 			"properties": {
 				"field": {
 					"type": "string",
 					"minLength": 1,
 					"description": "Dot-path to the value on the record."
+				},
+				"text": {
+					"type": "string",
+					"minLength": 1,
+					"description": "A constant label (an i18n key), such as \"Inwoner\" or \"Klant\". Used when `field` is not set."
+				},
+				"countFrom": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["register", "schema"],
+					"description": "The list the pill counts with one list request (`_limit=1`, the response's `total`). `filter` values take the `@objectId` and `@object.<field>` tokens. Used when `field` is not set.",
+					"properties": {
+						"register": { "type": "string", "minLength": 1 },
+						"schema": { "type": "string", "minLength": 1 },
+						"filter": { "type": "object", "additionalProperties": true }
+					}
+				},
+				"countLabel": {
+					"type": "object",
+					"additionalProperties": false,
+					"description": "The count pill's label for one and for more, i18n keys with `{count}`: `{ \"one\": \"{count} lopende zaak\", \"other\": \"{count} lopende zaken\" }`.",
+					"properties": {
+						"one": { "type": "string", "minLength": 1 },
+						"other": { "type": "string", "minLength": 1 }
+					}
 				},
 				"colorMap": {
 					"type": "object",
@@ -1662,7 +1703,7 @@
 				"sizeToContent": {
 					"type": ["boolean", "integer"],
 					"minimum": 1,
-					"description": "Opt-in: hand this placement's height to whatever it renders, so a widget that decides AT RUNTIME it has nothing to show costs no row. `true` sizes purely to content; an integer is a row minimum. It makes gridHeight advisory for this widget — right for anything whose height is whatever it turned out to be (a banner whose condition is false, a list that came back empty), wrong for anything with a deliberate size. Maps to CnDashboardGrid's per-item `sizeToContent`."
+					"description": "Opt-in: hand this placement's height to whatever it renders, so a widget that decides AT RUNTIME it has nothing to show costs no row. `true` sizes purely to content; an integer sizes to content too but caps the height at that many rows (GridStack's maximum, NOT a minimum: content shorter than N rows is as short as it is, content taller is clipped at N). It makes gridHeight advisory for this widget — right for anything whose height is whatever it turned out to be (a banner whose condition is false, a list that came back empty), wrong for anything with a deliberate size. Maps to CnDashboardGrid's per-item `sizeToContent`."
 				},
 				"props": {
 					"type": "object",
@@ -1869,11 +1910,16 @@
 												"properties": {
 													"register": { "type": "string" },
 													"schema": { "type": "string" },
-													"filter": { "type": "object", "additionalProperties": true }
+													"filter": { "type": "object", "additionalProperties": true },
+													"order": {
+														"type": "object",
+														"additionalProperties": { "type": "string", "enum": ["asc", "desc"] },
+														"description": "Order of the query (`{ field: \"asc\" | \"desc\" }`), so the first result is the first of an ordered list. With it an attention card names that row: `{subject.<field>}` in its title, reason and kicker and `@subject.<field>` in an action route read it (screens-start-here-banner, 2.89.0)."
+													}
 												}
 											},
 											"field": { "type": "string", "description": "Dot-path into the response ('@total' or omitted = collection total for a source)." },
-											"op": { "type": "string", "enum": ["eq", "neq", "gt", "gte", "lt", "lte"], "default": "eq", "description": "Comparison operator." },
+											"op": { "type": "string", "enum": ["eq", "neq", "gt", "gte", "lt", "lte", "empty", "notEmpty"], "default": "eq", "description": "Comparison operator. `notEmpty` on `id` is the \"there is a first row\" test of a card that names one." },
 											"value": { "description": "Literal right-hand side of the comparison." }
 										}
 									},
@@ -1889,6 +1935,11 @@
 										"enum": ["banner", "attention"],
 										"default": "banner",
 										"description": "How the banner renders. `banner` (default) is the note card. `attention` is a card with a severity edge, a kicker, a title, a reason line and up to two actions."
+									},
+									"stacked": {
+										"type": "boolean",
+										"default": false,
+										"description": "Attention card: put the actions under the text instead of beside it, with a 16px title (PqMijnWerk \"Begin hier\"; screens-start-here-banner, 2.89.0)."
 									},
 									"kicker": {
 										"type": "string",
@@ -2155,9 +2206,27 @@
 											},
 											"style": {
 												"type": "string",
-												"enum": ["radio", "select"],
+												"enum": ["radio", "select", "chips", "toggle"],
 												"default": "radio",
-												"description": "Choice style: 'radio' (default) list or 'select' dropdown."
+												"description": "Choice style: 'radio' (default) list, 'select' dropdown, 'chips' (one compact segmented group with a count after each label; screens-page-lenses, 2.87.0) or 'toggle' (a switch writing `onValue` / `offValue`; screens-page-controls, 2.88.0)."
+											},
+											"layout": {
+												"type": "string",
+												"enum": ["start", "bar"],
+												"description": "'start' draws the start card; 'bar' draws `controls` side by side in one row (screens-page-controls, 2.88.0)."
+											},
+											"controls": {
+												"type": "array",
+												"items": { "type": "object", "additionalProperties": true },
+												"description": "With `layout: \"bar\"`: the bar's controls, each a workspace-filter content (chips, a toggle, a select) with its own `writes`. `align: \"end\"` pushes a control to the right edge (2.88.0)."
+											},
+											"onValue": { "description": "style 'toggle': the value written while the switch is on. Default true (2.88.0)." },
+											"offValue": { "description": "style 'toggle': the value written while the switch is off. Default false (2.88.0)." },
+											"align": { "type": "string", "enum": ["start", "end"], "description": "In a bar: 'end' pushes this control to the right edge (2.88.0)." },
+											"urlKey": {
+												"type": "string",
+												"minLength": 1,
+												"description": "Keep the choice in the address as `?<urlKey>=<value>` (replacing the history entry, keeping other query keys). The address wins over `default` on load, so a chip is linkable (screens-page-lenses, 2.87.0)."
 											},
 											"allLabel": {
 												"type": "string",
@@ -2170,7 +2239,7 @@
 											},
 											"options": {
 												"type": "array",
-												"description": "Static options — each { value, label, count? } (or { id, name } / bare strings, normalised).",
+												"description": "Static options — each { value, label, count?, countFrom? } (or { id, name } / bare strings, normalised). `countFrom` is `{ register, schema, filter? }`, or a list of those that are added up; the option shows that list's total (one list request each; none when it fails). screens-page-lenses, 2.87.0.",
 												"items": { "type": ["object", "string", "number"] }
 											},
 											"source": {
@@ -2582,6 +2651,14 @@
 					"type": "string",
 					"description": "open-form: overrides the create dialog's heading. Defaults to 'Create {schema title}'."
 				},
+				"formEyebrow": {
+					"type": "string",
+					"description": "open-form: the context line above the create dialog's heading (board look), e.g. the list the record joins. Through the host translate. Absent: no line."
+				},
+				"formSubtitle": {
+					"type": "string",
+					"description": "open-form: the sentence under the create dialog's heading (board look), e.g. which fields are required and what happens on save. Through the host translate. Absent: no sentence."
+				},
 				"size": {
 					"type": "string",
 					"enum": ["small", "normal", "large", "full"],
@@ -2888,15 +2965,20 @@
 						"filter": { "type": "object", "additionalProperties": true }
 					}
 				},
+				"workspace": {
+					"type": "string",
+					"minLength": 1,
+					"description": "WORKSPACE mode (screens-page-lenses, 2.87.0): the key of the page workspace context to compare, read at once with no request. A page control (a `workspace-filter` with `writes`) sets the key, and a dashboard widget carrying this condition appears and disappears as it changes. Honoured on a dashboard widget or KPI-row tile only, and as a top-level condition (not inside `all` / `any`)."
+				},
 				"field": {
 					"type": "string",
 					"description": "Dot-path to the compared value — into the endpoint body, the source's first result, or (LOCAL mode) the caller's object context."
 				},
 				"op": {
 					"type": "string",
-					"enum": ["eq", "neq", "gt", "gte", "lt", "lte", "empty", "notEmpty"],
+					"enum": ["eq", "neq", "gt", "gte", "lt", "lte", "empty", "notEmpty", "in"],
 					"default": "eq",
-					"description": "Comparison operator (default eq). eq/neq compare loosely-normalised primitives; ordering operators coerce both sides to Number. `empty` / `notEmpty` take no `value` and treat undefined, null, '' and an empty array alike — the one question eq cannot ask, because an unset field arrives in a shape that depends on the store and String(null) is the word 'null' rather than blank."
+					"description": "Comparison operator (default eq). eq/neq compare loosely-normalised primitives; ordering operators coerce both sides to Number. `in` holds when the value is one of the listed `value` array (2.87.0). `empty` / `notEmpty` take no `value` and treat undefined, null, '' and an empty array alike — the one question eq cannot ask, because an unset field arrives in a shape that depends on the store and String(null) is the word 'null' rather than blank."
 				},
 				"value": {
 					"description": "The right-hand side of the comparison, resolved through the shared @-token grammar so `@me` names the signed-in reader rather than a literal only the server knows. Omitted for `empty` / `notEmpty`."
@@ -2948,6 +3030,45 @@
 					"type": "array",
 					"items": { "type": "string" },
 					"description": "OpenRegister `_extend[]` values forwarded on the fetch (e.g. [\"calculations\"]) so read-time virtual/derived fields are hydrated and available as columns. Each entry is passed through verbatim."
+				},
+				"pageControls": { "$ref": "#/$defs/pageControls" }
+			}
+		},
+		"pageControls": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "screens-page-controls (2.88.0): which page controls a list widget (`record-list`, `object-table`) listens to, and what they mean for it. A page control is a `workspace-filter` select or switch that writes a workspace key. `sort` picks the list's sort from the key's value; `toggle` drops filter keys while the key is on. Without it the list ignores the page's controls.",
+			"properties": {
+				"sort": {
+					"type": "object",
+					"required": ["key", "map"],
+					"additionalProperties": false,
+					"description": "The workspace key a sort select writes, and what each of its values sorts by. A value with no entry leaves the list's own sort.",
+					"properties": {
+						"key": { "type": "string", "minLength": 1 },
+						"map": {
+							"type": "object",
+							"additionalProperties": {
+								"type": "object",
+								"required": ["field"],
+								"additionalProperties": false,
+								"properties": {
+									"field": { "type": "string", "minLength": 1 },
+									"dir": { "type": "string", "enum": ["asc", "desc"], "default": "asc" }
+								}
+							}
+						}
+					}
+				},
+				"toggle": {
+					"type": "object",
+					"required": ["key", "removes"],
+					"additionalProperties": false,
+					"description": "The workspace key a switch writes. While it is on (true, 1, \"1\", \"true\") the filter keys in `removes` are dropped, so a list that hides finished work shows it.",
+					"properties": {
+						"key": { "type": "string", "minLength": 1 },
+						"removes": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+					}
 				}
 			}
 		},
@@ -4004,6 +4125,40 @@
 							"default": [],
 							"description": "type='dashboard': widget ids drawn as a KPI row above the grid, in the listed order, in an auto-fit grid (`repeat(auto-fit, minmax(200px, 1fr))`, gap 16). The named widgets are not GridStack items, so they do not reflow with the grid and are not part of the emitted layout; an id that names no widget is skipped with a development warning (screens-dashboard-parity). Maps to CnDashboardPage `kpiRow`. `dateRange.control` also accepts \"segmented\": the presets as one compact segmented group under the header."
 						},
+						"greeting": {
+							"oneOf": [
+								{ "type": "boolean" },
+								{ "type": "string", "enum": ["first", "full"] }
+							],
+							"default": false,
+							"description": "type='dashboard': greet the reader in the header subtitle. `true` or \"first\" writes \"Good afternoon, Pieter · Monday 5 October 2026\", \"full\" uses the whole display name; the page `description` follows after another middle dot (screens-dashboard-greeting-header). Maps to CnDashboardPage `greeting`."
+						},
+						"viewLinks": {
+							"type": "array",
+							"default": [],
+							"description": "type='dashboard': links drawn as small pills on the switch row under the header, right of the view switch (screens-dashboard-greeting-header). `route` is a route name or a `{ name, params, query }` location, `href` a plain URL; `label` is an i18n key. An entry without a label or a target is skipped. Maps to CnDashboardPage `viewLinks`.",
+							"items": {
+								"type": "object",
+								"required": ["label"],
+								"additionalProperties": false,
+								"properties": {
+									"label": { "type": "string", "minLength": 1 },
+									"icon": { "type": "string", "minLength": 1 },
+									"route": {
+										"oneOf": [
+											{ "type": "string", "minLength": 1 },
+											{ "type": "object", "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 }, "params": { "type": "object" }, "query": { "type": "object" } } }
+										]
+									},
+									"href": { "type": "string", "minLength": 1 }
+								}
+							}
+						},
+						"showActionsMenu": {
+							"type": "boolean",
+							"default": true,
+							"description": "type='dashboard': `false` removes the page Actions menu from the header, for a board page whose header carries only the buildiq square and the primary (screens-dashboard-greeting-header). Maps to CnDashboardPage `showActionsMenu`."
+						},
 						"gridFloat": {
 							"type": "boolean",
 							"default": true,
@@ -4038,6 +4193,41 @@
 							"minLength": 1,
 							"description": "type='index', board look: free text after the footer's count, e.g. \"click a column header to sort\" (screens-index-list-parity). Maps to CnIndexPage `footerNote`."
 						},
+						"queryPresets": {
+							"type": "array",
+							"minItems": 1,
+							"description": "type='index': per-query overlays of this page (screens-index-query-presets). A menu entry that deep-links here with a query (`menu[].query`, e.g. { caseType: '<uuid>' }, the shape hydra gate-68 asks for instead of a second page) gets its own lenses, columns and copy: the first preset whose every `match` pair is in the route query replaces those keys of this config. Only the listed keys can be replaced; register, schema and permissions stay the page's. Switching preset remounts the list.",
+							"items": {
+								"type": "object",
+								"required": ["match"],
+								"additionalProperties": false,
+								"properties": {
+									"id": { "type": "string", "minLength": 1, "description": "A name for the preset, for people reading the manifest." },
+									"match": { "type": "object", "minProperties": 1, "additionalProperties": { "type": ["string", "number", "boolean"] }, "description": "Route query pairs that must ALL be present, e.g. { \"caseType\": \"<uuid>\" }. A repeated parameter matches when it holds the value." },
+									"title": { "type": "string", "minLength": 1, "description": "The page title while the preset applies." },
+									"quickFilters": { "type": "array", "description": "The lenses while the preset applies; same shape as config.quickFilters." },
+									"columns": { "type": "array", "description": "The columns while the preset applies; same shape as config.columns." },
+									"cardFields": { "type": "array", "items": { "type": "string" }, "description": "The card facts while the preset applies." },
+									"countText": { "type": "string", "minLength": 1, "description": "The count line while the preset applies." },
+									"searchPlaceholder": { "type": "string", "minLength": 1, "description": "The search placeholder while the preset applies." },
+									"footerNote": { "type": "string", "minLength": 1, "description": "The footer note while the preset applies." },
+									"defaultSort": { "type": "array", "description": "The default sort while the preset applies; same shape as config.defaultSort." },
+									"viewSwitch": { "type": "array", "items": { "type": "string", "enum": ["table", "cards", "board", "map"] }, "description": "The drawn view segments while the preset applies." }
+								}
+							}
+						},
+						"viewSwitch": {
+							"type": "array",
+							"minItems": 1,
+							"uniqueItems": true,
+							"items": { "type": "string", "enum": ["table", "cards", "board", "map"] },
+							"description": "type='index', board look: the segments the view switch draws, e.g. [\"table\", \"cards\", \"board\", \"map\"] as the boards do. A listed mode the page can open is an ordinary segment; one it cannot (no board columns, no map) is drawn disabled and named \"<mode>: not available on this list\". Order is always table, cards, board, map. Ignored without the board look (screens-view-switch-parity). Maps to CnIndexPage `viewSwitch`."
+						},
+						"searchPlaceholder": {
+							"type": "string",
+							"minLength": 1,
+							"description": "type='index': the placeholder (and accessible name) of the list's search field, e.g. \"Search by case, number or requester\". Run through the app's translate, so an English key with a Dutch catalogue entry reads Dutch. Absent: the library's \"Search…\" (screens-index-toolbar-parity). Maps to CnIndexPage `searchPlaceholder`."
+						},
 						"bulkHint": {
 							"type": "string",
 							"minLength": 1,
@@ -4047,6 +4237,38 @@
 							"type": "array",
 							"description": "type='index': the property keys the cards view shows as the facts list of each card, in order; defaults to the first four list columns under the board look (screens-card-parity). Maps to CnIndexPage `cardFields`.",
 							"items": { "type": "string", "minLength": 1 }
+						},
+						"statRow": {
+							"type": "array",
+							"default": [],
+							"description": "type='index': KPI tiles above the list, between the header and the toolbar, in an auto-fit row (each at least 200px). Each entry is a widget definition, usually `type: \"stat\"`; the type resolves through the app's widget registry, then the dashboard catalog (screens-index-stat-row). Maps to CnIndexPage `statRow`.",
+							"items": {
+								"type": "object",
+								"required": ["id", "type"],
+								"properties": {
+									"id": { "type": "string", "minLength": 1 },
+									"type": { "type": "string", "minLength": 1 },
+									"title": { "type": "string" },
+									"content": { "type": "object" },
+									"headerLink": { "type": "object" }
+								}
+							}
+						},
+						"sidePanel": {
+							"type": "array",
+							"default": [],
+							"description": "type='index': titled cards in a 300px column right of the toolbar and the list (above them below 1024px). Each entry is a widget definition with an optional `title` (i18n key) and `headerLink`; the type resolves as for `statRow` (screens-index-stat-row). Maps to CnIndexPage `sidePanel`.",
+							"items": {
+								"type": "object",
+								"required": ["id", "type"],
+								"properties": {
+									"id": { "type": "string", "minLength": 1 },
+									"type": { "type": "string", "minLength": 1 },
+									"title": { "type": "string" },
+									"content": { "type": "object" },
+									"headerLink": { "type": "object" }
+								}
+							}
 						},
 						"headerButtons": {
 							"type": "array",
@@ -4064,6 +4286,12 @@
 									"format": { "type": "string", "enum": ["csv", "excel"], "default": "csv", "description": "For `export`." }
 								}
 							}
+						},
+						"rowTitle": {
+							"type": "string",
+							"enum": ["link", "plain"],
+							"default": "link",
+							"description": "type='index' (screens-table-rows-parity): how the board look draws the table's title column. `link` (the default) is the 15px weight 600 underlined title of the DqZaken board; `plain` is the 15px bold title without an underline over a 13px muted secondary line, as the PqTickets and OcPublicaties boards draw it. The row stays clickable either way. The Nextcloud look ignores it. Maps to CnIndexPage `rowTitle`."
 						},
 						"showTypeEyebrow": {
 							"type": "boolean",
