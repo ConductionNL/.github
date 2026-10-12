@@ -16,6 +16,20 @@
   several Conduction developers. Sections marked "org-wide" describe how the
   shared tooling behaves for everyone; the rest are recommended working
   agreements you are free to change. Delete this comment when you are done.
+
+  Keeping it lean (Anthropic's guidance: under 200 lines, every line should
+  change behaviour):
+  - A rule is one or two sentences plus a one-clause reason. Incident
+    history, dates and issue numbers go in HTML comments like this one:
+    Claude Code strips them before the file is injected, so they cost no
+    tokens but stay readable for you.
+  - Emphasis only on the two or three lines that really go wrong; bold
+    everywhere makes nothing stand out.
+  - Anything that MUST always hold (never push, never merge, read-only
+    production) belongs in a hook, not here: CLAUDE.md is advice.
+  - Two rules that contradict each other get picked arbitrarily; scope them
+    (for example "as PR author" versus "as reviewer").
+  - @imports load at launch, so they save no tokens; they only split files.
 -->
 
 User-scoped, cross-project facts that apply to every Claude Code session on this machine. Project-specific context belongs in the per-project auto-memory directory at `~/.claude/projects/<slug>/memory/`, not here.
@@ -51,6 +65,11 @@ Deliver exactly the thing requested. When something else looks wrong along the w
 
 - Present every command I am expected to run as a **fenced code block** on its own line, never inline-backticked inside prose. A fenced block is a clean copy target.
 - Exactly **one** final, copy-ready command block per handover. Decide everything — commit type, wording, file list — *before* writing it. Never a block with a correction further down: the first block is what gets copied.
+
+## PR review threads: two roles
+
+- As the **author** of a PR: after pushing a fix in response to a review thread, ask yes/no before replying; reply in neutral framing and never resolve the thread, the reviewer does that.
+- As the **reviewer** (`/review-pr`, re-reviews): resolve every thread that is solved, trying the resolution API first and falling back to manual instructions only when that attempt fails.
 
 ## Closing block: PR overview + next steps
 
