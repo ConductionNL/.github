@@ -12339,6 +12339,13 @@ fi
 # NOT diff-scoped: the defect is a rename landing WITHOUT touching the seed, so
 # scoping to a diff that contains the seed would skip exactly the change that
 # causes it.
+#
+# A seed may require a slug a SIBLING app owns, by saying so on its own line:
+#     # hydra-gate-109 external: <slug> owner=<app>
+# The claim is verified, not trusted: the owner must be in the caller's
+# additional-apps (HYDRA_GATE_ADDITIONAL_APPS) and its descriptors, checked out
+# by quality.yml under HYDRA_GATE_SIBLINGS_DIR/<app>, must declare the slug. An
+# owner that cannot be read FAILS and is named; it never passes unchecked.
 # ---------------------------------------------------------------------------
 _srs_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-seed-required-slugs.log
 : > "${_srs_log}"
@@ -12363,7 +12370,7 @@ else
     _srs_n=$(grep -cE '^FAIL ' "${_srs_log}" 2>/dev/null || true)
     case "${_srs_n}" in ''|*[!0-9]*) _srs_n=1 ;; esac
     grep -E '^FAIL ' "${_srs_log}" || true
-    _fail 109 "seed-required-slugs" "${_srs_n} schema slug(s) the e2e seed requires are declared nowhere - the seed would exit before Playwright starts and every spec would report as NOT RUN - see ${_srs_log}"
+    _fail 109 "seed-required-slugs" "${_srs_n} schema slug(s) the e2e seed requires are declared nowhere, or claimed from an owner that does not declare them or cannot be read - the seed would exit before Playwright starts and every spec would report as NOT RUN - see ${_srs_log}"
 fi
 
 # GATE 108 — shipped-object-properties

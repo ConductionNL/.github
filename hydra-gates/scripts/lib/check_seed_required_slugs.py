@@ -43,11 +43,33 @@ WHAT IT DELIBERATELY DOES NOT CHECK
   in both directions.
 * It does not look at registers, only schemas. The register list is a different
   shape and a different failure.
-* A slug another app owns is gate 106's subject, not this one's. A seed may
-  legitimately require a schema a sibling app declares — buildiq's export
-  bundler reads hermiq's `agent` on purpose — so a slug this app does not
-  declare is reported only when the app declares NOTHING resembling it. See
-  `_unresolved` for the exact rule.
+* Whether an app SHOULD own a slug. That is gate 106's subject. This gate
+  only asks that the seed's requirement can be met.
+
+A SLUG ANOTHER APP OWNS: THE ANNOTATION, AND THE CLAIM IS VERIFIED
+
+A seed may legitimately require a schema a sibling app declares (buildiq's
+export bundler reads hermiq's `agent`; since decision 196 buildiq's seed reads
+openregister's `decision-table`). The seed says so on a line of its own:
+
+    # hydra-gate-109 external: decision-table owner=openregister
+
+The same `hydra-gate-<n> <verb>:` shape as the `hydra-gate-98 held:` marker in
+info.xml. An annotation is a CLAIM, and the gate checks it rather than trusting
+it:
+
+  * the owner must be in the app's CI `additional-apps` / `e2e-additional-apps`
+    (the workflow hands the gate that list as HYDRA_GATE_ADDITIONAL_APPS);
+  * the owner's descriptors, read from the checkout the workflow made at the ref
+    it installs (HYDRA_GATE_SIBLINGS_DIR/<owner>), must really declare the slug,
+    by the same merged-view resolution used for the app's own;
+  * if any of that cannot be read the gate FAILS and names what it could not
+    read. A check that did not run looks exactly like one that passed.
+
+An annotation nothing in the seed needs (the slug is not required, or the app
+declares it itself) is reported as STALE. That is a warning, not a failure.
+A `hydra-gate-109` line that does not parse is a failure: a typo in the
+directive must not turn into an unchecked requirement.
 
 Exit codes: 0 pass, 1 findings, 2 usage/wiring.
 """
@@ -56,6 +78,9 @@ import json
 import os
 import re
 import sys
+
+ENV_APPS = 'HYDRA_GATE_ADDITIONAL_APPS'
+ENV_SIBLINGS = 'HYDRA_GATE_SIBLINGS_DIR'
 
 SEED = os.path.join('tests', 'e2e', 'ci-seed.sh')
 
@@ -167,6 +192,88 @@ def _required_slugs(app_dir):
     return [m for m in _SLUG_RE.findall(match.group('body'))]
 
 
+# `# hydra-gate-109 external: <slug> owner=<app>`
+_ANNOTATION_RE = re.compile(
+    r"^\s*#\s*hydra-gate-109\s+external:\s*(?P<slug>[A-Za-z0-9_.\-]+)"
+    r"\s+owner=(?P<owner>[A-Za-z0-9_.\-]+)\s*$"
+)
+_DIRECTIVE_RE = re.compile(r"^\s*#\s*hydra-gate-109\b")
+
+
+def _annotations(app_dir):
+    """(claims, malformed): claims is a list of (slug, owner, lineno).
+
+    Malformed lines are returned, never skipped: a misspelt directive that is
+    silently ignored leaves the slug as an unannotated finding at best and, at
+    worst, an annotation nobody checks.
+    """
+    path = os.path.join(app_dir, SEED)
+    claims, malformed = [], []
+    if not os.path.isfile(path):
+        return claims, malformed
+    with open(path, encoding='utf-8') as fh:
+        for n, line in enumerate(fh, 1):
+            if not _DIRECTIVE_RE.match(line):
+                continue
+            m = _ANNOTATION_RE.match(line.rstrip('\n'))
+            if m:
+                claims.append((m.group('slug'), m.group('owner'), n))
+            else:
+                malformed.append((n, line.strip()))
+    return claims, malformed
+
+
+def _installed_apps():
+    """Names in the CI additional-apps lists, or None when not supplied.
+
+    None and [] are different answers and must stay different: None means the
+    gate was not told, so it cannot say whether the owner is installed.
+    """
+    raw = os.environ.get(ENV_APPS)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        return None
+    names = set()
+    # The workflow passes the two lists concatenated; accept either a flat
+    # array or an array of arrays.
+    stack = [doc]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, list):
+            stack.extend(item)
+        elif isinstance(item, dict) and item.get('app'):
+            names.add(str(item['app']))
+    return names
+
+
+def _verify_claim(slug, owner, installed):
+    """None when the owner really declares `slug`, else why it does not."""
+    if installed is None:
+        return (f"cannot verify owner '{owner}': {ENV_APPS} was not provided, "
+                f"so the gate does not know what this app's CI installs")
+    if owner not in installed:
+        return (f"owner '{owner}' is not in this app's CI additional-apps / "
+                f"e2e-additional-apps, so it is not installed when the seed runs")
+    base = os.environ.get(ENV_SIBLINGS, '')
+    if not base:
+        return (f"cannot read owner '{owner}': {ENV_SIBLINGS} was not provided "
+                f"(the workflow checks installed apps out there)")
+    owner_dir = os.path.join(base, owner)
+    if not os.path.isdir(owner_dir):
+        return f"cannot read owner '{owner}': {owner_dir} does not exist"
+    declared = _declared_slugs(owner_dir)
+    if not declared:
+        return (f"cannot read owner '{owner}': no descriptor under {owner_dir} "
+                f"(lib/Settings, tests/e2e, appinfo) declares any schema")
+    if slug.lower() not in {d.lower() for d in declared}:
+        return (f"owner '{owner}' declares {len(declared)} schema slug(s) and "
+                f"none is '{slug}'")
+    return None
+
+
 def _unresolved(required, declared):
     """Required slugs this app declares nothing for.
 
@@ -197,17 +304,52 @@ def main():
         return 2
 
     findings = _unresolved(required, declared)
+    claims, malformed = _annotations(args.app_dir)
+    lowered_local = {d.lower() for d in declared}
+    lowered_required = {r.lower() for r in required}
+    installed = _installed_apps() if claims else None
+
+    external = 0
+    extra = []
+    for n, text in malformed:
+        extra.append(f"FAIL {SEED}:{n}: unparseable hydra-gate-109 directive "
+                     f"'{text}'. Expected "
+                     f"'# hydra-gate-109 external: <slug> owner=<app>'.")
+    claimed = set()
+    for slug, owner, n in claims:
+        low = slug.lower()
+        if low not in lowered_required:
+            print(f"STALE {SEED}:{n}: annotation for '{slug}' "
+                  f"(owner={owner}) but the seed does not require it.")
+            continue
+        if low in lowered_local:
+            print(f"STALE {SEED}:{n}: annotation for '{slug}' "
+                  f"(owner={owner}) but this app declares it itself.")
+            continue
+        claimed.add(low)
+        why = _verify_claim(slug, owner, installed)
+        if why is None:
+            external += 1
+        else:
+            extra.append(f"FAIL {SEED}:{n}: annotation '{slug}' "
+                         f"owner={owner}: {why}.")
+
+    # An annotated slug is judged by its claim above, not by the local list.
+    findings = [f for f in findings if f.lower() not in claimed]
     for slug in findings:
         print(f"FAIL {SEED}: requires schema slug '{slug}', which no "
               f"descriptor under lib/Settings declares. The seed exits before "
               f"Playwright starts, so every spec would report as NOT RUN.")
+    for line in extra:
+        print(line)
+    findings = findings + extra
 
     # 🔴 A TERMINAL SUMMARY, SO A CRASH IS NOT READ AS A FINDING. The runner
     # checks for this line before believing a non-zero exit (.github#374): a
     # checker that dies half way through otherwise reports as a clean failure
     # with however many findings it managed to print.
     print(f'checked {len(required)} required slug(s) against '
-          f'{len(declared)} declared')
+          f'{len(declared)} declared ({external} via external owner)')
 
     if args.mode == 'report':
         return 0

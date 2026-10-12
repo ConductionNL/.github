@@ -8047,12 +8047,19 @@ jobs:
     # which is how a PR keeps its mechanical feedback while someone fixes an
     # unrelated Playwright job.
     timeout-minutes: 20
+    # READ-ONLY TOKEN, AND NO TOKEN ON DISK. This job now clones the caller's
+    # `additional-apps` (below) so gate 109 can verify a slug an app borrows
+    # from a sibling. Same rule as every other job that touches those repos
+    # (keepiq#881), asserted by scripts/assert-sibling-jobs-read-only-token.py.
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout app
         uses: actions/checkout@v4
         with:
           path: app
+          persist-credentials: false
           # fetch-depth: 0 is REQUIRED, not an optimisation. The gates are
           # diff-scoped; a shallow clone has no base branch to diff against, so
           # the base would not resolve and the run would (correctly) exit 99.
@@ -8064,6 +8071,44 @@ jobs:
           repository: ConductionNL/.github
           ref: ${{ inputs.hydra-gates-ref }}
           path: gates
+          persist-credentials: false
+
+      # ── Sibling apps, so a slug an app BORROWS can be verified ────────────
+      #
+      # Gate 109 lets a seed require a schema slug another app owns, but only
+      # on the seed's say-so PLUS the owner's descriptors actually declaring it
+      # (`# hydra-gate-109 external: <slug> owner=<app>`). This job checks out
+      # one repository, so without this step the gate could not read the owner
+      # and would have to either trust the annotation or fail every time.
+      #
+      # It clones the SAME lists, at the SAME refs, that the phpunit and
+      # browser jobs install, so "the owner declares it" is judged against the
+      # code the seed really runs next to.
+      #
+      # A clone that fails does NOT fail this step and is NOT retried: the gate
+      # fails, naming the owner and the directory it could not read, and only
+      # when an annotation depends on it. A failure here for an app whose seed
+      # borrows nothing would be a red build about nothing.
+      - name: Check out additional apps for gate 109
+        env:
+          ADDITIONAL_APPS: ${{ inputs.additional-apps }}
+          E2E_ADDITIONAL_APPS: ${{ inputs.e2e-additional-apps }}
+        run: |
+          set -u
+          SIB="${RUNNER_TEMP}/gate-siblings"
+          mkdir -p "${SIB}"
+          printf '%s\n%s\n' "${ADDITIONAL_APPS}" "${E2E_ADDITIONAL_APPS}" \
+            | jq -c -s 'add // [] | .[]' | while read -r app; do
+              repo=$(echo "$app" | jq -r '.repo')
+              name=$(echo "$app" | jq -r '.app')
+              ref=$(echo "$app" | jq -r '.ref // "main"')
+              if git clone --depth 1 --branch "$ref" "https://github.com/$repo.git" "${SIB}/$name"; then
+                echo "gate 109: read $repo ($name) at $ref"
+              else
+                echo "::warning::gate 109: could not clone $repo ($name) at $ref. A seed annotation naming $name as owner will FAIL, naming this directory."
+              fi
+            done
+          echo "HYDRA_GATE_SIBLINGS_DIR=${SIB}" >> "$GITHUB_ENV"
 
       # ── Does the PINNED gate package know what "not applicable" means? ─────
       #
@@ -8459,6 +8504,10 @@ jobs:
           # from the caller's declaration rather than from whatever the runner
           # defaults to.
           HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING: ${{ inputs.hydra-gates-e2e-anchor-blocking && '1' || '0' }}
+          # Gate 109: the apps this caller's CI installs (both lists, as two
+          # JSON arrays). Passed even when both are `[]`, so "installs nothing"
+          # and "was not told" stay different answers.
+          HYDRA_GATE_ADDITIONAL_APPS: "[${{ inputs.additional-apps }},${{ inputs.e2e-additional-apps }}]"
         run: |
           set -u
           ARGS="--app-dir ${GITHUB_WORKSPACE}/app"
