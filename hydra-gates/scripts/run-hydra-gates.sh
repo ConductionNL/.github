@@ -13356,6 +13356,88 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 119 · procedure-code
+#
+# Decision 182 (Ruben, 10 Oct 2026): procedures are configuration, code is
+# generic. A Dutch procedure (woo, bezwaar, beschikking, vth, subsidie,
+# leerplicht, ...) belongs in a schema, a workflow or a template, not in a
+# class named after it. This gate counts the PHP, JS, TS and Vue files under
+# lib/ and src/ whose path or declared class name carries a procedure token,
+# leaves out national-standard adapters (zgw, ztc, stuf, brp, kvk, ... and the
+# lib/Adapter and lib/Service/Zgw paths), and holds the count to the number
+# committed in `.procedure-code-baseline.json`:
+#
+#     {"count": 12}
+#
+# A RATCHET, in both directions, the way the custom-widget ratchet (gate 29)
+# is one. A change that raises the count FAILS. A change that lowers it FAILS
+# too, until it lowers the baseline in the same PR, and the message says to
+# what. A change that raises the baseline FAILS (needs a delta base).
+#
+# THE TOKENS AND THE ALLOWLIST live in scripts/lib/procedure_code_tokens.json,
+# one file, and nowhere else.
+#
+# NO BASELINE FILE IS NOT APPLICABLE, NEVER PASS. The PR that adds this gate
+# adds no baseline to any app, and an app with no baseline has had nothing
+# measured. Each app opts in by committing the file; until it does, the gate
+# says so. DO NOT MERGE THIS GATE BEFORE EVERY FLEET APP HAS A BASELINE, or the
+# fleet reads NOT APPLICABLE for a rule it believes is enforced.
+#
+# NOT A DELTA GATE: the count is of the whole tree against the committed
+# number, so it needs no base to judge. A base only adds the baseline-raised
+# check.
+# ---------------------------------------------------------------------------
+if [ -d lib ] || [ -d src ]; then
+    _pc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-procedure-code.log
+    : > "${_pc_log}"
+    _pc_helper="${SCRIPT_DIR}/lib/check_procedure_code.py"
+    if [ ! -f "${_pc_helper}" ]; then
+        _skip 119 "procedure-code" wiring "check_procedure_code.py not found at ${_pc_helper}, so procedure-named code was NOT counted by this run."
+    elif ! command -v python3 > /dev/null 2>&1; then
+        _skip 119 "procedure-code" wiring "python3 is not on PATH, so procedure-named code was NOT counted by this run."
+    else
+        _pc_args=()
+        if [ "${HAVE_DELTA_BASE}" = "1" ] && [ -n "${BASE_REF}" ] && [ "${BASE_REF}" != "${_empty_tree:-}" ]; then
+            _pc_args=(--base "${BASE_REF}")
+        fi
+        set +e
+        python3 "${_pc_helper}" . "${_pc_args[@]}" --list > "${_pc_log}" 2>&1
+        _pc_rc=$?
+        set +e
+        grep -E '^\[gate-119\] procedure-code: counted ' "${_pc_log}" 2>/dev/null | tail -1
+        case "${_pc_rc}" in
+            0)
+                if _helper_finished "${_pc_log}" '^\[gate-119\] procedure-code: counted [0-9]+ file'; then
+                    _pass 119 "procedure-code"
+                else
+                    _skip 119 "procedure-code" wiring "check_procedure_code.py exited 0 without its census line, so the count is UNVERIFIED by this run. See ${_pc_log}."
+                fi
+                ;;
+            1)
+                if _helper_finished "${_pc_log}" '^\[gate-119\] procedure-code: FAIL: [0-9]+ finding'; then
+                    grep -E '^  [^ ]' "${_pc_log}" 2>/dev/null | grep -vE '^  (counted|allowlisted) '
+                    _pc_n=$(sed -n 's/^\[gate-119\] procedure-code: FAIL: \([0-9]*\) finding.*/\1/p' "${_pc_log}" | tail -1)
+                    _fail 119 "procedure-code" "${_pc_n:-1} finding(s): the count of procedure-named files no longer matches .procedure-code-baseline.json (decision 182: procedures are configuration, code is generic). See ${_pc_log}"
+                else
+                    # A CRASH IS NOT A FINDING. A Python traceback also exits 1.
+                    _pc_why=$(tail -3 "${_pc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                    _skip 119 "procedure-code" wiring "check_procedure_code.py exited 1 without its FAIL summary, so it did not finish and the count is UNVERIFIED by this run. Checker output: ${_pc_why:-<empty>}. See ${_pc_log}."
+                fi
+                ;;
+            4)
+                _skip 119 "procedure-code" na "this app has no .procedure-code-baseline.json, so there is no committed count to hold the code to. Not a pass: nothing was compared. Commit the baseline to opt in."
+                ;;
+            *)
+                _pc_why=$(tail -3 "${_pc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                _skip 119 "procedure-code" wiring "check_procedure_code.py exited ${_pc_rc} without a verdict, so the count is UNVERIFIED by this run. Checker output: ${_pc_why:-<empty>}. See ${_pc_log}."
+                ;;
+        esac
+    fi
+else
+    _skip 119 "procedure-code" na "this repo has neither lib/ nor src/, so there is no code to count."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
