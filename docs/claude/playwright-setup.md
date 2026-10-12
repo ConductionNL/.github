@@ -7,7 +7,7 @@ Claude Code drives browsers through [`@playwright/mcp`](https://github.com/micro
 
 So the setup is: one browser per project by default, and the seven-browser pool as an opt-in that points at a single shared server.
 
-> Background: on 2026-09-08 Hydra shipped the seven-browser pool as its root `.mcp.json` ([hydra#651](https://github.com/ConductionNL/hydra/pull/651)). Fourteen open Claude Code sessions then held 98 idle MCP processes and ~6 GB, and WSL ran out of memory. Hydra reverted to `browser-1` only and moved the pool to `.claude/mcp/`.
+> Background: on 2026-09-08 Hydra shipped the seven-browser pool as its root `.mcp.json` ([hydra#651](https://github.com/ConductionNL/hydra/pull/651)). Fourteen open Claude Code sessions then held 98 idle MCP processes and ~6 GB, and WSL ran out of memory. Hydra reverted to `browser-1` only and moved the pool to `.claude/mcp/`. Since [hydra#750](https://github.com/ConductionNL/hydra/pull/750) that `browser-1` is itself a URL to the shared server.
 
 ## Default: `browser-1` in `.mcp.json`
 
@@ -24,7 +24,7 @@ Each project ships a `.mcp.json` at its root with a single headless browser. Cop
 }
 ```
 
-Hydra ships this file at its repository root (`hydra/.mcp.json`) and the pools under `hydra/.claude/mcp/`. A workspace that symlinks Hydra's `.claude/skills` should symlink both, so the browsers travel with the skills that depend on them:
+Hydra's own root `.mcp.json` (`hydra/.mcp.json`) goes one step further: its `browser-1` is `{"type": "http", "url": "http://localhost:8931/mcp"}`, so a session costs a connection instead of an idle stdio process. That needs [the shared server](#the-shared-server) installed once per machine; without it `browser-1` shows as failed in `/mcp` and nothing else breaks. Hydra keeps the pools under `hydra/.claude/mcp/`. A workspace that symlinks Hydra's `.claude/skills` should symlink both, so the browsers travel with the skills that depend on them:
 
 ```bash
 ln -sfn /path/to/hydra/.mcp.json   /path/to/workspace/.mcp.json
@@ -95,7 +95,7 @@ Verify with `claude mcp list`. Remove one with `claude mcp remove --scope user b
 
 ## Verification
 
-After reload, open the MCP servers panel and check that `browser-1` shows **Connected** (plus whatever pool entries you registered):
+After reload, open the MCP servers panel and check that `browser-1` shows **Connected** (plus whatever pool entries you registered). In a workspace that uses Hydra's `.mcp.json`, `browser-1` only connects while the shared server runs:
 
 - Type `/MCP servers` in the Claude Code chat input
 - Or `Ctrl+Shift+P` → search **"MCP servers"**
