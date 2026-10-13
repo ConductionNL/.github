@@ -95,6 +95,14 @@ README and docs are for users and contributors; commit messages are for future m
 - Commit messages, PR titles and PR descriptions are **always English**, regardless of the repository's language.
 - Commit subjects follow Conventional Commits and must stand on their own. Conduction repos allow merge, squash and rebase merges and the practice differs per repo (e.g. `.github` and `nextcloud-vue` mostly use merge commits, `openregister` mostly squashes), so check the repo's recent history before assuming a WIP commit will disappear behind the PR title.
 
+## References outside the ConductionNL org: ask first
+
+Never reference a pull request or issue outside the ConductionNL org in text GitHub renders (issue or PR body, comment, review comment, commit message) without asking me first, neither as a URL nor as `owner/repo#N`: GitHub puts a cross-reference on the other party's PR that everyone sees, and editing it away later does not remove it. Describe it in words instead. A link to a repository root, and references in Slack, Jira or local files, create no cross-reference.
+
+<!-- 2026-10: an internal ConductionNL issue linked an open PR in an upstream
+     Nextcloud repository; the cross-reference stayed on that PR after the link
+     was edited out, and a colleague asked not to do that again. -->
+
 ## CI / supply chain
 
 - Pin third-party GitHub Actions to a full commit SHA, tag in a trailing comment (`uses: actions/checkout@<sha> # v4`). No floating tags. First-party reusable workflows (`ConductionNL/.github/.github/workflows/*.yml@main`) are referenced by branch on purpose; that is the fleet's convention, not a pinning gap.
