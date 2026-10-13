@@ -66,6 +66,12 @@ Deliver exactly the thing requested. When something else looks wrong along the w
 - Present every command I am expected to run as a **fenced code block** on its own line, never inline-backticked inside prose. A fenced block is a clean copy target.
 - Exactly **one** final, copy-ready command block per handover. Decide everything — commit type, wording, file list — *before* writing it. Never a block with a correction further down: the first block is what gets copied.
 
+## Short labels in replies: never bare
+
+A label that only means something inside its source document is opaque in a reply, whatever its letter or numbering: a plan finding (F8), a review finding (f2, F2–F4), an audit item (A1), a question (Q3), a plan step, a revision (r26), a scenario number, a tracking tag. I read the reply without that document open. Every first mention carries, in parentheses, what it is and preferably a link (plan line, issue, PR, review thread): "F8 (the search page returns 500 when a catalogue points at an unknown register, [plan](…))".
+
+<!-- Why: a reply asked "what do you want to do with F8?" and the label only existed in a plan; a tracking tag like "WOO-527b" was read as a different ticket. A first version of this rule named only F8, so it did not obviously cover f2, F2–F4 or A1: name the kind of label, not one example. -->
+
 ## PR review threads: two roles
 
 - As the **author** of a PR: after pushing a fix in response to a review thread, ask yes/no before replying; reply in neutral framing and never resolve the thread, the reviewer does that.
