@@ -97,6 +97,7 @@ interface LifecycleGuardInterface {
 }//end interface
 '
 
+# shellcheck disable=SC2016  # PHP source: single quotes are REQUIRED
 _STUB_IFACE_NOPARAM='<?php
 
 namespace OCA\OpenRegister\Lifecycle;
@@ -110,6 +111,7 @@ interface LifecycleGuardInterface {
 }//end interface
 '
 
+# shellcheck disable=SC2016  # PHP source: single quotes are REQUIRED
 _GUARD='<?php
 
 namespace OCA\Learniq\Service;
@@ -137,6 +139,7 @@ class WalletClaimSyncService implements LifecycleGuardInterface {
 }//end class
 '
 
+# shellcheck disable=SC2016  # PHP source: single quotes are REQUIRED
 _GUARD_UNMARKED='<?php
 
 namespace OCA\Learniq\Service;
@@ -164,6 +167,7 @@ class WalletClaimSyncService implements LifecycleGuardInterface {
 }//end class
 '
 
+# shellcheck disable=SC2016  # PHP source: single quotes are REQUIRED
 _FREE_THEN_USE='<?php
 
 namespace OCA\Learniq\Service;
@@ -198,6 +202,7 @@ class PermissionService {
 }//end class
 '
 
+# shellcheck disable=SC2016  # PHP source: single quotes are REQUIRED
 _FREE_MARKED='<?php
 
 namespace OCA\Learniq\Service;

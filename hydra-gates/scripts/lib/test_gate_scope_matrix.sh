@@ -96,7 +96,7 @@ printf '\n- unrelated doc tweak\n' >> "${WORK}/inherited/docs/CHANGELOG.md"
 gf_commit_paths "${WORK}/inherited" "docs: unrelated change" docs/CHANGELOG.md
 
 _pc="$(cd "${WORK}/inherited" && python3 "${CHECKER}" . --all 2>&1)"
-if printf '%s' "${_pc}" | grep -qF 'lib/Listener/InheritedDebtListener.php'; then
+if grep -qF 'lib/Listener/InheritedDebtListener.php' <<< "${_pc}"; then
     _ok "positive control: checker --all NAMES lib/Listener/InheritedDebtListener.php"
 else
     echo "FAIL — the positive control did not fire: check_listener_placement.py --all"
@@ -107,7 +107,7 @@ else
     printf '%s\n' "${_pc}" | sed 's/^/       /'
     exit 1
 fi
-if printf '%s' "${_pc}" | grep -qE 'checked 1 post-event registration'; then
+if grep -qE 'checked 1 post-event registration' <<< "${_pc}"; then
     _ok "positive control: exactly 1 registration is present to be judged"
 else
     _bad "positive control: expected 'checked 1 post-event registration', got: $(printf '%s' "${_pc}" | tail -2 | tr '\n' ' ')"
@@ -182,8 +182,8 @@ gf_commit_all "${WORK}/inherited-nobase" "docs: unrelated change"
 
 _out="$(gf_run_wrapper "${WORK}/inherited-nobase" "${WORK}/log-full")"
 
-if printf '%s' "${_out}" | grep -qF 'SCOPE-MODE: full' \
-    && printf '%s' "${_out}" | grep -qF 'Delta base: NONE'; then
+if grep -qF 'SCOPE-MODE: full' <<< "${_out}" \
+    && grep -qF 'Delta base: NONE' <<< "${_out}"; then
     _ok "the run states BOTH its file scope (full) and that it resolved no delta base"
 else
     _bad "the run did not state both 'SCOPE-MODE: full' and 'Delta base: NONE'; the rest of this arm is unsafe to interpret because nothing pins which inputs produced it"
@@ -207,19 +207,19 @@ case "${_v}" in
         ;;
     *)  _bad "gate-61 on --full gave an unrecognised verdict: ${_v:0:160}" ;;
 esac
-if printf '%s' "${_v}" | grep -qF 'out of scope'; then
+if grep -qF 'out of scope' <<< "${_v}"; then
     _bad ".github#347 is LIVE: gate-61 on --full still claims 'the diff ... put every post-event registration out of scope', on a run whose own preamble says it computed no diff, over a tree whose single registration the positive control just failed. 0 of 1 inspected, and the reason cites a diff that does not exist."
 else
     _ok "gate-61's --full reason no longer claims a diff excluded anything"
 fi
-if printf '%s' "${_v}" | grep -qF 'computed NO diff'; then
+if grep -qF 'computed NO diff' <<< "${_v}"; then
     _ok "gate-61's --full reason names the ABSENCE of a diff — the falsifiable form"
 else
     _bad "gate-61's --full reason does not state that the run computed no diff, so a reader still cannot tell an empty scope from an empty tree: ${_v:0:200}"
 fi
 # The size of what went unread must be stated, or the skip is unfalsifiable in
 # the other direction: '0 of 1' and '0 of 45' print identically without it.
-if printf '%s' "${_v}" | grep -qE 'ADVISORY.*[0-9]+ registration\(s\) carrying [0-9]+ finding\(s\)'; then
+if grep -qE 'ADVISORY.*[0-9]+ registration\(s\) carrying [0-9]+ finding\(s\)' <<< "${_v}"; then
     _ok "gate-61's --full skip states the size of the backlog it did not inspect"
 else
     _bad "gate-61's --full skip does not state how many registrations went unread — the advisory sweep is missing, so '0 of 1' and '0 of 45' are typographically identical: ${_v:0:200}"
@@ -242,7 +242,7 @@ echo "== arm 3b — FULL file scope WITH a delta base (the new common case) =="
 # the claim rather than trust it.
 _outb="$(gf_run_wrapper "${WORK}/inherited" "${WORK}/log-full-base")"
 
-if printf '%s' "${_outb}" | grep -qE '^\[hydra-gates\] Delta base: [^N]'; then
+if grep -qE '^\[hydra-gates\] Delta base: [^N]' <<< "${_outb}"; then
     _ok "the full-scope run resolved a delta base and NAMED it"
 else
     _bad "the full-scope run resolved no delta base though the fixture has refs/remotes/origin/development — arm 3b would then be re-measuring arm 3 and proving nothing"
@@ -261,8 +261,8 @@ esac
 
 # A reason may name a diff ONLY on a run that computed one. Asserted from the
 # other side here, so the pair pins both directions.
-if printf '%s' "${_vb}" | grep -qF 'the diff against'; then
-    if printf '%s' "${_outb}" | grep -qE '^\[hydra-gates\] Delta base: [^N]'; then
+if grep -qF 'the diff against' <<< "${_vb}"; then
+    if grep -qE '^\[hydra-gates\] Delta base: [^N]' <<< "${_outb}"; then
         _ok "gate-61 names the diff it was actually given, on a run that printed that base — a checkable claim, not #347's unfalsifiable one"
     else
         _bad ".github#347 IS LIVE BY A NEW ROUTE: gate-61 names a diff on a run that announced no delta base"
@@ -272,7 +272,7 @@ fi
 # The backlog SIZE must be stated here too. This is now the common path, and
 # without it '0 of 1' and '0 of 45' print identically on every PR in the fleet —
 # the exact ambiguity the advisory sweep was added to remove on the other path.
-if printf '%s' "${_vb}" | grep -qE 'ADVISORY.*[0-9]+ registration\(s\) carrying [0-9]+ finding\(s\)'; then
+if grep -qE 'ADVISORY.*[0-9]+ registration\(s\) carrying [0-9]+ finding\(s\)' <<< "${_vb}"; then
     _ok "gate-61 states the size of the backlog it did not inspect at FULL scope too, not only when there is no base"
 else
     _bad "gate-61's full-scope skip does not state how many registrations went unread. This is the common case now, so the ambiguity the advisory sweep removed on the no-base path has simply moved to the path everyone runs: ${_vb:0:200}"
@@ -321,7 +321,7 @@ _known_defect "wording (unfiled)" \
 
 # And the legitimate wording must STAY legitimate.
 _v29="$(gf_verdict "${_out}" 29)"
-if printf '%s' "${_v29}" | grep -qF 'intrinsically diff-relative'; then
+if grep -qF 'intrinsically diff-relative' <<< "${_v29}"; then
     _ok "gate-29 declines on --full with an honest reason ('intrinsically diff-relative') — the good pattern"
 else
     _bad "gate-29's --full reason changed; it used to state honestly that the run is not diff-scoped. Got: ${_v29:0:140}"
@@ -336,7 +336,7 @@ echo "== coverage accounting: NOT APPLICABLE must carry a reason =="
 _bare=0
 while IFS= read -r _line; do
     # everything after "NOT APPLICABLE" should be an em-dash + prose
-    if ! printf '%s' "${_line}" | grep -qE 'NOT APPLICABLE (—|-) .{20,}'; then
+    if ! grep -qE 'NOT APPLICABLE (—|-) .{20,}' <<< "${_line}"; then
         echo "       bare: ${_line:0:120}"
         _bare=$((_bare + 1))
     fi
