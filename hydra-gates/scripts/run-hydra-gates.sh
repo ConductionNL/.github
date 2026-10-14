@@ -13445,6 +13445,72 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# gate-120: register-version-needs-app-version
+#
+# An app's register configuration (lib/Settings/<app>_register.json and its
+# register.d fragments) reaches an existing instance only through the app's
+# InitializeSettings repair step, and `occ upgrade` runs repair steps only when
+# appinfo/info.xml <version> changes. A PR that raises a register document's
+# info.version, or a register's effective version (components.registers.<slug>
+# .version after the register.d merge), and leaves <version> alone ships a
+# register change no running instance imports. Measured: portaliq #1549 and pipelinq #2471, one week of
+# October 2026, both closing a register to a staff group, both live-open until
+# a follow-up release PR raised the app version.
+#
+# A DELTA RULE. Without a base there is no change to judge, so it is NOT
+# APPLICABLE, never PASS. A mock (`x-openregister.type: mock`) is not counted:
+# sample data is imported on demand, never by a repair step.
+# ---------------------------------------------------------------------------
+if [ -f appinfo/info.xml ] && [ -d lib/Settings ]; then
+    _rv_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-register-version.log
+    : > "${_rv_log}"
+    _rv_helper="${SCRIPT_DIR}/lib/check_register_version_bump.py"
+    if [ ! -f "${_rv_helper}" ]; then
+        _skip 120 "register-version-needs-app-version" wiring "check_register_version_bump.py not found at ${_rv_helper}, so register version changes were NOT checked by this run."
+    elif ! command -v python3 > /dev/null 2>&1; then
+        _skip 120 "register-version-needs-app-version" wiring "python3 is not on PATH, so register version changes were NOT checked by this run."
+    elif [ "${HAVE_DELTA_BASE}" != "1" ] || [ -z "${BASE_REF}" ] || [ "${BASE_REF}" = "${_empty_tree:-}" ]; then
+        _skip 120 "register-version-needs-app-version" na "no delta base, and this rule compares a change against its base. Give the run a base (--base <ref> or HYDRA_GATE_BASE_REF) to judge it."
+    else
+        set +e
+        python3 "${_rv_helper}" . --base "${BASE_REF}" > "${_rv_log}" 2>&1
+        _rv_rc=$?
+        set +e
+        grep -E '^\[gate-120\] register-version-needs-app-version: checked ' "${_rv_log}" 2>/dev/null | tail -1
+        case "${_rv_rc}" in
+            0)
+                if _helper_finished "${_rv_log}" '^\[gate-120\] register-version-needs-app-version: checked [0-9]+ document'; then
+                    _pass 120 "register-version-needs-app-version"
+                else
+                    _skip 120 "register-version-needs-app-version" wiring "check_register_version_bump.py exited 0 without its census line, so the change is UNVERIFIED by this run. See ${_rv_log}."
+                fi
+                ;;
+            1)
+                if _helper_finished "${_rv_log}" '^\[gate-120\] register-version-needs-app-version: FAIL: [0-9]+ finding'; then
+                    grep -E '^  ' "${_rv_log}" 2>/dev/null
+                    _rv_n=$(sed -n 's/^\[gate-120\] register-version-needs-app-version: FAIL: \([0-9]*\) finding.*/\1/p' "${_rv_log}" | tail -1)
+                    _fail 120 "register-version-needs-app-version" "${_rv_n:-1} register document(s) changed info.version while appinfo/info.xml <version> did not, so no existing instance imports the change. Raise <version> in this PR. See ${_rv_log}"
+                else
+                    # A CRASH IS NOT A FINDING. A Python traceback also exits 1.
+                    _rv_why=$(tail -3 "${_rv_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                    _skip 120 "register-version-needs-app-version" wiring "check_register_version_bump.py exited 1 without its FAIL summary, so it did not finish and the change is UNVERIFIED by this run. Checker output: ${_rv_why:-<empty>}. See ${_rv_log}."
+                fi
+                ;;
+            4)
+                _rv_why=$(tail -1 "${_rv_log}" 2>/dev/null | cut -c1-200)
+                _skip 120 "register-version-needs-app-version" na "${_rv_why:-the checker found nothing to compare}"
+                ;;
+            *)
+                _rv_why=$(tail -3 "${_rv_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                _skip 120 "register-version-needs-app-version" wiring "check_register_version_bump.py exited ${_rv_rc} without a verdict, so the change is UNVERIFIED by this run. Checker output: ${_rv_why:-<empty>}. See ${_rv_log}."
+                ;;
+        esac
+    fi
+else
+    _skip 120 "register-version-needs-app-version" na "this repo has no appinfo/info.xml or no lib/Settings, so it ships no register configuration a repair step imports."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
