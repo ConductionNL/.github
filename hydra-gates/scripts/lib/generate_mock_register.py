@@ -422,9 +422,20 @@ def _value(name: str, spec: dict, index: int, depth: int = 0) -> Any:
             low += 1
         value = low + index
         high = spec.get("maximum")
-        if high is not None:
+        if high is not None and not isinstance(high, bool):
             try:
-                value = min(value, int(high))
+                # float(), not int(), for the same reason as the minimum above:
+                # `minimum: 0.5, maximum: 0.99` clamped to int(0.99) = 0, a
+                # value BELOW its own minimum. dossiq's `stoppingRule.targetRecall`
+                # carried 0.0 in all three demo rows because of it, and gate 101
+                # then failed any pull request that changed the register. An
+                # integer is clamped to the last whole number inside the band.
+                import math  # noqa: PLC0415
+
+                ceiling = float(high)
+                if kind == "integer":
+                    ceiling = float(math.floor(ceiling))
+                value = min(value, ceiling)
             except (TypeError, ValueError):
                 pass
         # 🔴 `multipleOf` IS A CONSTRAINT, AND FLOATS DO NOT SATISFY IT BY LUCK.
