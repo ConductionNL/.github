@@ -59,6 +59,14 @@ networks:
   default:
     name: conduction-network
 
+# Every service rotates its container log: 3 files of 50 MB at most. Without this Docker keeps
+# a container log forever; conduction-postgres alone reached 2.6 GB on 14 Oct 2026 and filled C:.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   # ===========================================================================
   # Core Services (start by default)
@@ -67,6 +75,7 @@ services:
   # PostgreSQL Database (default)
   # Recommended for production use with vector search capabilities
   db:
+    logging: *default-logging
     image: pgvector/pgvector:pg16
     restart: always
     container_name: conduction-postgres
@@ -111,6 +120,7 @@ services:
   # Access at: http://localhost:8080
   # Default credentials: admin / admin
   nextcloud:
+    logging: *default-logging
     user: root
     container_name: nextcloud
     deploy:
@@ -301,6 +311,7 @@ services:
   # n8n ExApp - Workflow Automation (starts by default)
   # Access via Nextcloud: /index.php/apps/app_api/proxy/n8n
   exapp-n8n:
+    logging: *default-logging
     image: ghcr.io/conductionnl/n8n-nextcloud:latest
     container_name: conduction-exapp-n8n
     deploy:
@@ -340,6 +351,7 @@ services:
   # Nextcloud Demo (installs apps from app store, no volume mounts)
   # Access at: http://localhost:8080
   nextcloud-demo:
+    logging: *default-logging
     profiles:
       - demo
     user: root
@@ -394,6 +406,7 @@ services:
   # MariaDB Database (for compatibility testing)
   # Note: Vector search features will not be available with MariaDB
   db-mariadb:
+    logging: *default-logging
     profiles:
       - mariadb
     image: mariadb:11.2
@@ -432,6 +445,7 @@ services:
 
   # Nextcloud with MariaDB (use --profile mariadb)
   nextcloud-mariadb:
+    logging: *default-logging
     profiles:
       - mariadb
     user: root
@@ -598,6 +612,7 @@ services:
   # Database: the matomo image supports MySQL/MariaDB only, hence matomo-db.
   # Documentation: https://matomo.org/faq/on-premise/
   matomo-db:
+    logging: *default-logging
     profiles:
       - matomo
     image: mariadb:11.2
@@ -623,6 +638,7 @@ services:
           memory: 512M
 
   matomo:
+    logging: *default-logging
     profiles:
       - matomo
     image: matomo:5-apache
@@ -657,6 +673,7 @@ services:
   # Seed data: bash .github/docker/mail/seed-mail.sh
   # Documentation: https://greenmail-mail-test.github.io/greenmail/
   greenmail:
+    logging: *default-logging
     profiles:
       - mail
       - ox
@@ -699,6 +716,7 @@ services:
 
   # OX requires its own MariaDB (uses MySQL-specific init tools)
   ox-mariadb:
+    logging: *default-logging
     profiles:
       - ox
     image: mariadb:11.2
@@ -721,6 +739,7 @@ services:
       retries: 10
 
   open-xchange:
+    logging: *default-logging
     profiles:
       - ox
     image: jamesregis/open-xchange-appsuite:latest
@@ -773,6 +792,7 @@ services:
 
   # ZooKeeper for SolrCloud coordination
   zookeeper:
+    logging: *default-logging
     profiles:
       - solr
       - search
@@ -801,6 +821,7 @@ services:
   # Solr in SolrCloud mode
   # Access at: http://localhost:8983
   solr:
+    logging: *default-logging
     profiles:
       - solr
       - search
@@ -839,6 +860,7 @@ services:
   # Elasticsearch
   # Access at: http://localhost:9200
   elasticsearch:
+    logging: *default-logging
     profiles:
       - elasticsearch
       - search
@@ -877,6 +899,7 @@ services:
   # Access at: http://localhost:11434
   # Pull models: docker exec conduction-ollama ollama pull llama3.2
   ollama:
+    logging: *default-logging
     profiles:
       - ollama
     image: ollama/ollama:latest
@@ -911,6 +934,7 @@ services:
   # OpenAnonymiser - PII detection and anonymisation
   # Access at: http://localhost:5002
   openanonymiser:
+    logging: *default-logging
     profiles:
       - ai
     image: mwest2020/openanonymiser:dev
@@ -934,6 +958,7 @@ services:
   # Presidio Analyzer - Microsoft PII detection (recommended for production)
   # Access at: http://localhost:5001
   presidio-analyzer:
+    logging: *default-logging
     profiles:
       - ai
     image: mcr.microsoft.com/presidio-analyzer:latest
@@ -961,6 +986,7 @@ services:
   # Hugging Face Text Generation Inference (TGI) with OpenAI-compatible API
   # Access at: http://localhost:8081
   tgi-llm:
+    logging: *default-logging
     profiles:
       - ai
     image: ghcr.io/huggingface/text-generation-inference:latest
@@ -998,6 +1024,7 @@ services:
   # Dolphin VLM - Document parsing via Vision-Language Model
   # Access at: http://localhost:8083
   dolphin-vlm:
+    logging: *default-logging
     profiles:
       - ai
     build:
@@ -1032,6 +1059,7 @@ services:
   # Open WebUI + Ollama ExApp - AI Chat with built-in LLM inference
   # Access via Nextcloud: /index.php/apps/app_api/proxy/open_webui
   exapp-openwebui:
+    logging: *default-logging
     profiles:
       - ai
     image: ghcr.io/conductionnl/open-webui-nextcloud:latest
@@ -1077,6 +1105,7 @@ services:
   # Access at: http://localhost:5678
   # Default credentials: admin / admin
   n8n:
+    logging: *default-logging
     profiles:
       - standalone
     image: n8nio/n8n:latest
@@ -1129,6 +1158,7 @@ services:
   # Open WebUI Standalone - Web interface for LLMs
   # Access at: http://localhost:3000
   open-webui:
+    logging: *default-logging
     profiles:
       - standalone
     image: ghcr.io/open-webui/open-webui:main
@@ -1163,6 +1193,7 @@ services:
   # OpenLLM Management Interface (use --profile llm-management)
   # Access at: http://localhost:3002
   openllm:
+    logging: *default-logging
     profiles:
       - llm-management
     image: ghcr.io/bentoml/openllm:latest
@@ -1208,6 +1239,7 @@ services:
   # Tilburg WOO UI - Public interface for WOO documents
   # Access at: http://localhost:3000
   tilburg-woo-ui:
+    logging: *default-logging
     profiles:
       - ui
     build:
@@ -1263,6 +1295,7 @@ services:
   # OpenProject - Project Management
   # Access at: http://localhost:8086
   openproject:
+    logging: *default-logging
     profiles:
       - openproject
       - integrations
@@ -1295,6 +1328,7 @@ services:
   # XWiki - Wiki Platform
   # Access at: http://localhost:8088
   xwiki:
+    logging: *default-logging
     profiles:
       - xwiki
       - integrations
@@ -1331,6 +1365,7 @@ services:
 
   # HaRP - High-performance AppAPI Reverse Proxy
   harp:
+    logging: *default-logging
     profiles:
       - exapps
     image: ghcr.io/nextcloud/nextcloud-appapi-harp:release
@@ -1361,6 +1396,7 @@ services:
 
   # Docker Socket Proxy - Alternative Deploy Daemon (Legacy)
   docker-socket-proxy:
+    logging: *default-logging
     profiles:
       - exapps-legacy
     image: ghcr.io/nextcloud/docker-socket-proxy:latest
@@ -1390,6 +1426,7 @@ services:
 
   # Redis - Shared cache for ExApp services
   exapp-redis:
+    logging: *default-logging
     profiles:
       - commonground
       - exapps
@@ -1417,6 +1454,7 @@ services:
   # Keycloak ExApp - Identity and Access Management
   # Access at: http://localhost:8180
   exapp-keycloak:
+    logging: *default-logging
     profiles:
       - commonground
       - exapps
