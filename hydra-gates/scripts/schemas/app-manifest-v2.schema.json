@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.89.0",
+	"version": "2.96.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -150,6 +150,7 @@
 							"title": { "type": "string", "description": "i18n key / text for the tour name (restart menu)." },
 							"trigger": { "type": "string", "enum": ["first-visit", "version-bump", "empty-index", "manual"], "default": "manual", "description": "When the tour auto-starts." },
 							"minAppVersion": { "type": "string", "description": "Semver; the tour is inert below this app version." },
+							"startOn": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true, "description": "Route names the tour may auto-start on. A user who first lands anywhere else, such as on a case opened from a link, does not get the tour there: it waits until they reach one of these routes. Without it a tour whose first step is centered starts wherever the user lands. Has no effect on a tour started by hand." },
 							"steps": {
 								"type": "array",
 								"description": "Ordered steps.",
@@ -808,6 +809,11 @@
 			"pattern": "^@row\\.[A-Za-z][A-Za-z0-9_.@]*$",
 			"description": "Row context: a field of the row a row action runs on (@row.<field>, dot path allowed), read by the field-list widget's rowActions request url and payload (payload values resolve at any depth). Mirrors SENTINEL_TOKEN_PATTERNS.row."
 		},
+		"sentinelContextToken": {
+			"type": "string",
+			"pattern": "^@context\\.[A-Za-z][A-Za-z0-9_.]*$",
+			"description": "Detail context: a record a detail page reads beside the loaded one (`config.visibilityContext`), read by a grid widget's or a tab's `visibleWhen` field as @context.<name>.<field> (dot path allowed). Mirrors SENTINEL_TOKEN_PATTERNS.context."
+		},
 		"sentinelSubjectToken": {
 			"type": "string",
 			"pattern": "^@subject\\.[A-Za-z][A-Za-z0-9_.]*$",
@@ -826,6 +832,7 @@
 				{ "$ref": "#/$defs/sentinelAnswerToken" },
 				{ "$ref": "#/$defs/sentinelRowToken" },
 				{ "$ref": "#/$defs/sentinelSubjectToken" },
+				{ "$ref": "#/$defs/sentinelContextToken" },
 				{ "$ref": "#/$defs/sentinelDeprecatedToken" }
 			]
 		},
@@ -4223,6 +4230,31 @@
 							"items": { "type": "string", "enum": ["table", "cards", "board", "map"] },
 							"description": "type='index', board look: the segments the view switch draws, e.g. [\"table\", \"cards\", \"board\", \"map\"] as the boards do. A listed mode the page can open is an ordinary segment; one it cannot (no board columns, no map) is drawn disabled and named \"<mode>: not available on this list\". Order is always table, cards, board, map. Ignored without the board look (screens-view-switch-parity). Maps to CnIndexPage `viewSwitch`."
 						},
+						"filterStrip": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": ["field"],
+							"description": "type='index': a second filter strip under the toolbar, on one field (board PqWachtrij: the kind in the quick filters, the channel in this strip). \"All\" and one pill per value (`options`, else the field's schema enum); picking one filters the list on that value, All clears it. With `showCount` each pill counts its rows within the active quick filter (screens-filter-strip, 2.92.0). Maps to CnIndexPage `filterStrip`.",
+							"properties": {
+								"field": { "type": "string", "minLength": 1 },
+								"label": { "type": "string", "minLength": 1, "description": "The strip's accessible name; default the field's title." },
+								"allLabel": { "type": "string", "minLength": 1, "description": "The first pill; default \"All\"." },
+								"options": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["value"], "properties": { "value": { "type": "string", "minLength": 1 }, "label": { "type": "string", "minLength": 1 } } } },
+								"showCount": { "type": "boolean", "default": false }
+							}
+						},
+						"viewSwitchLinks": {
+							"type": "object",
+							"additionalProperties": false,
+							"minProperties": 1,
+							"description": "type='index', board look: view switch segments that open another PAGE instead of switching in place, by mode: `{ \"board\": { \"route\": \"CaseBoard\" } }` for a board or a map that is a page of its own. The segment sits in its place in the switch (table, cards, board, map) as a link: `route` with optional `params` and `query`, or `href`. A mode the page opens in place stays a button, and a route the router cannot resolve is left out. Ignored without the board look (screens-view-switch-links, 2.91.0). Maps to CnIndexPage `viewSwitchLinks`.",
+							"properties": {
+								"table": { "type": "object", "additionalProperties": false, "anyOf": [{ "required": ["route"] }, { "required": ["href"] }], "properties": { "route": { "type": "string", "minLength": 1 }, "params": { "type": "object", "additionalProperties": true }, "query": { "type": "object", "additionalProperties": true }, "href": { "type": "string", "minLength": 1 } } },
+								"cards": { "type": "object", "additionalProperties": false, "anyOf": [{ "required": ["route"] }, { "required": ["href"] }], "properties": { "route": { "type": "string", "minLength": 1 }, "params": { "type": "object", "additionalProperties": true }, "query": { "type": "object", "additionalProperties": true }, "href": { "type": "string", "minLength": 1 } } },
+								"board": { "type": "object", "additionalProperties": false, "anyOf": [{ "required": ["route"] }, { "required": ["href"] }], "properties": { "route": { "type": "string", "minLength": 1 }, "params": { "type": "object", "additionalProperties": true }, "query": { "type": "object", "additionalProperties": true }, "href": { "type": "string", "minLength": 1 } } },
+								"map": { "type": "object", "additionalProperties": false, "anyOf": [{ "required": ["route"] }, { "required": ["href"] }], "properties": { "route": { "type": "string", "minLength": 1 }, "params": { "type": "object", "additionalProperties": true }, "query": { "type": "object", "additionalProperties": true }, "href": { "type": "string", "minLength": 1 } } }
+							}
+						},
 						"searchPlaceholder": {
 							"type": "string",
 							"minLength": 1,
@@ -4272,7 +4304,7 @@
 						},
 						"headerButtons": {
 							"type": "array",
-							"description": "type='index': buttons beside the page title, as the board's \"Export\" and \"New case\" (zuiddrecht-pixel-gaps-3). `action` is `add` (the Add flow; the label defaults to the Add label), `export` (the export leaf in `format`, else the export dialog; under the board look it reads \"Download\" by default), `actions-menu` (the page's header actions as one labelled menu button, absent when the page has none), `import`, `refresh`, or the id of a `headerActions` entry. Under the board look the buttons render in a fixed order whatever the manifest declares: export, actions-menu, other secondary buttons, the buildiq square, then the primary button. Shown only with `showTitle`; when they show, the actions bar drops its Views and Actions menus, and the Add button and Export menu when a button takes their action. Maps to CnIndexPage `headerButtons`.",
+							"description": "type='index': buttons beside the page title, as the board's \"Export\" and \"New case\" (zuiddrecht-pixel-gaps-3). `action` is `add` (the Add flow; the label defaults to the Add label), `export` (the export leaf in `format`, else the export dialog; under the board look it reads \"Download\" by default), `actions-menu` (the page's header actions as one labelled menu button, absent when the page has none), `import`, `refresh`, or the id of a `headerActions` entry. Under the board look the buttons render in a fixed order whatever the manifest declares: export, actions-menu, other secondary buttons, the buildiq square, then the primary button. Shown only with `showTitle`; when they show, the actions bar drops its Views and Actions menus, and the Add button and Export menu when a button takes their action. Maps to CnIndexPage `headerButtons`. type='reports' (screens-reports-header-buttons, 2.96.0): the same buttons beside the reports page title, as board DcRapportages draws \"Downloaden\". There `label` is required and `action` is the id of a `headerActions` entry (same shape as on an index page), which says what the click does; every click also emits `header-action`. Under the board look the buildiq square sits between the secondary buttons and the primary one. Maps to CnReportsPage `headerButtons`.",
 							"items": {
 								"type": "object",
 								"additionalProperties": false,
@@ -4283,7 +4315,8 @@
 									"action": { "type": "string", "minLength": 1 },
 									"variant": { "type": "string", "enum": ["primary", "secondary"], "default": "secondary" },
 									"icon": { "type": "string", "minLength": 1, "description": "MDI icon name." },
-									"format": { "type": "string", "enum": ["csv", "excel"], "default": "csv", "description": "For `export`." }
+									"format": { "type": "string", "enum": ["csv", "excel"], "default": "csv", "description": "For `export`." },
+									"items": { "type": "array", "minItems": 1, "items": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "object", "additionalProperties": false, "required": ["heading"], "properties": { "heading": { "type": "string", "minLength": 1, "description": "i18n key of a group heading." } } } ] }, "description": "For `actions-menu`: the menu's entries, in order. Each is `header-actions` (every header action), the id of one `headerActions` entry, or a built-in of the actions bar's own menu, which the bar drops while header buttons show: `import`, `export`, `refresh`, `copy-selected`, `delete-selected` (disabled until a row is selected) or `documentation` (a link to the page's documentationUrl, left out without one). An unknown name is left out. Absent: the header actions only (screens-index-header-actions-menu, 2.90.0). Entries can be grouped: `{ \"heading\": \"<i18n key>\" }` draws a group heading and `\"separator\"` a rule, each only when an entry follows it, so a group whose entries are all left out leaves no empty heading (screens-index-header-menu-headings, 2.93.0)." }
 								}
 							}
 						},
@@ -4322,6 +4355,20 @@
 							"type": "string",
 							"minLength": 1,
 							"description": "type='detail': the id of a widget in `widgets` to render inside the header on its own row under the title, without a card of its own, e.g. the stages bars (zuiddrecht-pixel-gaps-2). The widget leaves the body grid. Maps to CnDetailPage `headerWidget`."
+						},
+						"visibilityContext": {
+							"type": "object",
+							"description": "type='detail': records the page reads beside the loaded one, so a widget's or a tab's `visibleWhen` can ask about them (detail-widgets-visible-when). `{ <name>: { field, register, schema } }`: `field` is the property of the loaded record holding the other record's id, and a condition reads that record as `@context.<name>.<path>`, e.g. `{ \"field\": \"@context.caseType.category\", \"op\": \"in\", \"value\": [\"Sociaal domein\"] }`. A record that cannot be read is absent, so its condition fails safe. Maps to CnDetailPage `visibilityContext`.",
+							"additionalProperties": {
+								"type": "object",
+								"required": ["field", "register", "schema"],
+								"additionalProperties": false,
+								"properties": {
+									"field": { "type": "string", "minLength": 1, "description": "Dot-path on the loaded record to the id of the record to read." },
+									"register": { "type": "string", "minLength": 1, "description": "Register slug or id of the record to read." },
+									"schema": { "type": "string", "minLength": 1, "description": "Schema slug or id of the record to read." }
+								}
+							}
 						},
 						"mapConfig": {
 							"type": "object",
