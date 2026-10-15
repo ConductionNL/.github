@@ -587,6 +587,46 @@ class UnusualComponentShapes(unittest.TestCase):
             self.assertNotIn("avg", owns)
 
 
+class FractionalBounds(unittest.TestCase):
+    """A number between two fractions gets a value between them.
+
+    dossiq's `stoppingRule.targetRecall` is `minimum: 0.5, maximum: 0.99`. The
+    maximum was clamped through int(), so 0.99 became 0 and every demo row
+    carried 0.0: below its own minimum, and refused by the schema it was
+    generated from.
+    """
+
+    def test_a_number_between_two_fractions_stays_between_them(self):
+        spec = {"type": "number", "minimum": 0.5, "maximum": 0.99}
+        for index in (1, 2, 3):
+            value = gmr._value("targetRecall", spec, index)
+            self.assertGreaterEqual(value, 0.5, f"index {index} gave {value}")
+            self.assertLessEqual(value, 0.99, f"index {index} gave {value}")
+
+    def test_the_generated_object_passes_its_own_schema(self):
+        schema = {
+            "type": "object",
+            "required": ["targetRecall"],
+            "properties": {
+                "targetRecall": {"type": "number", "minimum": 0.5, "maximum": 0.99},
+            },
+        }
+        for index in (1, 2, 3):
+            obj = {"targetRecall": gmr._value("targetRecall", schema["properties"]["targetRecall"], index)}
+            self.assertIsNone(gmr._validate(obj, schema))
+
+    def test_an_integer_under_a_fractional_maximum_is_a_whole_number_inside_it(self):
+        spec = {"type": "integer", "minimum": 0, "maximum": 2.5}
+        for index in (1, 2, 3):
+            value = gmr._value("count", spec, index)
+            self.assertIsInstance(value, int)
+            self.assertLessEqual(value, 2)
+
+    def test_a_whole_maximum_clamps_as_before(self):
+        self.assertEqual(gmr._value("n", {"type": "integer", "minimum": 1, "maximum": 2}, 3), 2)
+        self.assertEqual(gmr._value("n", {"type": "number", "minimum": 0, "maximum": 100}, 3), 3.0)
+
+
 class MockDescriptorsAreNotInput(unittest.TestCase):
     """The generator's own output must never be read back as a source.
 
