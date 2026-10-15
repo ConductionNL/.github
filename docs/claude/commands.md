@@ -200,10 +200,12 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 | **Thorough** | Large or complex PR — full analysis                                                                      |
 | **Strict**   | Security-sensitive code (auth, RBAC, CI) — maximum depth; auto-suggested when sensitive code is detected |
 
+The mode is one of three axes — lane (how much is read), strictness (how hard it is judged), size band (whether an analysis agent reads it) — and every verdict header names the first two: `## Verdict: APPROVE (Quick · delta)`. The full overview with what each mode runs, posts and decides lives in hydra: [docs/review-pr-lanes-and-modes.md](https://github.com/ConductionNL/hydra/blob/main/docs/review-pr-lanes-and-modes.md) (kept in step with the skill by a test).
+
 **What it does:**
 
 1. **Checks batch scope first** — when given several PRs, detects whether one PR's head already contains another's commits (a retargeted stacked branch) and asks how to scope before staging anything. Reads `baseRefName` from the API, never the PR body, which goes stale the moment a branch is retargeted
-2. **Classifies each PR into a lane** — `settled` / `delta` / `full`, before any diff, gate, guide, clone or sub-agent runs. See *Lanes* below
+2. **Classifies each PR into a lane** — `settled` / `express` / `delta` / `full`, before any diff, gate, guide, clone or sub-agent runs. See *Lanes* below
 3. **Classifies sensitivity** — auto-detects auth/RBAC/CI code and recommends Strict mode
 4. **Asks strictness** — Quick, Standard, Thorough, or Strict. Always asked; never auto-selected
 5. **Consumes CI instead of repeating it** — when the repo's own gate job is green on *exactly* the PR's head SHA, that is taken as the evidence. A red gate check still gets a local run
@@ -220,6 +222,7 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 | Lane | When | What runs |
 | ---- | ---- | --------- |
 | `settled` | Merged/closed **and** no commits since your last review | Nothing. One row in the summary table, nothing posted. A merged PR already carrying your APPROVE never gets a second one |
+| `express` | Open, XS (≤ 3 files, ≤ 50 lines) and every changed file an allow-listed shape — a dependency bump, docs, l10n, a CI pin, a docblock — with the required checks and the gate green on the head. Computed from the diff by `scripts/express-fetch.sh`, never from "it is only a version bump" | One question (Go / Quick / Standard), a per-shape checklist (registry, lockfile integrity, dependency set, lockstep partner for a bump), then `APPROVE (Quick · express)`; a failed check leaves the lane. Seven of the fifteen steps |
 | `delta` | Re-review with new commits, or a non-open PR that moved | Analysis scoped to `compare(lastReviewedSha, headSha)` — not the full PR diff |
 | `full` | Open PR you have not reviewed before | The whole pipeline |
 
