@@ -200,7 +200,7 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 | **Thorough** | Large or complex PR — full analysis                                                                      |
 | **Strict**   | Security-sensitive code (auth, RBAC, CI) — maximum depth; auto-suggested when sensitive code is detected |
 
-The mode is one of three axes — lane (how much is read), strictness (how hard it is judged), size band (whether an analysis agent reads it) — and every verdict header names the first two: `## Verdict: APPROVE (Quick · delta)`. The full overview with what each mode runs, posts and decides lives in hydra: [docs/review-pr-lanes-and-modes.md](https://github.com/ConductionNL/hydra/blob/main/docs/review-pr-lanes-and-modes.md) (kept in step with the skill by a test).
+The mode is one of three axes — lane (how much is read), strictness (how hard it is judged), size band (whether an analysis agent reads it) — and every verdict header names the first two: `## Verdict: APPROVE (Quick · delta)`. The full overview with what each mode runs, posts and decides lives in hydra: [docs/review-pr-lanes-and-modes.md](https://github.com/ConductionNL/hydra/blob/development/docs/review-pr-lanes-and-modes.md) (kept in step with the skill by a test).
 
 **What it does:**
 
