@@ -59,6 +59,12 @@ row's title field"), not copy. Reading them as copy made the toggle-table on
 shillinq's required-fields admin tab fail on a string "title" that no user
 ever sees.
 
+Pure field templates are skipped: a string made only of `{path}` tokens
+(`{accountName}`, `{amount|currency} · {dueDate|date}`) is filled from the row
+by nextcloud-vue's fillTemplate after translation, and has no word for a
+translator to change. A template with words in it ("Invoice date
+{invoiceDate|date}") is still copy and still needs its key.
+
 Only nl is asserted. Dutch is the language this fleet ships to, and demanding
 every European locale would make the gate unpassable rather than useful.
 
@@ -69,6 +75,7 @@ touch the manifest.
 
 import json
 import os
+import re
 import sys
 
 VISIBLE_FIELDS = (
@@ -87,6 +94,20 @@ DATA_BINDING_KEYS = (
     "source",
     "bind",
 )
+
+# nextcloud-vue's fillTemplate token: `{path}`, `{path|format}`, `{path|format:arg}`.
+FIELD_TOKEN = re.compile(r"\{[^{}\s|]+(?:\|[a-z]+(?::[^{}\s]+)?)?\}")
+
+
+def _is_pure_field_template(value):
+    """
+    Whether a string is only field tokens plus punctuation and whitespace.
+
+    :param value: the manifest string.
+    :return: True when at least one token is present and no letter remains.
+    """
+    rest, count = FIELD_TOKEN.subn("", value)
+    return count > 0 and not any(ch.isalpha() for ch in rest)
 
 
 def _walk(node, hits, counter):
@@ -107,6 +128,8 @@ def _walk(node, hits, counter):
             if key in VISIBLE_FIELDS and isinstance(value, str) and value.strip():
                 # `{{name}}` is substituted by the renderer, not read by a human.
                 if value.startswith("{{"):
+                    continue
+                if _is_pure_field_template(value):
                     continue
                 counter[0] += 1
                 hits.add(value)
