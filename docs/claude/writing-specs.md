@@ -24,7 +24,7 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 
 ## Requirements
 
-### REQ-{NNN}: <Name>
+### Requirement: <Name> (REQ-XX-NNN)
 
 <Description using RFC 2119 keywords>
 
@@ -49,6 +49,18 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 
 <Open questions, constraints, dependencies, related ADRs.>
 ```
+
+### Requirement headings (ADR-038)
+
+Every requirement heading has one form — Form A of [ADR-038](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-038-canonical-req-id-format.md):
+
+```markdown
+### Requirement: <Concise Title> (REQ-XX-NNN)
+```
+
+- `### Requirement:` is the heading; the id is an **optional parenthesised suffix at the end**, never a prefix. `### REQ-001: <Title>` is the legacy form: the coverage scanner (`/opsx-coverage-scan`) cannot read it and synthesises an id for it, differently on every run.
+- The id's prefix is 2–4 capitals naming the capability (`REQ-AUTH-003`, `REQ-PUB-005`); the number is sequential within the spec file — `001` upward in a new spec, the next free number for an added requirement.
+- One requirement per heading. Scenarios go under it as `#### Scenario:` — four hashes.
 
 ### Field reference
 
@@ -195,7 +207,7 @@ New requirements that didn't exist before:
 ```markdown
 ## ADDED Requirements
 
-### REQ-001: Full-Text Search
+### Requirement: Full-Text Search (REQ-SRCH-001)
 
 The system MUST support full-text search across publication titles and content bodies using PostgreSQL's tsvector.
 
@@ -215,7 +227,7 @@ Changes to existing requirements. Always note what the previous behavior was:
 ```markdown
 ## MODIFIED Requirements
 
-### REQ-003: Session Duration
+### Requirement: Session Duration (REQ-AUTH-003)
 
 The system MUST expire user sessions after 15 minutes of inactivity.
 
@@ -236,7 +248,7 @@ Requirements being deprecated. Always explain why:
 ```markdown
 ## REMOVED Requirements
 
-### REQ-002: Remember Me Checkbox
+### Requirement: Remember Me Checkbox (REQ-AUTH-002)
 
 (Deprecated: replaced by automatic session refresh on activity. Removing the checkbox simplifies the login form and improves security by eliminating long-lived sessions.)
 ```
@@ -248,7 +260,7 @@ Requirements whose name is changing but whose behavior is unchanged. Always use 
 ```markdown
 ## RENAMED Requirements
 
-### REQ-004: Old Requirement Name
+### Requirement: Old Requirement Name (REQ-AUTH-004)
 
 FROM: Old Requirement Name
 TO: New Requirement Name
@@ -261,7 +273,7 @@ TO: New Requirement Name
 When your requirement relates to a cross-project convention, reference the shared spec:
 
 ```markdown
-### REQ-005: Publication API Endpoint
+### Requirement: Publication API Endpoint (REQ-PUB-005)
 
 The system MUST provide a REST endpoint at `/index.php/apps/opencatalogi/api/publications`.
 
@@ -273,22 +285,22 @@ Shared specs live in `hydra/openspec/specs/` (company-wide, maintained by Conduc
 
 ## Cross-Referencing Requirements
 
-`REQ-NNN` numbers are unique only within their own spec file. When referring to a requirement from **outside** its spec — in tasks.md, PR titles, GitHub issues, or other spec files — always prefix with the capability name:
+`REQ-XX-NNN` ids are unique only within their own spec file. When referring to a requirement from **outside** its spec — in tasks.md, PR titles, GitHub issues, or other spec files — always prefix with the capability name:
 
 ```
-{capability-name}#REQ-NNN
+{capability-name}#REQ-XX-NNN
 ```
 
 Examples:
 
 | Context              | Format                                                        | Example                                                                                                           |
 | -------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| tasks.md task entry  | `{capability}#REQ-NNN — {title}`                              | `archival-destruction-workflow#REQ-009 — Advance Archivist Notifications`                                         |
-| Cross-spec reference | `[capability/spec.md#req-nnn](../capability/spec.md#req-nnn)` | `[archival-destruction-workflow#REQ-006](../archival-destruction-workflow/spec.md#req-006-legal-hold-management)` |
-| PR title / issue     | `{capability}#REQ-NNN`                                        | `archival-destruction-workflow#REQ-003`                                                                           |
+| tasks.md task entry  | `{capability}#REQ-XX-NNN — {title}`                           | `archival-destruction-workflow#REQ-ADW-009 — Advance Archivist Notifications`                                     |
+| Cross-spec reference | `[capability#REQ-XX-NNN](../capability/spec.md#requirement-<title>-req-xx-nnn)` | `[archival-destruction-workflow#REQ-ADW-006](../archival-destruction-workflow/spec.md#requirement-legal-hold-management-req-adw-006)` |
+| PR title / issue     | `{capability}#REQ-XX-NNN`                                     | `archival-destruction-workflow#REQ-ADW-003`                                                                       |
 | `@spec` PHPDoc tag   | `openspec/changes/{change}/tasks.md#task-N`                   | (points to tasks.md, not directly to REQ)                                                                         |
 
-Inside the spec file itself, bare `REQ-NNN` is sufficient — the file location already provides the namespace.
+Inside the spec file itself, bare `REQ-XX-NNN` is sufficient — the file location already provides the namespace.
 
 ## Organizing Specs
 
