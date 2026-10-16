@@ -6,6 +6,7 @@ Pins that a field path inside a data-binding block (`source`, `bind`) is not
 read as copy, while a real label next to it, and a `label` that is plain copy,
 are still reported. The toggle-table shape is taken from shillinq's
 required-fields admin tab, where `source.label: "title"` names the row field.
+A string made only of `{field}` tokens is a row template, not copy.
 
 Run: python3 scripts/lib/test_check_manifest_l10n_coverage.py   (exit 0 = green)
 """
@@ -115,6 +116,38 @@ manifest = {
 }
 rc, out = run(manifest, [])
 check("title beside a scalar source is reported", "FAIL no nl.json key: Audit trail" in out, out)
+
+# --- pure field templates are filled from the row, not translated -----------
+RECORD_LIST = {
+    "pages": [
+        {
+            "id": "Customer",
+            "type": "detail",
+            "widgets": [
+                {
+                    "type": "record-list",
+                    "title": "Open invoices",
+                    "content": {
+                        "title": "{invoiceNumber}",
+                        "subtitle": "{amount|currency:EUR} · {dueDate|date}",
+                        "description": "Factuur {invoiceNumber}",
+                        "label": "{total}",
+                    },
+                },
+            ],
+        },
+    ],
+}
+rc, out = run(RECORD_LIST, ["Open invoices"])
+check("a pure {field} title is not reported", "FAIL no nl.json key: {invoiceNumber}" not in out, out)
+check("tokens with formats and punctuation are not reported", "{amount|currency:EUR}" not in out, out)
+check("a lone {total} label is not reported", "FAIL no nl.json key: {total}" not in out, out)
+check("a template with words is still reported", "FAIL no nl.json key: Factuur {invoiceNumber}" in out, out)
+check("only the worded strings are counted", "checked 2 manifest string(s)" in out, out)
+check("the worded template fails the gate", rc == 1, f"rc={rc}")
+
+rc, out = run(RECORD_LIST, ["Open invoices", "Factuur {invoiceNumber}"])
+check("covering the worded template passes", rc == 0, f"rc={rc}\n{out}")
 
 if _FAILED:
     print(f"\n{len(_FAILED)} assertion(s) failed")
