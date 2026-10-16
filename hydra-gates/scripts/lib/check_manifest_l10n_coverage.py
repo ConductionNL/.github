@@ -52,6 +52,13 @@ render time and translating them breaks the template. Underscore-prefixed
 blocks are skipped: `_meta` is per-fragment provenance (spdx, change, adr),
 never rendered.
 
+Data-binding blocks are skipped: under `source` and `bind` a widget is told
+WHERE its rows come from and WHICH field to read or write, so `label`, `title`
+or `description` there name a field path ("label": "title" means "show each
+row's title field"), not copy. Reading them as copy made the toggle-table on
+shillinq's required-fields admin tab fail on a string "title" that no user
+ever sees.
+
 Only nl is asserted. Dutch is the language this fleet ships to, and demanding
 every European locale would make the gate unpassable rather than useful.
 
@@ -76,6 +83,11 @@ VISIBLE_FIELDS = (
     "helpText",
 )
 
+DATA_BINDING_KEYS = (
+    "source",
+    "bind",
+)
+
 
 def _walk(node, hits, counter):
     """
@@ -89,6 +101,8 @@ def _walk(node, hits, counter):
     if isinstance(node, dict):
         for key, value in node.items():
             if key.startswith("_"):
+                continue
+            if key in DATA_BINDING_KEYS and isinstance(value, dict):
                 continue
             if key in VISIBLE_FIELDS and isinstance(value, str) and value.strip():
                 # `{{name}}` is substituted by the renderer, not read by a human.
