@@ -158,6 +158,20 @@ Options:
 - **Cancel** — end without changes
 ```
 
+### Progress carrier (for multi-step skills)
+
+A progress line typed between tool calls is not a reliable carrier. Whenever the model thinks before a tool call, the typed text block is absent from the transcript and from the screen — counted on three `review-pr` sessions (2026-09-29): 0 of 56 messages with a thinking block showed their line, 43 of 122 without one did (hydra `.claude/skills/review-pr/references/rationale.md`, "Progress carrier"). Emit progress as the **output of a tool call** instead, and put the line in that Bash call's `description`, which the collapsed tool row shows even when text between calls is not:
+
+```markdown
+Then, as the last call of every step:
+
+    python3 .claude/skills/<skill>/scripts/metrics.py progress --emit {N}
+
+The Bash call's `description` is the step's own line ("Step N/15 — <heading>").
+```
+
+A script that logs each emit with a timestamp also gives the closing step something to check: a missing line and a bundle (three steps within ten seconds) are measured, not guessed. Reference implementation: hydra `.claude/skills/review-pr/scripts/skill-metrics.py progress`.
+
 ### Referencing subfolders
 
 Use relative markdown links — Claude resolves them relative to the skill folder:

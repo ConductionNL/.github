@@ -66,7 +66,7 @@ When content is duplicated, it will eventually diverge. One copy gets updated; t
 | Architectural decisions (why)                               | `openspec/architecture/adr-{NNN}-*.md`                                        |
 | Technical decisions and constraints                         | `openspec/architecture/` ADRs                                                 |
 | **Standards & Patterns**                                    |                                                                               |
-| NL Design System and UI standards                           | `openspec/specs/{domain}/spec.md` (app-specific) or company ADR-003           |
+| NL Design System and UI standards                           | `openspec/specs/{domain}/spec.md` (app-specific) or company ADR-010           |
 | API conventions and URL structure                           | `openspec/specs/{domain}/spec.md` (app-specific) or company ADR-002           |
 | **Requirements**                                            |                                                                               |
 | Feature requirements and scenarios                          | `openspec/specs/{domain}/spec.md`                                             |
@@ -121,7 +121,7 @@ Each document has one target audience. Don't mix them.
 
 **Filenames** also MUST be English — `user-guide.md`, not `handleiding.md`.
 
-**Language support for user-facing features:** Many apps in this ecosystem are Dutch-first for end users. When documenting such features, note the Dutch-first default and where English is also required. Per ADR-005, both Dutch and English MUST be supported for i18n-enabled features.
+**Language support for user-facing features:** Many apps in this ecosystem are Dutch-first for end users. When documenting such features, note the Dutch-first default and where English is also required. Per ADR-007, both Dutch and English MUST be supported for i18n-enabled features.
 
 ---
 
