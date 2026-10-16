@@ -864,5 +864,60 @@ class Application {
         self.assertNotIn("NOTE", out)
 
 
+SHAPES = Path(__file__).resolve().parent.parent / "test-fixtures" / "apphost-prelude-shapes"
+
+
+class PreludeShapeFixtureTest(unittest.TestCase):
+    """The prelude shapes the fleet ships, as on-disk apps.
+
+    Each fixture is an app that adopts AppHost through
+    `Bootstrap::aliasStoreController()`; they differ only in what runs first.
+    decidiq-shape is decidiq's real lib/AppInfo code with its comments removed.
+    """
+
+    EXPECTED = {
+        "old-form": 0,            # \OC_App::registerAutoloading('openregister', $p)
+        "new-form": 0,            # OpenRegisterAutoloader::register(), spl loader
+        "decidiq-shape": 0,       # the reference implementation
+        "larpinq-shape": 0,       # app id via `$appId ??= 'openregister'`
+        "no-prelude": 1,          # aliases with nothing in front of it
+        "name-only": 1,           # a class NAMED OpenRegisterAutoloader is not a loader
+        "variable-other-app": 1,  # the variable binds a different app id
+    }
+
+    def test_every_fixture_is_covered(self):
+        self.assertEqual(
+            sorted(p.name for p in SHAPES.iterdir() if p.is_dir()),
+            sorted(self.EXPECTED),
+        )
+
+    def test_each_shape_gets_its_verdict(self):
+        for name, expected in self.EXPECTED.items():
+            with self.subTest(shape=name):
+                rc, out = _run(SHAPES / name)
+                self.assertEqual(rc, expected, out)
+
+    def test_no_fixture_passes_on_a_suppression(self):
+        for path in SHAPES.rglob("*.php"):
+            self.assertNotIn("apphost-prelude", path.read_text(encoding="utf-8"), path)
+
+    def test_decidiq_without_its_loader_is_RED(self):
+        """The control: the same registrar with the loader file removed."""
+        tmp = Path(tempfile.mkdtemp(prefix="apphost-prelude-"))
+        try:
+            shutil.copytree(SHAPES / "decidiq-shape", tmp / "decidiq", dirs_exist_ok=True)
+            (tmp / "decidiq" / "lib" / "AppInfo" / "OpenRegisterAutoloader.php").unlink()
+            self.assertEqual(_run(tmp / "decidiq")[0], 1)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_a_binding_inside_a_string_does_not_supply_the_app_id(self):
+        code = "<?php $x = \"$appId = 'openregister'\"; spl_autoload_register(f(...));" \
+               " $n = 'OCA\\\\OpenRegister\\\\'; $m->getAppPath($appId);"
+        self.assertFalse(gate.has_spl_prelude(*gate.code_and_anchor(code)))
+        real = code.replace("$x = \"$appId = 'openregister'\";", "$appId = 'openregister';")
+        self.assertTrue(gate.has_spl_prelude(*gate.code_and_anchor(real)))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -147,6 +147,15 @@ GET_APP_PATH_OPEN = re.compile(r"getAppPath\s*\(")
 OR_NAMESPACE_LITERAL = re.compile(
     r"""(['"])\\{0,2}OCA\\{1,2}OpenRegister\\{1,2}\1"""
 )
+# The app id may reach getAppPath() through a VARIABLE bound to it in the same
+# file: `$appId = 'openregister'`, `$appId ??= 'openregister'`, or a parameter
+# default `?string $appId = 'openregister'`. MEASURED: larpinq's
+# OpenRegisterAutoloader::register() takes `?string $appId = null`, does
+# `$appId ??= 'openregister'` and calls `getAppPath($appId)`. Reading only a
+# literal or a constant failed that app for a prelude it runs.
+APPID_VAR = re.compile(
+    r"""(\$[A-Za-z_][A-Za-z0-9_]*)\s*(?:\?\?)?=(?![=>])\s*['"]openregister['"]"""
+)
 
 
 def _paren_map(text: str) -> dict:
@@ -359,8 +368,9 @@ def has_spl_prelude(text: str, anchor: str) -> bool:
       * an `spl_autoload_register(` call;
       * a string literal that is exactly the `OCA\\OpenRegister\\` prefix,
         which is what the loader matches class names against;
-      * a `getAppPath(` call naming 'openregister' (literal, or a constant
-        defined to it), which is where the loader finds the files.
+      * a `getAppPath(` call naming 'openregister' (literal, a constant
+        defined to it, or a variable bound to it in the same file), which is
+        where the loader finds the files.
 
     Calls are found in *anchor* (string contents blanked) and their arguments
     read out of *text*, as in has_prelude(). The namespace literal must be a
@@ -385,6 +395,13 @@ def has_spl_prelude(text: str, anchor: str) -> bool:
         for m in APPID_CONST.finditer(text)
         if anchor.startswith("const", m.start())
     }
+    # A `$var = 'openregister'` inside a string is not a binding: the `$`
+    # surviving the anchor is the proof that this one is code.
+    var_names = {
+        m.group(1)
+        for m in APPID_VAR.finditer(text)
+        if anchor[m.start()] == "$"
+    }
     parens = _paren_map(anchor)
     for m in GET_APP_PATH_OPEN.finditer(anchor):
         close = parens.get(m.end() - 1)
@@ -394,6 +411,8 @@ def has_spl_prelude(text: str, anchor: str) -> bool:
         if OPENREGISTER_LITERAL.search(args):
             return True
         if any(re.search(r"\b" + re.escape(n) + r"\b", args) for n in const_names):
+            return True
+        if any(re.search(re.escape(n) + r"\b", args) for n in var_names):
             return True
     return False
 
