@@ -60,7 +60,7 @@ Every requirement heading has one form — Form A of [ADR-038](https://github.co
 ### Requirement: <Concise Title> (REQ-XX-NNN)
 ```
 
-- `### Requirement:` is the heading; the id is an **optional parenthesised suffix at the end**, never a prefix. `### REQ-001: <Title>` is the legacy prefix form (ADR-038 Form B): the coverage scanner (`/opsx-coverage-scan`) still reads its id, but warns on the heading, and `/opsx-annotate` refuses to run on an app whose report carries that warning until its specs are migrated.
+- `### Requirement:` is the heading; the id is an **optional parenthesised suffix at the end**, never a prefix. `### REQ-001: <Title>` is the legacy prefix form (ADR-038 Form B): the coverage scanner (`/opsx-coverage-scan`) still reads its id, but flags the heading as legacy and asks for the spec to be migrated before `/opsx-annotate` runs.
 - The id is optional (ADR-038 rule 2) — give one when the requirement will be cross-referenced — and matches `[A-Z]{2,5}-[0-9]+[a-z]*` (rule 3): a prefix of 2–5 capitals naming the capability (`REQ-AUTH-003`, `REQ-PUB-005`). Numbering is this guide's convention, not the ADR's: `001` upward in a new spec, the next free number for an added requirement.
 - One requirement per heading. Scenarios go under it as `#### Scenario:` — four hashes.
 
