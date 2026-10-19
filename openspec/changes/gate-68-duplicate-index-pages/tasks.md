@@ -204,7 +204,7 @@
   gate-68 block's header comment in `run-hydra-gates.sh` documents behaviour,
   mirroring gates 52 and 53.
 
-## i18n (company-wide ADR-005)
+## i18n (company-wide ADR-007)
 
 - N/A — CI tooling with no user-facing strings; gate output is
   machine-parseable JSON plus English diagnostics on stderr.

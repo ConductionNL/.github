@@ -170,7 +170,7 @@ Then, as the last call of every step:
 The Bash call's `description` is the step's own line ("Step N/15 — <heading>").
 ```
 
-A script that logs each emit with a timestamp also gives the closing step something to check: a missing line and a bundle (three steps within ten seconds) are measured, not guessed. Reference implementation: hydra `.claude/skills/review-pr/scripts/skill-metrics.py progress`.
+A script that logs each emit with a timestamp also gives the closing step something to check: a missing line and a bundle (three steps within ten seconds) are measured, not guessed. Reference implementation: hydra `.claude/skills/review-pr/scripts/skill-metrics.py progress`, with the measurement behind it in `references/rationale.md` "Progress carrier" — both on hydra's `development` branch, not yet on `main`.
 
 ### Referencing subfolders
 
