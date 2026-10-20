@@ -29,7 +29,11 @@ Maturity model (exactly three), rendered as the hex bullet colour:
   soon   (orange)— honest roadmap; not usable yet.
 
 Each emitted entry: { slug, title, summary, status, docsUrl } plus optional
-{ providedBy, title_nl, summary_nl } when curated. Entries are deterministic
+{ providedBy, title_nl, summary_nl, category } when curated. A field the
+existing docs/features.json holds for the same slug and the sources do not
+give (a hand-curated `category`, or any field this script does not know) is
+carried over, after the generated fields, so regenerating never drops a field
+a consumer reads. Entries are deterministic
 (overlay order preserved; spec-derived sorted by slug) with stable JSON
 formatting so the workflow only commits on real content changes.
 
@@ -222,11 +226,12 @@ def parse_spec(spec_path: Path) -> dict | None:
         provided_by=_field(front, "provided-by") or _field(front, "providedBy"),
         title_nl=_field(front, "title_nl"),
         summary_nl=first_sentence(_field(front, "summary_nl") or _field(front, "tagline_nl") or ""),
+        category=_field(front, "category"),
     )
     return entry
 
 
-def _attach_optional(entry: dict, provided_by=None, title_nl=None, summary_nl=None) -> None:
+def _attach_optional(entry: dict, provided_by=None, title_nl=None, summary_nl=None, category=None) -> None:
     """Append optional curated fields in a fixed order (so JSON stays stable)."""
     if provided_by:
         entry["providedBy"] = provided_by
@@ -234,6 +239,8 @@ def _attach_optional(entry: dict, provided_by=None, title_nl=None, summary_nl=No
         entry["title_nl"] = title_nl
     if summary_nl:
         entry["summary_nl"] = summary_nl
+    if category:
+        entry["category"] = category
 
 
 def normalize_overlay_entry(raw: dict) -> dict | None:
@@ -261,6 +268,7 @@ def normalize_overlay_entry(raw: dict) -> dict | None:
         provided_by=raw.get("providedBy"),
         title_nl=(str(raw.get("title_nl")).strip() if raw.get("title_nl") else None),
         summary_nl=(str(raw.get("summary_nl")).strip() if raw.get("summary_nl") else None),
+        category=(str(raw.get("category")).strip() if raw.get("category") else None),
     )
     return entry
 
@@ -296,6 +304,32 @@ def collect(app_root: Path) -> list[dict]:
     return entries
 
 
+def keep_existing_fields(entries: list[dict], out_path: Path) -> list[dict]:
+    """Carry over the fields the existing output holds and the sources do not give.
+
+    Keyed by slug. A field the sources give is regenerated; any other field of
+    the existing entry (a hand-curated `category`, a field a newer consumer
+    added) is appended in its existing order. Without this, regenerating on
+    every spec commit silently dropped such fields.
+    """
+    if not out_path.is_file():
+        return entries
+    try:
+        existing = json.loads(out_path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return entries
+    if not isinstance(existing, list):
+        return entries
+    by_slug = {e.get("slug"): e for e in existing if isinstance(e, dict) and e.get("slug")}
+    out = []
+    for entry in entries:
+        old = by_slug.get(entry.get("slug"))
+        if isinstance(old, dict):
+            entry = {**entry, **{k: v for k, v in old.items() if k not in entry}}
+        out.append(entry)
+    return out
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--app-root", type=Path, default=Path.cwd(), help="App repo root (default: cwd)")
@@ -304,7 +338,7 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     out_path = args.out or (args.app_root / "docs" / "features.json")
-    entries = collect(args.app_root)
+    entries = keep_existing_fields(collect(args.app_root), out_path)
     payload = json.dumps(entries, indent=2, ensure_ascii=False) + "\n"
 
     if args.check:

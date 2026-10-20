@@ -191,6 +191,22 @@ jobs:
       - name: "Assert every tool's own exit code reaches the family verdict"
         run: python3 scripts/test-consolidated-tool-legs.py .github/workflows/quality.yml
 
+  extract-features:
+    name: "Regenerating docs/features.json keeps every existing field"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Every app's pre-commit hook runs extract-features.py on each spec
+      # commit. A field only the existing file held (dossiq's `category`) was
+      # dropped every time, and nothing went red until a consumer's test did.
+      - name: "Positive control — without the carry-over the suite must fail"
+        run: python3 scripts/test-extract-features.py --positive-control
+
+      - name: "Assert regeneration keeps every field the existing file holds"
+        run: python3 scripts/test-extract-features.py
+
   e2e-shard-partition:
     name: "A sharded E2E run cannot lose a test"
     runs-on: ubuntu-latest
