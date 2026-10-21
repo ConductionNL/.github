@@ -51,13 +51,15 @@ name: Vendored manifest schema sync
 
 on:
   schedule:
-    # Mondays 04:00 UTC, an hour BEFORE fleet-shared-dep-bump. An app that is
-    # about to be moved onto a newer nextcloud-vue should find the gate's
-    # schema already able to read what that release added.
+    # Daily 04:00 UTC. Weekly was too slow: the library publishes several
+    # schema versions a week, and between two Monday runs apps adopted keys
+    # the gate still refused (2.96.0 vendored against 2.138.0 published,
+    # 2026-10-21). Monday's run still lands an hour BEFORE
+    # fleet-shared-dep-bump.
     #
     # CRON IS UTC AND DOES NOT KNOW ABOUT SUMMER TIME. Nothing here needs a
     # precise local hour.
-    - cron: "0 4 * * 1"
+    - cron: "0 4 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -187,9 +189,20 @@ jobs:
             echo "Opened by .github/workflows/hydra-gates-schema-sync.yml. See #785 for why the vendored copy needs a keeper."
           } > pr-body.md
 
-          gh pr create --base main --head "${BRANCH}" \
+          NEW_PR=$(gh pr create --base main --head "${BRANCH}" \
             --title "chore(hydra-gates): vendor manifest schema ${WANT}" \
-            --body-file pr-body.md
+            --body-file pr-body.md)
+          echo "${NEW_PR}"
+
+          # An older sync PR left open is how the copy stayed behind: each run
+          # opened a new branch and the previous one sat unmerged. Close the
+          # ones this PR supersedes, so exactly one sync PR is open at a time.
+          gh pr list --state open --base main --json number,headRefName \
+            --jq ".[] | select(.headRefName | startswith(\"chore/vendored-manifest-schema-\")) | select(.headRefName != \"${BRANCH}\") | .number" \
+            | while read -r OLD; do
+                gh pr close "${OLD}" --delete-branch \
+                  --comment "Superseded by ${NEW_PR}, which vendors ${WANT}."
+              done
 
       - name: Report
         if: always()

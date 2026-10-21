@@ -5102,7 +5102,8 @@ if [ -f src/manifest.json ]; then
                     _mv_why=$(head -3 "${_mv_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
                     _skip 22 "manifest-validation" wiring "the vendored canonical validator (${_mv_validator}) exited ${_mv_rc} WITHOUT reporting a single \`at <pointer>: <message>\` diagnostic, so src/manifest.json was NOT schema-validated and NO violation was measured. That is a crashed validator, not a finding about the manifest — the manifest is UNVERIFIED by this run. Validator output: ${_mv_why:-<empty>}. See ${_mv_log}${_mv_app_note}"
                 else
-                    _fail 22 "manifest-validation" "${_mv_fail} schema violation(s) in src/manifest.json — see ${_mv_log}${_mv_app_note}"
+                    _mv_stale=$(grep -m1 -o 'VENDORED SCHEMA BEHIND:.*' "${_mv_log}" 2>/dev/null || true)
+                    _fail 22 "manifest-validation" "${_mv_fail} schema violation(s) in src/manifest.json — see ${_mv_log}${_mv_app_note}${_mv_stale:+ [${_mv_stale}]}"
                 fi ;;
         esac
     fi
@@ -9920,7 +9921,8 @@ if [ -f src/manifest.json ]; then
                 # by the prefix, so the count is what this PR must actually fix.
                 _em_n=$(grep -E '^at ' "${_em_log}" 2>/dev/null | grep -cvE ': (WARN|PRE-EXISTING) ' || true)
                 { [ -z "${_em_n}" ] || [ "${_em_n}" -eq 0 ]; } && _em_n=1
-                _em_reason="${_em_n} structural violation(s) in the ASSEMBLED manifest (base+fragments+menu-layout) — see ${_em_log}"
+                _em_stale=$(grep -m1 -o 'VENDORED SCHEMA BEHIND:.*' "${_em_log}" 2>/dev/null || true)
+                _em_reason="${_em_n} structural violation(s) in the ASSEMBLED manifest (base+fragments+menu-layout) — see ${_em_log}${_em_stale:+ [${_em_stale}]}"
             else
                 set +e
                 node "${_em_crossref}" --app-dir . --manifest "${_em_tmp}" ${_em_scope_flag} ${_em_scope_val} >> "${_em_log}" 2>&1
