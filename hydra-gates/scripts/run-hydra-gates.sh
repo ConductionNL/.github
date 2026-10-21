@@ -13513,6 +13513,81 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# gate-121: register-auth-dialect
+#
+# OpenRegister reads a schema's access rules from `authorization` and its
+# administered checks from `x-openregister-validations`. `x-openregister-rbac`,
+# `x-rbac-role` and the singular `x-openregister-validation` are read by
+# nothing: a schema carrying them looks protected in review and is open to
+# anyone who reaches the register. Measured 2026-10-21: all 528 shillinq
+# schemas had no `authorization` block, 333 of them leaning on
+# `x-openregister-rbac` instead.
+#
+# Reads lib/Settings/*register*.json, register.d/*.json and packages/**.json.
+#   * a dead key inside a schema body -> FAIL (scoped like gate-18: the files
+#     in scope are judged)
+#   * a schema with no `authorization` block -> REPORT-ONLY census line, so the
+#     fleet can see its coverage. HYDRA_GATE_REGISTER_AUTHORIZATION_BLOCKING=1
+#     promotes it to a failure for a repo that has closed every schema.
+# ---------------------------------------------------------------------------
+_rad_docs=$(_enum_tracked '^lib/Settings/([^/]*register[^/]*\.json|register\.d/[^/]+\.json|packages/.+\.json)$' lib/Settings)
+if [ -z "${_rad_docs}" ]; then
+    _skip 121 "register-auth-dialect" na "this repo ships no register document under lib/Settings (*register*.json, register.d/*.json or packages/**.json), so it declares no schema to protect."
+else
+    _rad_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-register-auth-dialect.log
+    _rad_all=${HYDRA_GATE_LOG_DIR}/hydra-gate-register-auth-dialect.documents
+    _rad_scoped=${HYDRA_GATE_LOG_DIR}/hydra-gate-register-auth-dialect.scoped
+    : > "${_rad_log}"
+    printf '%s\n' "${_rad_docs}" > "${_rad_all}"
+    printf '%s\n' "${_rad_docs}" | _filter_files_by_scope > "${_rad_scoped}" || true
+    _rad_helper="${SCRIPT_DIR}/lib/check_register_auth_dialect.py"
+    _rad_args=""
+    [ "${HYDRA_GATE_REGISTER_AUTHORIZATION_BLOCKING:-0}" = "1" ] && _rad_args="--require-authorization"
+    if [ ! -f "${_rad_helper}" ]; then
+        _skip 121 "register-auth-dialect" wiring "check_register_auth_dialect.py not found at ${_rad_helper}, so the register authorization dialect was NOT checked by this run."
+    elif ! command -v python3 > /dev/null 2>&1; then
+        _skip 121 "register-auth-dialect" wiring "python3 is not on PATH, so the register authorization dialect was NOT checked by this run."
+    elif [ ! -s "${_rad_scoped}" ]; then
+        _skip_empty_scope 121 "register-auth-dialect" "register document under lib/Settings"
+    else
+        set +e
+        # shellcheck disable=SC2086
+        python3 "${_rad_helper}" . --documents-from "${_rad_all}" --judge-from "${_rad_scoped}" ${_rad_args} > "${_rad_log}" 2>&1
+        _rad_rc=$?
+        set +e
+        grep -E '^\[gate-121\] register-auth-dialect: (dead keys|authorization coverage|checked)[: ]' "${_rad_log}" 2>/dev/null
+        case "${_rad_rc}" in
+            0)
+                if _helper_finished "${_rad_log}" '^\[gate-121\] register-auth-dialect: checked [0-9]+ document'; then
+                    _pass 121 "register-auth-dialect"
+                else
+                    _skip 121 "register-auth-dialect" wiring "check_register_auth_dialect.py exited 0 without its census line, so the dialect is UNVERIFIED by this run. See ${_rad_log}."
+                fi
+                ;;
+            1)
+                if _helper_finished "${_rad_log}" '^\[gate-121\] register-auth-dialect: FAIL: [0-9]+ finding'; then
+                    grep -E '^  [^ ]' "${_rad_log}" 2>/dev/null
+                    _rad_n=$(sed -n 's/^\[gate-121\] register-auth-dialect: FAIL: \([0-9]*\) finding.*/\1/p' "${_rad_log}" | tail -1)
+                    _fail 121 "register-auth-dialect" "${_rad_n:-1} schema annotation(s) OpenRegister never reads (x-openregister-rbac, x-rbac-role, or the singular x-openregister-validation), so the schemas they sit on are not protected by them. Move the rules to \`authorization\` and \`x-openregister-validations\`. See ${_rad_log}"
+                else
+                    # A CRASH IS NOT A FINDING. A Python traceback also exits 1.
+                    _rad_why=$(tail -3 "${_rad_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                    _skip 121 "register-auth-dialect" wiring "check_register_auth_dialect.py exited 1 without its FAIL summary, so it did not finish and the dialect is UNVERIFIED by this run. Checker output: ${_rad_why:-<empty>}. See ${_rad_log}."
+                fi
+                ;;
+            4)
+                _rad_why=$(tail -1 "${_rad_log}" 2>/dev/null | cut -c1-200)
+                _skip 121 "register-auth-dialect" na "${_rad_why:-the checker found no schema to judge}"
+                ;;
+            *)
+                _rad_why=$(tail -3 "${_rad_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                _skip 121 "register-auth-dialect" wiring "check_register_auth_dialect.py exited ${_rad_rc} without a verdict, so the dialect is UNVERIFIED by this run. Checker output: ${_rad_why:-<empty>}. See ${_rad_log}."
+                ;;
+        esac
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
