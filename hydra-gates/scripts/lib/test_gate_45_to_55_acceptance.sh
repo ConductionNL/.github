@@ -1488,8 +1488,10 @@ _outK2="${_tmp}/k2.txt"
 _run "${_appK2}" "${_outK2}"
 _expect "${_outK2}" 53 "FAIL" "still rejects an unknown action key and an out-of-enum size"
 _logK2="$(sed -n 's/.*see \(.*hydra-gate-effective-manifest-crossref\.log\).*/\1/p' "${_outK2}" | head -1)"
-if [ -n "${_logK2}" ] && grep -q 'additionalProperties' "${_logK2}" && grep -q 'enum' "${_logK2}"; then
-    _ok "gate-53 names BOTH planted defects (additionalProperties + enum)"
+# Schema 2.138.0 closes the action with unevaluatedProperties instead of
+# additionalProperties; either keyword is the unknown-key refusal.
+if [ -n "${_logK2}" ] && grep -qE '(additional|unevaluated)Properties' "${_logK2}" && grep -q 'enum' "${_logK2}"; then
+    _ok "gate-53 names BOTH planted defects (closed object + enum)"
 else
     _bad "gate-53 failed without naming both planted defects — a schema loosened one way would pass this"
 fi
@@ -1633,8 +1635,10 @@ _outM2="${_tmp}/m2.txt"
 _run "${_appM2}" "${_outM2}"
 _expect "${_outM2}" 22 "FAIL" "still rejects an unknown store key and an out-of-enum page type"
 _logM2="$(sed -n 's/.*see \(.*hydra-gate-manifest-validation\.log\).*/\1/p' "${_outM2}" | head -1)"
-if [ -n "${_logM2}" ] && grep -q 'additionalProperties' "${_logM2}" && grep -q 'enum' "${_logM2}"; then
-    _ok "gate-22 names BOTH planted defects (additionalProperties + enum)"
+# Schema 2.138.0 closes the action with unevaluatedProperties instead of
+# additionalProperties; either keyword is the unknown-key refusal.
+if [ -n "${_logM2}" ] && grep -qE '(additional|unevaluated)Properties' "${_logM2}" && grep -q 'enum' "${_logM2}"; then
+    _ok "gate-22 names BOTH planted defects (closed object + enum)"
 else
     _bad "gate-22 failed without naming both planted defects — a schema loosened one way would pass this"
 fi
