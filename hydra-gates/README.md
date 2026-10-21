@@ -48,7 +48,17 @@ library had published. No app could fix that, because the schema is not in any
 app's repo (#785).
 
 `.github/workflows/hydra-gates-schema-sync.yml` now watches the registry every
-Monday and opens a pull request when the copy falls behind. It opens a pull
+day and opens a pull request when the copy falls behind, closing any older sync
+pull request it supersedes. Weekly was not enough: on 2026-10-21 the copy was at
+2.96.0 against a published 2.138.0, with two sync pull requests sitting open,
+and dossiq, portaliq and shillinq failed gates 22 and 53 on keys the library
+already accepted.
+
+Drift is also named where it bites. When the app running the gate has a newer
+`@conduction/nextcloud-vue` installed than the vendored copy, gates 22 and 53
+append `VENDORED SCHEMA BEHIND: …` to their failure reason. To check by hand,
+`node scripts/lib/vendored_schema_freshness.js` compares the copy with npm
+latest (`--strict` exits 1 when behind). It opens a pull
 request rather than pushing, because CI resolves these gates at `@main`: a
 bump reaches all 21 swept apps the minute it lands. The pull request carries
 the output of `scripts/lib/diff_schema_strictness.js`, which names every

@@ -77,6 +77,7 @@ const MANIFEST_PATH = _positional[0]
 	: path.resolve(process.cwd(), 'src', 'manifest.json')
 
 const scopeFilter = require('./manifest_scope_filter.js')
+const freshness = require('./vendored_schema_freshness.js')
 
 // Base-schema candidates, in priority order. The CANONICAL hydra-vendored
 // schema wins (2026-07-06 manifest audit, item 4): pinned-first meant "pass"
@@ -503,6 +504,13 @@ function main() {
 	const basePath = findFirst(BASE_SCHEMA_CANDIDATES)
 	const base = basePath ? loadJson(basePath) : canonical
 	console.error(`[check_manifest] base schema: ${basePath || CANONICAL_SCHEMA_PATH}`)
+	const installed = freshness.installedSchemaPath(process.cwd())
+	const behind = installed && freshness.behindNote(
+		canonical.version,
+		freshness.schemaVersion(installed),
+		'the @conduction/nextcloud-vue installed in this app',
+	)
+	if (behind) console.error(`[check_manifest] ${behind}`)
 	console.error('[check_manifest] AppHost blocks (observability, deepLinks) validated against the hydra-vendored canonical ADR-040 schema')
 	const schema = mergeAppHostBlocks(base, canonical)
 
