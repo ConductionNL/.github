@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.138.0",
+	"version": "2.140.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -549,6 +549,10 @@
 			"description": "One field's overrides over its schema-derived descriptor (label, order, hidden, readOnly, widget, enumLabels and more stay free-form). A `widget` that is not one of the form's own widget names mounts the registered component of that name (the v2 registry, then customComponents). 2.126.0 documents the search look of a single select.",
 			"properties": {
 				"widget": { "type": "string", "minLength": 1 },
+				"createModal": { "type": "string", "minLength": 1, "description": "A select-or-create reference: the registry key of the `kind: 'modal'` dialog its Create mounts on top of the form, ahead of the page that lists the referenced schema. The dialog gets `initialData` with the typed term and reports the new object with `created`." },
+				"createModalProps": { "type": "object", "additionalProperties": true, "description": "More props for the createModal dialog. A string `@answer.<key>` is that form value, so a contact dialog can carry the chosen client." },
+				"pickerFilter": { "type": "object", "additionalProperties": true, "description": "A select-or-create reference: filters its options are scoped by. A string `@answer.<key>` is that form value, so a contact picker can follow the chosen client." },
+				"hintWidget": { "type": "string", "minLength": 1, "description": "The registered component shown under the field, with `field`, `value` and `formData` as props, such as a hint that follows the field's value." },
 				"look": { "type": "string", "enum": ["search"], "description": "`search` draws a single select as CnSearchSelect: a magnifier instead of the chevron, and rows with initials or an icon, the name, a secondary line and a check on the chosen one (DqOverdragen \"Nieuw team\")." },
 				"optionSecondary": { "type": "string", "description": "look 'search': the row's secondary line, a template filled from each option (\"{members} leden · {focus}\")." },
 				"optionAvatar": { "type": "boolean", "description": "look 'search': draw each option's initials." },
@@ -669,6 +673,14 @@
 					"type": "string",
 					"minLength": 1,
 					"description": "The indicator applies while the field holds a readable date before this moment: `now` or an ISO date."
+				},
+				"lt": {
+					"type": "number",
+					"description": "The indicator applies while the field holds a number below this one."
+				},
+				"gt": {
+					"type": "number",
+					"description": "The indicator applies while the field holds a number above this one."
 				},
 				"icon": {
 					"type": "string",
@@ -872,8 +884,8 @@
 		},
 		"sentinelFilterToken": {
 			"type": "string",
-			"pattern": "^@(?:me(?:\\.(?:displayName|email))?|myGroups|now|today|monthStart|monthEnd|nextMonthStart|quarterStart|yearStart)$|^@today[+-][0-9]+d$",
-			"description": "Filter-value context: relative fetch-time tokens resolved by resolveFilterTokens (@me, @me.displayName, @me.email, @myGroups (the current user's group ids, an IN list), @now, @today, @today±Nd, @monthStart, @monthEnd, @nextMonthStart, @quarterStart, @yearStart). Mirrors SENTINEL_TOKEN_PATTERNS.filter in src/utils/sentinelTokens.js (byte-equality enforced by a unit test)."
+			"pattern": "^@(?:me(?:\\.(?:displayName|email))?|myGroups|now|today|monthStart|monthEnd|nextMonthStart|quarterStart|yearStart)$|^@today[+-](?:[0-9]+|\\{@config\\.[A-Za-z][A-Za-z0-9_.]*\\})d$",
+			"description": "Filter-value context: relative fetch-time tokens resolved by resolveFilterTokens (@me, @me.displayName, @me.email, @myGroups (the current user's group ids, an IN list), @now, @today, @today±Nd (N may be {@config.<key>}), @monthStart, @monthEnd, @nextMonthStart, @quarterStart, @yearStart). Mirrors SENTINEL_TOKEN_PATTERNS.filter in src/utils/sentinelTokens.js (byte-equality enforced by a unit test)."
 		},
 		"sentinelConfigToken": {
 			"type": "string",
@@ -1204,6 +1216,24 @@
 					"items": { "type": "string" },
 					"description": "The fields a card shows. Keep it short: a card is scanned, not read."
 				},
+				"cardActions": {
+					"type": "array",
+					"items": { "type": "string", "minLength": 1 },
+					"description": "pl4-board-card-actions: the ids of the page's row `actions` each card offers in its own menu (assign, priority), in this order."
+				},
+				"cardCells": {
+					"type": "object",
+					"description": "pl4-board-card-cells: how a card field is drawn, as a table column's cell config: `{ [field]: { widget?, widgetProps?, formatter? } }` (a priority badge, a value with its currency, a close date with its due text). A field without one is text.",
+					"additionalProperties": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"widget": { "type": "string", "minLength": 1 },
+							"widgetProps": { "type": "object" },
+							"formatter": { "type": "string", "minLength": 1 }
+						}
+					}
+				},
 				"swimlaneField": {
 					"type": "string",
 					"description": "A second field to group the board into rows by, while the columns stay the stages. Cards with no value for it land in one named row, last, rather than being dropped: grouping by handler and hiding the unassigned work turns a board into a picture of what is already somebody's problem."
@@ -1287,6 +1317,9 @@
 									"schema": { "type": "string", "minLength": 1 },
 									"labelField": { "type": "string", "description": "The referenced row's field that names a column. Defaults to `name`, then `title`." },
 									"orderField": { "type": "string", "description": "The referenced row's numeric field the columns are ordered by." },
+									"itemsPath": { "type": "string", "minLength": 1, "description": "pl4-board-list-stages: the columns are a LIST on each referenced row (a pipeline's `stages`), not the rows themselves. Each item is keyed by `keyField` and linked to its row under `_parent`, so `narrowBy: { field: \"_parent\", rowField }` shows the stages of the parent the page filters on." },
+									"keyField": { "type": "string", "minLength": 1, "description": "With `itemsPath`: the item field a card stores and a drop writes (default `name`)." },
+									"closedField": { "type": "string", "minLength": 1, "description": "The referenced row's (or item's) field that marks a stage closed: its column starts collapsed, with its count, until the reader opens it." },
 									"colorField": { "type": "string", "description": "The referenced row's field that holds the column's dot colour (a badge variant or a CSS colour)." },
 									"filter": { "type": "object", "description": "Equality filters on the referenced rows, e.g. `{ \"isFinal\": false }` to leave out end states.", "additionalProperties": { "type": ["string", "number", "boolean"] } },
 									"capacityField": { "type": "string", "minLength": 1, "description": "board-column-capacity (2.100.0): the referenced row's numeric field that holds the column's limit. The header reads \"count / capacity\" and turns full at the limit, and a move into a full row is refused before it is written (the server still guards). A column merged from several rows shows no limit, but each row's own limit still refuses a move into it. A row without a number above 0 has no limit." },
@@ -1420,6 +1453,17 @@
 					"default": "default",
 					"description": "Badge variant for a value `colorMap` does not name."
 				}
+			}
+		},
+		"rowClassCondition": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["field", "value"],
+			"description": "One condition of a row-class rule: the row's `field` compared to `value` with `op`.",
+			"properties": {
+				"field": { "type": "string", "description": "Dot-path into the row." },
+				"op": { "type": "string", "enum": ["eq", "neq", "gt", "gte", "lt", "lte"], "default": "eq", "description": "Comparison operator (default eq)." },
+				"value": { "description": "Literal right-hand side of the comparison; tokens such as `@today` resolve." }
 			}
 		},
 		"dueRule": {
@@ -2090,15 +2134,11 @@
 											"required": ["when", "class"],
 											"properties": {
 												"when": {
-													"type": "object",
-													"additionalProperties": false,
-													"required": ["field", "value"],
-													"description": "The predicate evaluated against the row (shared visibleWhen grammar, LOCAL form).",
-													"properties": {
-														"field": { "type": "string", "description": "Dot-path into the row." },
-														"op": { "type": "string", "enum": ["eq", "neq", "gt", "gte", "lt", "lte"], "default": "eq", "description": "Comparison operator (default eq)." },
-														"value": { "description": "Literal right-hand side of the comparison." }
-													}
+													"description": "The predicate evaluated against the row (shared visibleWhen grammar, LOCAL form), or a list of them that must all hold.",
+													"oneOf": [
+														{ "$ref": "#/$defs/rowClassCondition" },
+														{ "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rowClassCondition" } }
+													]
 												},
 												"class": { "type": "string", "description": "CSS class added to the row when `when` holds." }
 											}
@@ -3248,14 +3288,17 @@
 				},
 				"entities": {
 					"type": "array",
-					"description": "export only: selectable entity types offered by the export launcher (e.g. Leads / Requests). Optional — when absent the dialog shows only the format picker. Each entry needs an id + pre-translated label.",
+					"description": "export only: selectable entity types offered by the export launcher (e.g. Leads / Requests). Optional — when absent the dialog shows only the format picker. Each entry needs an id + label (run through the app's translate). Without a `handler`, an entry naming `register` and `schema` downloads those OpenRegister objects, `filter` applied (pl4-export-action).",
 					"items": {
 						"type": "object",
 						"additionalProperties": false,
 						"required": ["id", "label"],
 						"properties": {
 							"id": { "type": "string", "description": "Entity id handed to the confirm handler." },
-							"label": { "type": "string", "description": "Pre-translated display label." }
+							"label": { "type": "string", "description": "Display label, run through the app's translate." },
+							"register": { "type": "string", "minLength": 1, "description": "OpenRegister register this entity exports from when the action has no handler." },
+							"schema": { "type": "string", "minLength": 1, "description": "OpenRegister schema this entity exports from when the action has no handler." },
+							"filter": { "type": "object", "description": "Filters sent with the export, as a list filter takes them." }
 						}
 					}
 				},
@@ -3691,6 +3734,15 @@
 					"additionalProperties": true,
 					"description": "Request parameters. Values pass the shared filter-token grammar (resolveFilterTokens): @me, @now, @today, @today±Nd, @monthStart/@quarterStart/@yearStart, @objectId/@object.<field> (detail context), @workspace.<key>/@config.<key> with a trailing `?` for optional values (dropped when unresolved; e.g. `{ \"period\": \"@workspace.datePreset?\" }` rides the dashboard date-range pills). A required token that stays unresolved blocks the fetch until the page context provides it."
 				},
+				"loadOn": {
+					"type": "string",
+					"enum": ["mount", "request"],
+					"default": "mount",
+					"description": "When the widget reads. \"request\" reads nothing until the reader presses its button (requestLabel), and again only on the next press once the request changes; for an endpoint that records every read, so a plain visit records nothing."
+				},
+				"requestLabel": { "type": "string", "description": "With loadOn \"request\": the button label, through the app's translate (default \"Show\")." },
+				"requestHint": { "type": "string", "description": "With loadOn \"request\": a sentence above the button, through the app's translate." },
+				"truncatedText": { "type": "string", "description": "The sentence shown when the answer declares itself truncated, through the app's translate; replaces the default." },
 				"responsePath": {
 					"type": "string",
 					"description": "Dot-path pluck of the response payload (e.g. 'summary', 'data.series'). Omitted = the whole response body."
@@ -3718,6 +3770,15 @@
 					"additionalProperties": true,
 					"description": "Request parameters — the shared filter-token grammar (see $defs/endpointSource.params). Params re-resolve and the chart refetches when the dashboard date range changes (the page publishes dateFrom / dateTo / datePreset into the workspace context)."
 				},
+				"loadOn": {
+					"type": "string",
+					"enum": ["mount", "request"],
+					"default": "mount",
+					"description": "When the widget reads. \"request\" reads nothing until the reader presses its button (requestLabel), and again only on the next press once the request changes; for an endpoint that records every read, so a plain visit records nothing."
+				},
+				"requestLabel": { "type": "string", "description": "With loadOn \"request\": the button label, through the app's translate (default \"Show\")." },
+				"requestHint": { "type": "string", "description": "With loadOn \"request\": a sentence above the button, through the app's translate." },
+				"truncatedText": { "type": "string", "description": "The sentence shown when the answer declares itself truncated, through the app's translate; replaces the default." },
 				"responsePath": {
 					"type": "string",
 					"description": "Dot-path pluck of the response payload. Omitted = the whole response body."
@@ -3743,6 +3804,10 @@
 							"name": {
 								"type": "string",
 								"description": "Series display name (legend / tooltip). Defaults to the path."
+							},
+							"namePath": {
+								"type": "string",
+								"description": "Path of the series name in the whole response (before responsePath), so the endpoint can say what the numbers measure. Falls back to name."
 							},
 							"path": {
 								"type": "string",
@@ -3930,8 +3995,8 @@
 				"type": {
 					"type": "string",
 					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "reports",
-						"links", "store", "search", "wiki", "flow", "flows", "flow-detail", "custom"],
-					"description": "Page type. Closed enum of 18 supported types. 'links' mounts CnLinkCardsPage: a page of link cards grouped under captions, declared with config.categories + config.cards ($defs/linkCard). Use it for the pages a short menu leaves out; unlike 'reports' an app may have several. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
+						"links", "store", "search", "wiki", "flow", "flows", "flow-detail", "redaction", "custom"],
+					"description": "Page type. Closed enum of 19 supported types. 'redaction' mounts CnRedactionEditor (a record's documents redacted one by one; config.recordId, config.config, config.breadcrumbs, config.recordSource). 'links' mounts CnLinkCardsPage: a page of link cards grouped under captions, declared with config.categories + config.cards ($defs/linkCard). Use it for the pages a short menu leaves out; unlike 'reports' an app may have several. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
 				},
 				"title": {
 					"type": "string",
@@ -4114,6 +4179,7 @@
 						},
 						"bulkBandAlways": { "type": "boolean", "default": false, "description": "type='index', board look: draw the bulk band (its actions and hint) before a selection too, its buttons disabled until rows are selected (DqZaken, DqWerkbord). Maps to CnIndexPage `bulkBandAlways`." },
 						"quickFilterPlacement": { "type": "string", "enum": ["", "toolbar", "row"], "default": "", "description": "type='index': where the quick-filter chips sit. `toolbar` keeps them on one row with the Filter button and the view switch beside a side panel, the chips that do not fit behind the overflow chip (DqTeamwachtrij). `row` puts them on a row of their own above the toolbar, wrapping onto more lines. Maps to CnIndexPage `quickFilterPlacement`." },
+						"live": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "type='index' (pl4-index-live): object types whose live changes the list follows; it reads itself again shortly after a change." },
 						"rowClass": {
 							"type": "array",
 							"description": "type='index': per-row CSS class rules, compiled into the table's rowClass function as on the object-table widget. Each rule { when: { field, op?, value }, class } adds `class` to a row whose `field` (a dot-path) compares to `value` with `op` (default eq; the visibleWhen operators and tokens such as `@today`, with two dates compared as moments), e.g. an overdue task `{ when: { field: \"dueAt\", op: \"lt\", value: \"@today\" }, class: \"cn-row--overdue\" }`. Maps to CnIndexPage `rowClass`.",
@@ -4126,35 +4192,19 @@
 								],
 								"properties": {
 									"when": {
-										"type": "object",
-										"additionalProperties": false,
-										"required": [
-											"field",
-											"value"
-										],
-										"description": "The predicate evaluated against the row (shared visibleWhen grammar, LOCAL form).",
-										"properties": {
-											"field": {
-												"type": "string",
-												"description": "Dot-path into the row."
+										"description": "The predicate evaluated against the row (shared visibleWhen grammar, LOCAL form), or a list of them that must all hold.",
+										"oneOf": [
+											{
+												"$ref": "#/$defs/rowClassCondition"
 											},
-											"op": {
-												"type": "string",
-												"enum": [
-													"eq",
-													"neq",
-													"gt",
-													"gte",
-													"lt",
-													"lte"
-												],
-												"default": "eq",
-												"description": "Comparison operator (default eq)."
-											},
-											"value": {
-												"description": "Literal right-hand side of the comparison."
+											{
+												"type": "array",
+												"minItems": 1,
+												"items": {
+													"$ref": "#/$defs/rowClassCondition"
+												}
 											}
-										}
+										]
 									},
 									"class": {
 										"type": "string",
@@ -4601,7 +4651,7 @@
 						},
 						"rowIndicators": {
 							"type": "array",
-							"description": "type='index': state indicators the page declares for its rows. Each entry names a `field` (a dotted path on the row), a condition (`equals`, `in`, a date `after` or `before` a moment, or plain truthiness when none is given), an `icon` (a CnIcon name) and a `text` (the text alternative, required). An entry without `text` does not render, because an icon with no text is colour and shape alone. The page declares which indicators exist; a record cannot add one the page has not declared. Maps to CnIndexPage `rowIndicators`.",
+							"description": "type='index': state indicators the page declares for its rows. Each entry names a `field` (a dotted path on the row), a condition (`equals`, `in`, a date `after` or `before` a moment, a number `lt` or `gt` a bound, or plain truthiness when none is given), an `icon` (a CnIcon name) and a `text` (the text alternative, required). An entry without `text` does not render, because an icon with no text is colour and shape alone. The page declares which indicators exist; a record cannot add one the page has not declared. Maps to CnIndexPage `rowIndicators`.",
 							"items": {
 								"$ref": "#/$defs/rowIndicator"
 							}
@@ -5206,12 +5256,13 @@
 							"items": {
 								"type": "object",
 								"required": ["key"],
-								"anyOf": [{ "required": ["options"] }, { "required": ["optionsFrom"] }],
+								"anyOf": [{ "required": ["options"] }, { "required": ["optionsFrom"] }, { "required": ["type"], "properties": { "type": { "enum": ["quarter", "year"] } } }],
 								"additionalProperties": false,
 								"properties": {
 									"key": { "type": "string", "minLength": 1, "description": "Workspace-context key written on change (the `@page.<key>` / `@workspace.<key>` token name)." },
 									"label": { "type": "string", "description": "Control label (i18n key or plain text)." },
-									"type": { "type": "string", "enum": ["select"], "default": "select", "description": "Control type, carried over from v1." },
+									"type": { "type": "string", "enum": ["select", "quarter", "year"], "default": "select", "description": "Control type, carried over from v1. \"quarter\" and \"year\" generate their options: the current quarter or year first, then `count - 1` before it, valued YYYY-Qn or YYYY." },
+									"count": { "type": "integer", "minimum": 1, "description": "With type \"quarter\" or \"year\": how many to offer (default 8 quarters, 5 years)." },
 									"control": { "type": "string", "enum": ["select", "segmented"], "default": "select", "description": "How the filter is drawn: a select, or a compact segmented group." },
 									"clearable": { "type": "boolean", "default": false, "description": "Lets the reader clear the select back to all; `placeholder` names that state (2.130.0)." },
 									"placeholder": { "type": "string", "description": "What a cleared select shows, e.g. \"All case types\", through the app's translate (2.130.0)." },
