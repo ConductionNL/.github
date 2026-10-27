@@ -213,7 +213,7 @@ The mode is one of three axes — lane (how much is read), strictness (how hard 
 7. **Posts inline comments** — one finding per comment, severity marked with 🔴/🟡/🟢; never bundles multiple findings in one comment
 8. **Offers local testing (optional)** — when the PR touches frontend or backend code, asks whether to verify the changes locally; locates or clones the target repo, checks Docker is running (starts it or asks the user to), maps detected layers to applicable `/test-*` skills, builds a test plan, gets your approval, then executes — any new issues join the existing findings before the verdict
 9. **Checks CI** — blocks APPROVE if required CI checks are failing
-10. **Submits formal review** — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings)
+10. **Submits formal review** — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings). A finding in code the base branch already carries never blocks, in any mode, unless you ask for the base's code to be reviewed too: it is capped at 🟡 when the PR's change reaches that code and at 🟢 otherwise (⚠️ when security-related). A 🔴 the cap lowered, or a ⚠️ 🟢, is offered as a tracking issue, after a search for an issue that already tracks it
 11. **Handles prior threads by author** — resolves threads *you* opened that are now addressed; on a co-reviewer's thread it posts an acknowledgment reply and leaves the thread for its author to close. Resolving someone else's comment misrepresents their agreement
 12. **Records what the run cost** — one line appended to `~/.claude/metrics/skill-runs.jsonl`, outside any repo. See *Measuring cost* below
 
