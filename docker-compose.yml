@@ -44,6 +44,7 @@ volumes:
   harp-data:
   openproject-pgdata:
   openproject-assets:
+  eurooffice-data:
   xwiki-data:
   exapp-n8n:
   exapp-openwebui:
@@ -1354,6 +1355,43 @@ services:
           memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/rest || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # Euro-Office Document Server - office editing and document conversion
+  # (DOCX/ODT/XLSX/PPTX/HTML/MD to PDF and PDF/A) for the `eurooffice` Nextcloud app.
+  # Access at: http://localhost:8090 (health: /healthcheck)
+  # Connect the app with: occ config:app:set eurooffice DocumentServerUrl --value=http://localhost:8090/
+  #   occ config:app:set eurooffice DocumentServerInternalUrl --value=http://eurooffice/
+  #   occ config:app:set eurooffice StorageUrl --value=http://nextcloud/
+  #   occ config:app:set eurooffice jwt_secret --value=<EUROOFFICE_JWT_SECRET>
+  eurooffice:
+    logging: *default-logging
+    profiles:
+      - eurooffice
+      - integrations
+    image: ghcr.io/euro-office/documentserver:v9.3.7
+    container_name: conduction-eurooffice
+    restart: always
+    ports:
+      - "8090:80"
+    volumes:
+      - eurooffice-data:/var/www/euro-office/Data
+    environment:
+      - JWT_ENABLED=true
+      - JWT_SECRET=${EUROOFFICE_JWT_SECRET:-conduction-dev-eurooffice-jwt-secret-32chars}
+      # The server fetches sources from the nextcloud container on the private docker network.
+      - ALLOW_PRIVATE_IP_ADDRESS=true
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:80/healthcheck | grep -q true"]
       interval: 30s
       timeout: 10s
       retries: 5
