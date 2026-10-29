@@ -216,6 +216,26 @@ class Ratchet(unittest.TestCase):
         self.assertIn("duplicated fragment of 6+ lines", out)
         self.assertIn("same as lib/Service/Legacy.php:", out)
 
+    def test_a_clone_of_mostly_comment_lines_is_not_six_lines_of_code(self):
+        # The openregister #5008 shape: jscpd's weak mode matches across a
+        # docblock, so a long "fragment" can hold three lines of code.
+        tail = ("        $this->addType(fieldName: 'linkedBy', type: 'string', nullable: true, default: null);\n    }\n\n"
+                "    /**\n" + "".join(f"     * Line {i} of a long explanation of the method below.\n" for i in range(9))
+                + "     */\n")
+        self.repo.git("checkout", "-q", "base")
+        self.repo.write("lib/Service/First.php", php_class("First", ["    public function __construct()\n    {\n" + tail
+                                                                     + php_method("one", lines=2, tag="o")]))
+        self.repo.commit("base with the first copy")
+        self.repo.git("checkout", "-q", "-B", "change", "base")
+        self.repo.write("lib/Service/Second.php", php_class("Second", ["    public function __construct()\n    {\n" + tail
+                                                                       + php_method("two", lines=2, tag="t")]))
+        rc, out = self.ratchet()
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("duplicated fragment", out)
+        # Five equal code lines are not a SIG clone, so the report counts no redundant code either.
+        clones = sig.run_jscpd(self.repo.dir, JSCPD, ["lib/Service/First.php", "lib/Service/Second.php"])
+        self.assertEqual(clones, [])
+
     def test_edit_inside_an_existing_clone_is_not_new(self):
         self.repo.git("checkout", "-q", "base")
         self.repo.write("lib/Service/Twin.php", php_class("Twin", [

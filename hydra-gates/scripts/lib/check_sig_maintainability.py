@@ -332,7 +332,14 @@ def read_text(path):
 
 def run_jscpd(app, exe, files):
     """Clone pairs among `files` (repo-relative), as a list of
-    {"a": (file, start, end), "b": (file, start, end), "lines": n}."""
+    {"a": (file, start, end), "b": (file, start, end), "lines": n, "code": {file: set}}.
+
+    jscpd matches tokens and skips comments, so a reported fragment can span a
+    docblock, and its first and last line may match only in part. SIG counts
+    code lines repeated literally modulo whitespace, so the code lines of both
+    fragments are paired in order and only the pairs that are equal without
+    whitespace count. A clone is kept when at least 6 lines do, and "code"
+    holds those line numbers per fragment."""
     if not files:
         return []
     out_dir = tempfile.mkdtemp(prefix="sig-jscpd-")
@@ -347,14 +354,33 @@ def run_jscpd(app, exe, files):
             data = json.load(fh)
     finally:
         shutil.rmtree(out_dir, ignore_errors=True)
+    code, text = {}, {}
+
+    def code_in(occ):
+        f, s, e = occ
+        if f not in code:
+            lang = LANG_OF_EXT.get(os.path.splitext(f)[1].lower(), "")
+            text[f] = read_text(os.path.join(app, f)).splitlines()
+            code[f] = code_lines("\n".join(text[f]), lang)
+        return [n for n in range(s, e + 1) if n in code[f]]
+
+    def literal_pairs(occ_a, occ_b):
+        same_a, same_b = set(), set()
+        for na, nb in zip(code_in(occ_a), code_in(occ_b)):
+            if "".join(text[occ_a[0]][na - 1].split()) == "".join(text[occ_b[0]][nb - 1].split()):
+                same_a.add(na)
+                same_b.add(nb)
+        return same_a, same_b
+
     clones = []
     for d in data.get("duplicates", []):
         a, b = d["firstFile"], d["secondFile"]
-        clones.append({
-            "a": (os.path.relpath(os.path.join(app, a["name"]), app), a["start"], a["end"]),
-            "b": (os.path.relpath(os.path.join(app, b["name"]), app), b["start"], b["end"]),
-            "lines": d.get("lines", b["end"] - b["start"] + 1),
-        })
+        occ_a = (os.path.relpath(os.path.join(app, a["name"]), app), a["start"], a["end"])
+        occ_b = (os.path.relpath(os.path.join(app, b["name"]), app), b["start"], b["end"])
+        code_a, code_b = literal_pairs(occ_a, occ_b)
+        if len(code_b) < DUP_MIN_LINES:
+            continue
+        clones.append({"a": occ_a, "b": occ_b, "lines": len(code_b), "code": {occ_a: code_a, occ_b: code_b}})
     return clones
 
 
@@ -414,9 +440,9 @@ def duplication_profile(app, clones, files_by_lang):
         code[rel] = code_lines(texts[rel], lang)
     redundant = collections.defaultdict(set)
     for c in clones:
-        f, s, e = c["b"]
+        f = c["b"][0]
         if f in code:
-            redundant[f].update(x for x in range(s, e + 1) if x in code[f])
+            redundant[f].update(c["code"][c["b"]])
     out = {}
     for lang in sorted(set(files_by_lang.values())):
         files = [f for f, lg in files_by_lang.items() if lg == lang]
@@ -902,7 +928,7 @@ def cmd_ratchet(args, lizard, jscpd_exe):
         hits = []
         for occ in (c["a"], c["b"]):
             f, s, e = occ
-            if f in added and sum(1 for n in added[f] if s <= n <= e) >= DUP_MIN_LINES:
+            if f in added and len(added[f] & c["code"][occ]) >= DUP_MIN_LINES:
                 hits.append(occ)
         if hits:
             f, s, e = hits[0]
