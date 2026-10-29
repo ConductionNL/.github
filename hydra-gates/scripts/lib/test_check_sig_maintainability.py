@@ -298,6 +298,24 @@ class Report(unittest.TestCase):
         self.assertIn("[gate-122] sig-maintainability: report: 2 unit(s) in 1 file(s), languages php", out)
         self.assertIn("| php | 2 |", out)
 
+    def test_duplication_counts_every_later_copy_of_six_code_lines(self):
+        block = lambda tag: php_method("copy", lines=1, tag=tag).replace("        return 0;", DUP_BLOCK + "        return 0;")
+        self.repo.write("lib/Service/A.php", php_class("A", [block("a")]))
+        self.repo.write("lib/Service/B.php", php_class("B", [block("b")]))
+        self.repo.write("lib/Service/C.php", php_class("C", [php_method("other", lines=9, tag="c")]))
+        self.repo.commit("base")
+        out_json = os.path.join(self.repo.dir, "..", os.path.basename(self.repo.dir) + "-dup.json")
+        rc, out = run("report", self.repo.dir, "--json", out_json)
+        self.assertEqual(rc, 0, out)
+        with open(out_json) as fh:
+            dup = json.load(fh)["languages"]["php"]
+        os.unlink(out_json)
+        # B repeats A's nine $shared lines plus the closing return, brace and class brace.
+        self.assertGreaterEqual(dup["duplication"]["redundant_lines"], 9)
+        self.assertLess(dup["duplication"]["redundant_lines"], 16)
+        self.assertFalse(dup["duplication"]["ok"])
+        self.assertIn("duplication_jscpd", dup)
+
     def test_no_measured_file_is_exit_4(self):
         self.repo.write("README.md", "x\n")
         self.repo.commit("base")

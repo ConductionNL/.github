@@ -42,7 +42,10 @@ way SIG will once the repository carries a scope file.
 
 TOOLS, PINNED
 -------------
-lizard 1.24.3 (units: NLOC, McCabe, parameters) and jscpd 4.0.5 (clones).
+lizard 1.24.3 (units: NLOC, McCabe, parameters) and jscpd 4.0.5 (the
+ratchet's clones). The report's duplication follows SIG's line definition
+directly (windows of 6 code lines equal modulo whitespace) and shows jscpd's
+figure next to it as a cross-check.
 A different version produces different numbers, so the pinned version is
 loaded or installed into the tool cache (HYDRA_GATE_TOOLS_DIR, default
 ~/.cache/hydra-gates/tools) and any other version is refused. Set
@@ -431,26 +434,51 @@ def worst(units, key, n=8):
 
 
 def duplication_profile(app, clones, files_by_lang):
-    """Redundant code lines per language: for every clone pair, the code lines
-    of its SECOND occurrence (jscpd reports N copies as pairs against one
-    original, so this counts occurrences minus one)."""
-    texts, code = {}, {}
+    """Redundant code lines per language, two ways.
+
+    "duplication" follows SIG's definition directly: every window of 6
+    consecutive code lines, compared without whitespace, that already occurred
+    earlier in a file of the same language makes its lines redundant (so N
+    copies count N-1 times). Windows made only of brackets are skipped.
+
+    "duplication_jscpd" is the cross-check from jscpd's clone pairs: the
+    literally equal code lines of each pair's second occurrence. jscpd reports
+    clones pairwise and needs 30 tokens, so it finds fewer clones than SIG."""
+    lines_of, code = {}, {}
     for rel, lang in files_by_lang.items():
-        texts[rel] = read_text(os.path.join(app, rel))
-        code[rel] = code_lines(texts[rel], lang)
+        text = read_text(os.path.join(app, rel))
+        lines_of[rel] = text.splitlines()
+        code[rel] = code_lines(text, lang)
+    windows = collections.defaultdict(dict)
     redundant = collections.defaultdict(set)
+    for rel in sorted(files_by_lang):
+        seen = windows[files_by_lang[rel]]
+        seq = [(n, "".join(lines_of[rel][n - 1].split())) for n in sorted(code[rel])]
+        for i in range(len(seq) - DUP_MIN_LINES + 1):
+            win = seq[i:i + DUP_MIN_LINES]
+            key = tuple(t for _n, t in win)
+            if all(len(t) <= 2 for t in key):
+                continue
+            if key in seen and seen[key] != (rel, i):
+                redundant[rel].update(n for n, _t in win)
+            else:
+                seen.setdefault(key, (rel, i))
+    by_jscpd = collections.defaultdict(set)
     for c in clones:
         f = c["b"][0]
         if f in code:
-            redundant[f].update(c["code"][c["b"]])
+            by_jscpd[f].update(c["code"][c["b"]])
+
+    def row(dup, total):
+        share = dup / total if total else 0.0
+        return {"code_lines": total, "redundant_lines": dup, "share": round(share, 4),
+                "limit": DUPLICATION_LIMIT, "ok": share <= DUPLICATION_LIMIT}
     out = {}
     for lang in sorted(set(files_by_lang.values())):
         files = [f for f, lg in files_by_lang.items() if lg == lang]
         total = sum(len(code[f]) for f in files)
-        dup = sum(len(redundant[f]) for f in files)
-        share = dup / total if total else 0.0
-        out[lang] = {"code_lines": total, "redundant_lines": dup, "share": round(share, 4),
-                     "limit": DUPLICATION_LIMIT, "ok": share <= DUPLICATION_LIMIT}
+        out[lang] = (row(sum(len(redundant[f]) for f in files), total),
+                     row(sum(len(by_jscpd[f]) for f in files), total))
     return out
 
 
@@ -749,7 +777,8 @@ def build_report(app, lizard, jscpd):
             "unit_size": profile(rows, "nloc", LIMITS["unit_size"]),
             "unit_complexity": profile(rows, "ccn", LIMITS["unit_complexity"]),
             "unit_interfacing": profile(rows, "params", LIMITS["unit_interfacing"]),
-            "duplication": dup.get(lang),
+            "duplication": dup[lang][0] if lang in dup else None,
+            "duplication_jscpd": dup[lang][1] if lang in dup else None,
             "largest_units": worst(rows, "nloc"),
             "most_complex_units": worst(rows, "ccn"),
             "widest_units": worst(rows, "params"),
@@ -790,16 +819,18 @@ def markdown(report):
     out = [f"## SIG maintainability profile: {report['app']}", "",
            f"lizard {LIZARD_VERSION}, jscpd {JSCPD_VERSION}; limits: {report['limits']}. "
            "Each cell is the share of code above the bound, against the 4-star limit.", "",
-           "| language | units | size >15/30/60 | complexity >5/10/25 | params 3+/5+/7+ | duplication |",
-           "|---|---|---|---|---|---|"]
+           "| language | units | size >15/30/60 | complexity >5/10/25 | params 3+/5+/7+ | duplication | jscpd |",
+           "|---|---|---|---|---|---|---|"]
 
     def cells(rows):
         return " / ".join(f"{pct(r['share'])}{'' if r['ok'] else ' ✗'}" for r in rows)
     for lang, d in report["languages"].items():
         dup = d.get("duplication")
         dcell = f"{pct(dup['share'])}{'' if dup['ok'] else ' ✗'}" if dup else "n/a"
+        jdup = d.get("duplication_jscpd")
+        jcell = pct(jdup["share"]) if jdup else "n/a"
         out.append(f"| {lang} | {d['units']} | {cells(d['unit_size'])} | {cells(d['unit_complexity'])} "
-                   f"| {cells(d['unit_interfacing'])} | {dcell} |")
+                   f"| {cells(d['unit_interfacing'])} | {dcell} | {jcell} |")
     for lang, s in report.get("structure", {}).items():
         if not s:
             continue
