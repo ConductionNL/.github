@@ -11140,7 +11140,10 @@ if ! grep -qE '^checked [0-9]+ file\(s\)$' "${_orcp_log}" 2>/dev/null; then
 elif [ "${_orcp_rc}" -eq 0 ]; then
     _pass 67 "openregister-contract-parity"
 elif [ "${_orcp_rc}" -eq 3 ]; then
-    _skip 67 "openregister-contract-parity" na "no lib/Contract/ — this repo does not own the OpenRegister contract, so it has nothing to keep in step."
+    # Two reasons share code 3: no lib/Contract/, or a lib/Contract/ that is
+    # another app's own. The checker's SKIP line says which.
+    _orcp_why=$(grep -m1 '^SKIP ' "${_orcp_log}" 2>/dev/null | sed 's/^SKIP //')
+    _skip 67 "openregister-contract-parity" na "${_orcp_why:-this repo does not own the OpenRegister contract, so it has nothing to keep in step.}"
 elif [ "${_orcp_rc}" -eq 4 ]; then
     _skip 67 "openregister-contract-parity" na "lib/Contract/ exists but no shipped copy was found to compare it against. NOT a pass — nothing was verified."
 else
