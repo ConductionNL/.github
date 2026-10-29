@@ -40,10 +40,16 @@ tried, in this order:
 A repo with no lib/Contract/ does not own the contract and is skipped; it is not
 judged, so it is not reported as a pass.
 
+Only OpenRegister publishes this contract, so only OpenRegister is judged. Other
+apps may keep their own interfaces in lib/Contract/ (opencatalogi does), and
+comparing those against hydra-gates/contracts/ reports drift in a contract they
+do not own. The repository is identified by `<id>` in appinfo/info.xml, with the
+composer package name as the fallback when info.xml is absent or unreadable.
+
 Exit codes
     0  the copies agree
     1  they differ -- see the FAIL lines
-    3  no lib/Contract/ -- this repo does not own the contract
+    3  not applicable: no lib/Contract/, or the repository is not OpenRegister
     4  lib/Contract/ exists but no shipped copy was found in any of the three
        locations. NOT a pass: nothing was verified.
 
@@ -54,7 +60,9 @@ a clean tree -- a dead checker otherwise reports as a pass.
 
 from __future__ import annotations
 
+import json
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Where each copy lives, relative to the repository root.
@@ -76,6 +84,29 @@ SELF_DIR = Path("hydra-gates") / "contracts"
 #
 # scripts/lib/<this file> -> scripts/lib -> scripts -> hydra-gates -> contracts/
 RUNNER_DIR = Path(__file__).resolve().parent.parent.parent / "contracts"
+
+
+# The app that publishes the contract, as named by appinfo/info.xml and composer.
+OWNER_APP_ID = "openregister"
+
+
+def _app_identity(root: Path) -> tuple[str | None, str]:
+    """Return (app id, where it was read) from info.xml, else from composer.json."""
+    try:
+        app_id = ET.parse(root / "appinfo" / "info.xml").getroot().findtext("id")
+    except (OSError, ET.ParseError):
+        app_id = None
+    if app_id and app_id.strip():
+        return app_id.strip(), "appinfo/info.xml <id>"
+
+    try:
+        name = json.loads((root / "composer.json").read_text(encoding="utf-8")).get("name")
+    except (OSError, ValueError, AttributeError):
+        name = None
+    if isinstance(name, str) and name.strip():
+        return name.strip().rsplit("/", 1)[-1], "composer.json name"
+
+    return None, "no appinfo/info.xml <id> and no composer.json name"
 
 
 def _php_files(directory: Path) -> dict[str, Path]:
@@ -100,6 +131,17 @@ def main(argv: list[str]) -> int:
         print(
             "SKIP no lib/Contract/ in this repository — it does not own the "
             "OpenRegister contract, so there is nothing to keep in step."
+        )
+        print("checked 0 file(s)")
+        return 3
+
+    app_id, source = _app_identity(root)
+    if app_id != OWNER_APP_ID:
+        print(
+            f"SKIP lib/Contract/ here is this app's own, not the OpenRegister "
+            f"contract (app id {app_id or 'unknown'}, from {source}). Only "
+            f"{OWNER_APP_ID} publishes the contract, so there is nothing to "
+            "keep in step."
         )
         print("checked 0 file(s)")
         return 3
