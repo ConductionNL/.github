@@ -13588,6 +13588,101 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# gate-122: sig-maintainability
+#
+# The Software Improvement Group (SIG, Sigrid) rates maintainability per
+# language from risk profiles: how much code sits in units above a size,
+# complexity or parameter bound, plus duplication and architecture. Its 4-star
+# limits are far stricter than phpmd at the fleet's defaults (CC 10, methods up
+# to 100 lines, 10 parameters, with baselines). Measured 2026-10-29 with
+# lizard 1.24.3 and jscpd 4.0.5: openregister, opencatalogi and openconnector
+# all miss unit size, complexity and interfacing in PHP; openregister keeps
+# 17.7% of its PHP in units over 60 lines against a limit of 8.3%.
+#
+# Two modes, chosen by whether a delta base exists:
+#   * delta base -> RATCHET. A unit the change adds or edits fails when it has
+#     NLOC > 60, McCabe > 10 or 5+ parameters, and so does a duplicated
+#     fragment of 6+ lines the change introduces. A unit that was already over
+#     the bound and did not get worse is inherited, and so is everything the
+#     change did not touch.
+#   * no delta base (a full-scope run: the nightly drift sweep, a dispatch) ->
+#     REPORT. The whole risk profile against the 4-star limits, written to
+#     sig-profile.json and sig-profile.md in $HYDRA_GATE_SIG_REPORT_DIR (the
+#     log directory by default). Report-only: it PASSES with its census line.
+#
+# Ships as a WARNING under the fleet rule for new gates: the package resolves
+# at @main for every core app, so a blocking ratchet would land everywhere the
+# minute it merged. HYDRA_GATE_SIG_MAINTAINABILITY_BLOCKING=1 makes it block.
+# ---------------------------------------------------------------------------
+_sig_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-sig-maintainability.log
+: > "${_sig_log}"
+_sig_helper="${SCRIPT_DIR}/lib/check_sig_maintainability.py"
+_sig_report_dir="${HYDRA_GATE_SIG_REPORT_DIR:-${HYDRA_GATE_LOG_DIR}}"
+if [ ! -f "${_sig_helper}" ]; then
+    _skip 122 "sig-maintainability" wiring "check_sig_maintainability.py not found at ${_sig_helper}, so no unit was measured by this run."
+elif ! command -v python3 > /dev/null 2>&1; then
+    _skip 122 "sig-maintainability" wiring "python3 is not on PATH, so no unit was measured by this run."
+else
+    set +e
+    if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+        _sig_mode=ratchet
+        python3 "${_sig_helper}" ratchet . --base-ref "${BASE_REF}" > "${_sig_log}" 2>&1
+        _sig_rc=$?
+    else
+        _sig_mode=report
+        mkdir -p "${_sig_report_dir}" 2>/dev/null
+        python3 "${_sig_helper}" report . --json "${_sig_report_dir}/sig-profile.json" \
+            --md "${_sig_report_dir}/sig-profile.md" > "${_sig_log}" 2>&1
+        _sig_rc=$?
+    fi
+    set +e
+    _sig_why=$(tail -3 "${_sig_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-240)
+    case "${_sig_rc}" in
+        0)
+            if [ "${_sig_mode}" = "ratchet" ] \
+                && _helper_finished "${_sig_log}" '^\[gate-122\] sig-maintainability: checked [0-9]+ changed unit'; then
+                grep -E '^  (unverified|inherited)' "${_sig_log}" 2>/dev/null
+                grep -E '^\[gate-122\] sig-maintainability: checked' "${_sig_log}"
+                _pass 122 "sig-maintainability"
+            elif [ "${_sig_mode}" = "report" ] \
+                && _helper_finished "${_sig_log}" '^\[gate-122\] sig-maintainability: report: [0-9]+ unit'; then
+                grep -E '^\| ' "${_sig_log}" 2>/dev/null
+                grep -E '^\[gate-122\] sig-maintainability: report:' "${_sig_log}"
+                echo "[gate-122] sig-maintainability: profile written to ${_sig_report_dir}/sig-profile.json and sig-profile.md (report-only)"
+                _pass 122 "sig-maintainability"
+            else
+                _skip 122 "sig-maintainability" wiring "check_sig_maintainability.py exited 0 without its ${_sig_mode} census line, so nothing is verified by this run. Checker output: ${_sig_why:-<empty>}. See ${_sig_log}."
+            fi
+            ;;
+        1)
+            if [ "${_sig_mode}" = "ratchet" ] \
+                && _helper_finished "${_sig_log}" '^\[gate-122\] sig-maintainability: FAIL: [0-9]+ finding'; then
+                grep -E '^  [^ ]' "${_sig_log}" 2>/dev/null
+                _sig_n=$(sed -n 's/^\[gate-122\] sig-maintainability: FAIL: \([0-9]*\) finding.*/\1/p' "${_sig_log}" | tail -1)
+                _sig_msg="${_sig_n:-1} unit(s) or duplicated fragment(s) this change adds or makes worse exceed the SIG ratchet (NLOC > 60, McCabe > 10, 5+ parameters, or a new 6+ line clone). Split the unit, pass a value object, or reuse the existing code. See ${_sig_log}"
+                if [ "${HYDRA_GATE_SIG_MAINTAINABILITY_BLOCKING:-0}" = "1" ]; then
+                    _fail 122 "sig-maintainability" "${_sig_msg}"
+                else
+                    _warn 122 "sig-maintainability" "${_sig_msg} (warning; HYDRA_GATE_SIG_MAINTAINABILITY_BLOCKING=1 makes it block)"
+                fi
+            else
+                # A CRASH IS NOT A FINDING. A Python traceback also exits 1.
+                _skip 122 "sig-maintainability" wiring "check_sig_maintainability.py exited 1 without its FAIL summary, so it did not finish and nothing is verified by this run. Checker output: ${_sig_why:-<empty>}. See ${_sig_log}."
+            fi
+            ;;
+        4)
+            _skip 122 "sig-maintainability" na "$(tail -1 "${_sig_log}" 2>/dev/null | sed 's/^\[gate-122\] sig-maintainability: //' | cut -c1-240)"
+            ;;
+        5)
+            _skip 122 "sig-maintainability" wiring "a pinned measuring tool is unavailable, so no unit was measured by this run: ${_sig_why:-<empty>}. See ${_sig_log}."
+            ;;
+        *)
+            _skip 122 "sig-maintainability" wiring "check_sig_maintainability.py exited ${_sig_rc} without a verdict, so nothing is verified by this run. Checker output: ${_sig_why:-<empty>}. See ${_sig_log}."
+            ;;
+    esac
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
