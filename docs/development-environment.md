@@ -90,6 +90,7 @@ docker compose -f .github/docker-compose.yml --profile mail --profile ai --profi
 | `mariadb`                      | db-mariadb, nextcloud-mariadb                                                                   | MariaDB compatibility testing                  | ~1 GB        |
 | `openproject` / `integrations` | openproject                                                                                     | Project management                             | ~4 GB        |
 | `xwiki` / `integrations`       | xwiki                                                                                           | Wiki platform                                  | ~4 GB        |
+| `eurooffice` / `integrations`  | eurooffice                                                                                      | Office documents, PDF and PDF/A conversion     | ~4 GB        |
 | `ox` / `integrations`          | open-xchange                                                                                    | Email and groupware (requires registry access) | ~4 GB        |
 | `exapps-legacy`                | docker-socket-proxy                                                                             | Legacy AppAPI deploy daemon                    | ~128 MB      |
 
@@ -336,11 +337,34 @@ Quick reference for all service ports:
 | 8087  | Open-Xchange        | ox            |
 | 8088  | XWiki               | xwiki         |
 | 8089  | Matomo              | matomo        |
+| 8090  | Euro-Office         | eurooffice    |
 | 8180  | Keycloak            | commonground  |
 | 8780  | HaRP                | exapps        |
 | 8983  | Solr                | solr          |
 | 9200  | Elasticsearch       | elasticsearch |
 | 11434 | Ollama              | ollama        |
+
+## Euro-Office document server (--profile eurooffice)
+
+Runs the Euro-Office document server, the office back end of the `eurooffice` Nextcloud app ("Nextcloud Office"). It edits documents in the browser and converts DOCX, ODT, XLSX, PPTX, HTML and Markdown to PDF and PDF/A.
+
+```bash
+docker compose -p openregister -f .github/docker-compose.yml --profile eurooffice up -d --no-deps eurooffice
+curl http://localhost:8090/healthcheck   # true once it is ready, after about a minute
+```
+
+The server only accepts requests signed with its JWT secret. Set `EUROOFFICE_JWT_SECRET` (at least 32 characters) before starting it; the default is for local use only. Then install the `eurooffice` app and point it at the server:
+
+```bash
+occ app:enable eurooffice
+occ config:app:set eurooffice DocumentServerUrl --value=http://localhost:8090/
+occ config:app:set eurooffice DocumentServerInternalUrl --value=http://eurooffice/
+occ config:app:set eurooffice StorageUrl --value=http://nextcloud/
+occ config:app:set eurooffice jwt_secret --sensitive --value="$EUROOFFICE_JWT_SECRET"
+occ eurooffice:documentserver --check
+```
+
+`DocumentServerUrl` is the address your browser uses; `DocumentServerInternalUrl` and `StorageUrl` are the addresses the two containers use to reach each other on `conduction-network`.
 
 ## Matomo analytics (--profile matomo)
 
