@@ -858,10 +858,16 @@ fi
 #                          the only core app shipping the file, with 0 findings.
 #                          Per-repo opt-in:
 #                          HYDRA_GATE_CONNECTIONS_DECLARATION_BLOCKING=1.
+#   122  sig-maintainability .github#871. A NEW gate, advisory under the fleet
+#                          rule that a new gate ships as a warning. It holds
+#                          changed units to the SIG 4-star bounds, and
+#                          openregister alone keeps 16.5% of its PHP in units
+#                          over 60 lines. Per-repo opt-in:
+#                          HYDRA_GATE_SIG_MAINTAINABILITY_BLOCKING=1.
 #
 # All of them are worked down per app and flipped back individually; the
 # findings print on every run either way, so none is hidden.
-_ADVISORY_ALLOWED_GATES="7 19 46 112 113 114 115 116"
+_ADVISORY_ALLOWED_GATES="7 19 46 112 113 114 115 116 122"
 
 _runner_src="${GF_PKG_ROOT}/scripts/run-hydra-gates.sh"
 _warn_gates="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_runner_src}" \
