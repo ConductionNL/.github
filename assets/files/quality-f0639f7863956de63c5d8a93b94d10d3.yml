@@ -617,6 +617,14 @@ on:
         required: false
         type: boolean
         default: true
+      hydra-gates-sig-blocking:
+        # Gate-122 (sig-maintainability) ships as a warning, like every new
+        # gate: the package resolves at @main for the whole fleet. This is the
+        # named opt-in a repo uses once it wants the SIG ratchet to block.
+        description: "Make gate-122 (sig-maintainability) BLOCK when a change adds or worsens a unit over the SIG 4-star bounds (NLOC 60, McCabe 10, 5+ parameters) or adds a duplicated fragment of 6+ lines. OPT-IN, default false. The findings are printed on every run either way."
+        required: false
+        type: boolean
+        default: false
       hydra-gates-e2e-anchor-blocking:
         # THE OPT-IN GATE-46 ALREADY INVITES AND NOTHING COULD ACCEPT.
         #
@@ -8504,6 +8512,13 @@ jobs:
           # from the caller's declaration rather than from whatever the runner
           # defaults to.
           HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING: ${{ inputs.hydra-gates-e2e-anchor-blocking && '1' || '0' }}
+          # Gate-122: blocking only where the caller opted in, as an explicit
+          # '1'/'0' for the same reason as the line above. On a run with no
+          # delta base (workflow_dispatch, which is what the daily drift sweep
+          # sends) the gate writes the SIG risk profile here instead of
+          # ratcheting; the step after the gates publishes it.
+          HYDRA_GATE_SIG_MAINTAINABILITY_BLOCKING: ${{ inputs.hydra-gates-sig-blocking && '1' || '0' }}
+          HYDRA_GATE_SIG_REPORT_DIR: ${{ runner.temp }}/sig-profile
           # Gate 109: the apps this caller's CI installs (both lists, as two
           # JSON arrays). Passed even when both are `[]`, so "installs nothing"
           # and "was not told" stay different answers.
@@ -8616,6 +8631,25 @@ jobs:
           echo "::error::${RC} Hydra gate(s) failed. The exit code is the failure COUNT — see the named [gate-N] FAIL lines above."
           exit 1
 
+      - name: Publish the SIG maintainability profile
+        # Full-scope runs only: that is the daily drift sweep's dispatch, the
+        # nightly measurement of every app. A diff-scoped run ratchets instead
+        # and writes no profile, so there is nothing to publish.
+        if: ${{ always() && steps.base.outputs.scope == 'full' }}
+        run: |
+          PROFILE="${RUNNER_TEMP}/sig-profile/sig-profile.md"
+          if [ -s "${PROFILE}" ]; then
+            cat "${PROFILE}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No SIG profile was written by this run. Read the [gate-122] line in the gate output for why (not applicable, or a tool that could not run)." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload the SIG maintainability profile
+        if: ${{ always() && steps.base.outputs.scope == 'full' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sig-profile
+          path: ${{ runner.temp }}/sig-profile/
+          if-no-files-found: ignore
       - name: Record result
         if: always()
         run: |
