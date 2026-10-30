@@ -13,7 +13,7 @@
     "  allow.pathPrefixes  repo-relative prefixes, case-insensitive. This is how an ambiguous token such as 'dso' is",
     "                      excused: by WHERE the file lives, not by the token alone.",
     "",
-    "allow.pathPrefixes also lists exact files of integriq's DSO-LV adapter (STAM koppelvlak, PKIoverheid signatures, DSO-SWF, status push, DSO exceptions and PKI admin). Exact files, because they are not under one directory. They match case-insensitively in every app, so check another app does not share a path before adding one. The DSO activity-to-zaaktype mapping and samenloop logic is NOT excused: it is procedure logic and stays counted (decision 188).",
+    "allow.pathPrefixes also lists exact files of integriq's DSO-LV adapter (STAM koppelvlak, PKIoverheid signatures, DSO-SWF, status push, DSO exceptions and PKI admin). Exact files, because they are not under one directory. They match case-insensitively in every app, so check another app does not share a path before adding one. The DSO activity-to-zaaktype mapping and samenloop logic is NOT excused: it is procedure logic and stays counted (decision 188). One exception: lib/Service/Dso/DsoActivityOverview.php, a read model over DsoActivityTable behind the generic Portal ActivityOverviewInterface, excused so the beta release could ship; whether it moves into configuration is open in integriq#2843.",
     "",
     "Which source files are read:",
     "  roots / extensions"
@@ -45,6 +45,7 @@
       "lib/Service/DSOSignatureVerifierService.php",
       "lib/Service/DSOStatusService.php",
       "lib/Service/Dso/DsoAccountRights.php",
+      "lib/Service/Dso/DsoActivityOverview.php",
       "lib/Service/Dso/DsoAttachmentFetcher.php",
       "lib/Service/Dso/DsoAttachmentFetcherInterface.php",
       "lib/Service/Dso/DsoClient.php",
