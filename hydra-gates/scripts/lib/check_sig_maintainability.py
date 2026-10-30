@@ -430,12 +430,18 @@ def run_jscpd(app, exe, files):
 
 
 def code_lines(text, lang):
-    """Line numbers (1-based) holding code: not blank, not a comment-only line."""
+    """Line numbers (1-based) holding code: not blank, not a comment-only line.
+    In a Vue file an HTML comment (`<!-- ... -->`, such as the SPDX header) is a comment too."""
     lines = set()
-    in_block = False
+    in_block = in_html = False
     hash_comments = lang in ("python", "php")
     for i, raw in enumerate(text.splitlines(), 1):
         s = raw.strip()
+        if lang == "vue" and (in_html or s.startswith("<!--")):
+            in_html = "-->" not in s[4 if s.startswith("<!--") else 0:]
+            if in_html or not s.rsplit("-->", 1)[1].strip():
+                continue
+            s = s.rsplit("-->", 1)[1].strip()
         if in_block:
             if "*/" in s:
                 in_block = False
