@@ -40,11 +40,13 @@
       "lib/Notification/DsoConnectionNotifier.php",
       "lib/Repair/MigrateDsoStamConnection.php",
       "lib/Service/DSOParserService.php",
+      "lib/Service/DSOParserServiceInterface.php",
       "lib/Service/DSOSamenwerkingService.php",
       "lib/Service/DSOSignatureVerifierService.php",
       "lib/Service/DSOStatusService.php",
       "lib/Service/Dso/DsoAccountRights.php",
       "lib/Service/Dso/DsoAttachmentFetcher.php",
+      "lib/Service/Dso/DsoAttachmentFetcherInterface.php",
       "lib/Service/Dso/DsoClient.php",
       "lib/Service/Dso/DsoConnection.php",
       "lib/Service/Dso/DsoConnectionAlerts.php",
@@ -53,6 +55,7 @@
       "lib/Service/Dso/DsoRequestTranslator.php",
       "lib/Service/Dso/LogDsoConnectorProvider.php",
       "lib/Service/DsoIngestService.php",
+      "lib/Service/DsoIngestServiceInterface.php",
       "src/views/admin/DsoPkiSettings.vue"
     ]
   },
