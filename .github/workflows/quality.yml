@@ -989,6 +989,8 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BEFORE: ${{ github.event.before }}
+          BRANCH: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           # Word-splitting on $GLOBS is INTENTIONAL (it is a space-separated
@@ -1029,8 +1031,26 @@ jobs:
                   run_everything "this push created the branch, so there is no previous commit to diff against."
                   ;;
               esac
-              RANGE="${BEFORE}..${HEAD_SHA}"
-              BASE="$BEFORE"
+              # Diff from the head of the last push run on this branch that
+              # finished, not from `before`. A cancelled run (Supersession
+              # watch cancels one as soon as a newer push queues) gave no
+              # verdict on its commits; diffing only this push would let a
+              # docs-only push after it skip the heavy tier for code that no
+              # run tested.
+              SELF="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --jq '"\(.workflow_id) \(.run_number)"' 2>/dev/null)" \
+                || run_everything "could not read this run's workflow id, so the last finished push run on ${BRANCH} is unknown."
+              read -r WORKFLOW_ID RUN_NUMBER <<< "$SELF"
+              LAST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_ID}/runs?branch=${BRANCH}&event=push&status=completed&per_page=50" \
+                --jq "[.workflow_runs[] | select(.run_number < ${RUN_NUMBER} and .conclusion != \"cancelled\" and .conclusion != \"skipped\")] | sort_by(.run_number) | last | .head_sha // empty" 2>/dev/null)" \
+                || run_everything "could not list the earlier push runs on ${BRANCH}."
+              [ -n "$LAST" ] || run_everything "none of the last 50 completed push runs on ${BRANCH} finished uncancelled, so there is no tested base to diff against."
+              git merge-base --is-ancestor "$LAST" "$HEAD_SHA" 2>/dev/null \
+                || run_everything "${LAST}, the head of the last finished push run on ${BRANCH}, is not an ancestor of ${HEAD_SHA}."
+              if [ "$LAST" != "$BEFORE" ]; then
+                echo "::notice::Diffing from ${LAST}, the head of the last finished push run, instead of ${BEFORE}: the push runs in between were cancelled or are still running, so none of them has given a verdict."
+              fi
+              RANGE="${LAST}..${HEAD_SHA}"
+              BASE="$LAST"
               ;;
             *)
               run_everything "event '$EVENT' is neither a push nor a pull_request, so the diff for it is undefined."
