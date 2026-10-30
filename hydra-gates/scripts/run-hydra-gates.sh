@@ -13612,6 +13612,8 @@ fi
 #     REPORT. The whole risk profile against the 4-star limits, written to
 #     sig-profile.json and sig-profile.md in $HYDRA_GATE_SIG_REPORT_DIR (the
 #     log directory by default). Report-only: it PASSES with its census line.
+#     HYDRA_GATE_SIG_PROFILE=five-star compares the report with half of each
+#     4-star limit instead (the checker reads it; the ratchet ignores it).
 #
 # Ships as a WARNING under the fleet rule for new gates: the package resolves
 # at @main for every core app, so a blocking ratchet would land everywhere the

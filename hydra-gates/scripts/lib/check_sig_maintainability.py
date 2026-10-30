@@ -30,6 +30,20 @@ report    (nightly, or a full-scope run with no base)
     Python module coupling, component independence and an entanglement
     approximation. Written as JSON and as a short markdown table.
 
+PROFILES (report mode)
+----------------------
+four-star   the default: the 4-star limits of the Guidance for Producers.
+five-star   half of every 4-star limit (SIG does not publish 5-star limits,
+            so half the share of code allowed in each risk band is the
+            yardstick, rounded to one decimal where the half has two):
+            duplication 2.8%, unit size 23.6/11.6/4.2%, complexity
+            10.1/3.7/0.55%, parameters 7.5/1.65/0.45%, module coupling
+            5.0/2.8/0.95%, component independence 96.9% (half the exposed
+            share), entanglement 0.0385.
+Chosen with --profile, or HYDRA_GATE_SIG_PROFILE when the flag is absent.
+The profile changes only the limits a report is compared with; the ratchet's
+unit bounds and the gate's advisory status do not change.
+
 WHAT IS MEASURED
 ----------------
 Tracked files with a source extension (php, js/mjs/cjs/jsx, ts/tsx, vue, py),
@@ -63,13 +77,14 @@ Python methods do not count `self` or `cls` as a parameter.
 Usage:
     check_sig_maintainability.py ratchet <app-dir> --base-ref REF
     check_sig_maintainability.py report  <app-dir> [--json FILE] [--md FILE]
+                                         [--profile four-star|five-star]
 
 Output ends in one of
     [gate-122] sig-maintainability: checked U changed unit(s) in F file(s), ...
     [gate-122] sig-maintainability: FAIL: N finding(s) ...
     [gate-122] sig-maintainability: report: ...
-Exit status: 0 clean (or a report), 1 findings, 3 the base does not resolve,
-4 nothing to judge, 5 a pinned tool is unavailable. A traceback is exit 1 with
+Exit status: 0 clean (or a report), 1 findings, 2 an unknown profile,
+3 the base does not resolve, 4 nothing to judge, 5 a pinned tool is unavailable. A traceback is exit 1 with
 no summary line, which the runner reports as WIRING, never as a finding.
 """
 import argparse
@@ -110,6 +125,33 @@ LIMITS = {
 DUPLICATION_LIMIT = .056
 INDEPENDENCE_MIN = .937
 ENTANGLEMENT_LIMIT = .077
+
+
+PROFILES = {
+    "four-star": {
+        "stars": "4-star",
+        "source": "SIG/TUV NORD CERT Guidance for Producers v17.0, 4 stars",
+        "limits": LIMITS,
+        "duplication": DUPLICATION_LIMIT,
+        "independence_min": INDEPENDENCE_MIN,
+        "entanglement": ENTANGLEMENT_LIMIT,
+    },
+    "five-star": {
+        "stars": "5-star",
+        "source": "half of each 4-star limit of the SIG/TUV NORD CERT Guidance for Producers v17.0 "
+                  "(SIG publishes no 5-star limits)",
+        "limits": {
+            "unit_size": [(15, .236), (30, .116), (60, .042)],
+            "unit_complexity": [(5, .101), (10, .037), (25, .0055)],
+            "unit_interfacing": [(2, .075), (4, .0165), (6, .0045)],
+            "module_coupling": [(10, .050), (20, .028), (50, .0095)],
+        },
+        "duplication": .028,
+        "independence_min": .969,
+        "entanglement": .0385,
+    },
+}
+DEFAULT_PROFILE = "four-star"
 
 TEST_PATTERNS = [
     r".*/tests?/.*", r".*/__tests__/.*", r".*/__mocks__/.*", r".*/e2e/.*",
@@ -433,7 +475,7 @@ def worst(units, key, n=8):
     return [f"{u['file']}:{u['start']} {u['name']} ({u[key]})" for u in ranked]
 
 
-def duplication_profile(app, clones, files_by_lang):
+def duplication_profile(app, clones, files_by_lang, limit=DUPLICATION_LIMIT):
     """Redundant code lines per language, two ways.
 
     "duplication" follows SIG's definition directly: every window of 6
@@ -472,7 +514,7 @@ def duplication_profile(app, clones, files_by_lang):
     def row(dup, total):
         share = dup / total if total else 0.0
         return {"code_lines": total, "redundant_lines": dup, "share": round(share, 4),
-                "limit": DUPLICATION_LIMIT, "ok": share <= DUPLICATION_LIMIT}
+                "limit": limit, "ok": share <= limit}
     out = {}
     for lang in sorted(set(files_by_lang.values())):
         files = [f for f, lg in files_by_lang.items() if lg == lang]
@@ -693,7 +735,7 @@ def violation_degree(lines):
     return round(degree, 4), dict(kinds), sorted(f"{a} -> {b} ({kind})" for (a, b), (kind, _w) in violated.items())
 
 
-def structure(app, files, deps):
+def structure(app, files, deps, prof=PROFILES[DEFAULT_PROFILE]):
     """Module coupling, component independence and entanglement for one language."""
     if not deps:
         return None
@@ -705,7 +747,7 @@ def structure(app, files, deps):
             incoming[t].add(src)
     total = sum(loc.values()) or 1
     coupling = []
-    for bound, cap in LIMITS["module_coupling"]:
+    for bound, cap in prof["limits"]["module_coupling"]:
         share = sum(loc[m] for m in modules if len(incoming[m]) > bound) / total
         coupling.append({"above": bound, "share": round(share, 4), "limit": cap, "ok": share <= cap})
     root, comp = component_of_factory(modules)
@@ -730,8 +772,8 @@ def structure(app, files, deps):
                            for m in sorted(modules, key=lambda m: (-len(incoming[m]), m))[:10]],
         "component_root": root or ".",
         "components": dict(comp_loc.most_common()),
-        "component_independence": {"hidden_share": round(independence, 4), "limit_min": INDEPENDENCE_MIN,
-                                   "ok": independence >= INDEPENDENCE_MIN},
+        "component_independence": {"hidden_share": round(independence, 4), "limit_min": prof["independence_min"],
+                                   "ok": independence >= prof["independence_min"]},
         "component_entanglement": {
             "communication_lines": len(lines),
             "connected_components": len(connected),
@@ -739,7 +781,7 @@ def structure(app, files, deps):
             "violation_degree": round(degree, 4),
             "violations": kinds,
             "violation_examples": examples[:12],
-            "limit": ENTANGLEMENT_LIMIT,
+            "limit": prof["entanglement"],
             "ok": None,
             "note": "SIG normalises density and violation degree by benchmark maxima it does not publish, "
                     "so this is the two inputs, not the rated value. Lower is better on both.",
@@ -747,7 +789,8 @@ def structure(app, files, deps):
     }
 
 
-def build_report(app, lizard, jscpd):
+def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE):
+    prof = PROFILES[profile_name]
     scope = Scope(app)
     files = production_files(app, scope)
     reader = UnitReader(lizard)
@@ -758,12 +801,14 @@ def build_report(app, lizard, jscpd):
     for u in units:
         by_lang[u["lang"]].append(u)
     clones = run_jscpd(app, jscpd, sorted(files)) if files else []
-    dup = duplication_profile(app, clones, files)
+    dup = duplication_profile(app, clones, files, prof["duplication"])
     report = {
         "app": os.path.basename(os.path.abspath(app)),
         "head": (git(app, "rev-parse", "HEAD")[1] or "").strip() or None,
         "tools": {"lizard": LIZARD_VERSION, "jscpd": JSCPD_VERSION},
-        "limits": "SIG/TUV NORD CERT Guidance for Producers v17.0, 4 stars",
+        "profile": profile_name,
+        "stars": prof["stars"],
+        "limits": prof["source"],
         "files": len(files),
         "skipped_files": reader.skipped,
         "languages": {},
@@ -774,9 +819,9 @@ def build_report(app, lizard, jscpd):
             "files": sum(1 for v in files.values() if v == lang),
             "units": len(rows),
             "unit_loc": sum(u["nloc"] for u in rows),
-            "unit_size": profile(rows, "nloc", LIMITS["unit_size"]),
-            "unit_complexity": profile(rows, "ccn", LIMITS["unit_complexity"]),
-            "unit_interfacing": profile(rows, "params", LIMITS["unit_interfacing"]),
+            "unit_size": profile(rows, "nloc", prof["limits"]["unit_size"]),
+            "unit_complexity": profile(rows, "ccn", prof["limits"]["unit_complexity"]),
+            "unit_interfacing": profile(rows, "params", prof["limits"]["unit_interfacing"]),
             "duplication": dup[lang][0] if lang in dup else None,
             "duplication_jscpd": dup[lang][1] if lang in dup else None,
             "largest_units": worst(rows, "nloc"),
@@ -787,14 +832,14 @@ def build_report(app, lizard, jscpd):
     py = {f: lg for f, lg in files.items() if lg == "python"}
     report["structure"] = {}
     if php:
-        report["structure"]["php"] = structure(app, php, php_dependencies(app, php))
+        report["structure"]["php"] = structure(app, php, php_dependencies(app, php), prof)
     if py:
-        report["structure"]["python"] = structure(app, py, python_dependencies(app, py))
+        report["structure"]["python"] = structure(app, py, python_dependencies(app, py), prof)
     return report
 
 
 def checks_of(report):
-    """Every 4-star check in a report as (label, ok)."""
+    """Every check of the report's profile as (label, ok)."""
     out = []
     for lang, d in report["languages"].items():
         for prop in ("unit_size", "unit_complexity", "unit_interfacing"):
@@ -818,7 +863,7 @@ def pct(x):
 def markdown(report):
     out = [f"## SIG maintainability profile: {report['app']}", "",
            f"lizard {LIZARD_VERSION}, jscpd {JSCPD_VERSION}; limits: {report['limits']}. "
-           "Each cell is the share of code above the bound, against the 4-star limit.", "",
+           f"Each cell is the share of code above the bound, against the {report['stars']} limit.", "",
            "| language | units | size >15/30/60 | complexity >5/10/25 | params 3+/5+/7+ | duplication | jscpd |",
            "|---|---|---|---|---|---|---|"]
 
@@ -838,11 +883,11 @@ def markdown(report):
         ci = s["component_independence"]
         out += ["", f"{lang} structure ({s['modules']} modules, components under `{s['component_root']}`): "
                 f"module coupling >10/20/50 {cells(s['module_coupling'])}; "
-                f"component independence {pct(ci['hidden_share'])}{'' if ci['ok'] else ' ✗'} (min {pct(INDEPENDENCE_MIN)}); "
+                f"component independence {pct(ci['hidden_share'])}{'' if ci['ok'] else ' ✗'} (min {pct(ci['limit_min'])}); "
                 f"entanglement inputs: {e['communication_lines']} lines between {e['connected_components']} components, "
                 f"density {e['communication_density']}, violation degree {e['violation_degree']}."]
     checks = checks_of(report)
-    out += ["", f"{sum(1 for _c, ok in checks if ok)} of {len(checks)} 4-star checks met. ✗ marks a miss."]
+    out += ["", f"{sum(1 for _c, ok in checks if ok)} of {len(checks)} {report['stars']} checks met. ✗ marks a miss."]
     if report["skipped_files"]:
         out += ["", f"{len(report['skipped_files'])} file(s) lizard could not read, NOT measured: "
                 + ", ".join(s["file"] for s in report["skipped_files"][:10])]
@@ -850,7 +895,7 @@ def markdown(report):
 
 
 def cmd_report(args, lizard, jscpd):
-    report = build_report(args.app, lizard, jscpd)
+    report = build_report(args.app, lizard, jscpd, args.profile)
     if args.json:
         with open(args.json, "w") as fh:
             json.dump(report, fh, indent=1)
@@ -869,7 +914,7 @@ def cmd_report(args, lizard, jscpd):
     units = sum(d["units"] for d in report["languages"].values())
     print(f"{GATE}: report: {units} unit(s) "
           f"in {report['files']} file(s), languages {', '.join(report['languages'])}; "
-          f"{len(checks) - len(missed)} of {len(checks)} 4-star checks met"
+          f"{len(checks) - len(missed)} of {len(checks)} {report['stars']} checks met"
           + (f"; missed: {', '.join(missed)}" if missed else ""))
     return 0
 
@@ -1002,8 +1047,14 @@ def main(argv):
     p.add_argument("app")
     p.add_argument("--json")
     p.add_argument("--md")
+    p.add_argument("--profile", default=os.environ.get("HYDRA_GATE_SIG_PROFILE") or DEFAULT_PROFILE,
+                   help="limits to report against: " + ", ".join(PROFILES)
+                        + " (default: HYDRA_GATE_SIG_PROFILE, else " + DEFAULT_PROFILE + ")")
     args = ap.parse_args(argv)
     args.app = os.path.abspath(args.app)
+    if args.mode == "report" and args.profile not in PROFILES:
+        print(f"{GATE}: unknown profile '{args.profile}'; choose one of {', '.join(PROFILES)}")
+        return 2
 
     lizard, why = load_lizard()
     if not lizard:

@@ -20,6 +20,10 @@
   4. REPORT: the shares are code-weighted and compared with the 4-star limits.
   5. STRUCTURE: PHP and Python dependencies, the component root, and the
      violation degree on the examples in SIG's Guidance for Producers.
+  6. PROFILES: five-star is half of every 4-star limit; a share between the
+     two passes four-star and misses five-star; HYDRA_GATE_SIG_PROFILE picks
+     the profile, --profile overrides it, four-star is the default, and an
+     unknown profile is exit 2.
 
 Run: python3 scripts/lib/test_check_sig_maintainability.py
 """
@@ -321,6 +325,90 @@ class Report(unittest.TestCase):
         self.repo.commit("base")
         rc, out = run("report", self.repo.dir)
         self.assertEqual(rc, 4, out)
+
+
+class Profiles(unittest.TestCase):
+    """A fixture whose PHP has 44 of 260 unit lines (16.9%) in a unit over 30
+    lines: inside the 4-star limit (23.1%), outside the 5-star one (11.6%)."""
+
+    def setUp(self):
+        self.repo = Repo()
+        methods = [php_method("long", lines=40, tag="a")]
+        methods += [php_method(f"s{i}", lines=5, tag=f"b{i}") for i in range(24)]
+        self.repo.write("lib/Service/A.php", php_class("A", methods))
+        self.repo.commit("base")
+        self.saved_env = os.environ.pop("HYDRA_GATE_SIG_PROFILE", None)
+
+    def tearDown(self):
+        os.environ.pop("HYDRA_GATE_SIG_PROFILE", None)
+        if self.saved_env is not None:
+            os.environ["HYDRA_GATE_SIG_PROFILE"] = self.saved_env
+        self.repo.close()
+
+    def report(self, *extra):
+        out_json = os.path.join(self.repo.dir, "..", os.path.basename(self.repo.dir) + "-profile.json")
+        rc, out = run("report", self.repo.dir, "--json", out_json, *extra)
+        self.assertEqual(rc, 0, out)
+        with open(out_json) as fh:
+            report = json.load(fh)
+        os.unlink(out_json)
+        return report, out
+
+    def above_30(self, report):
+        return {r["above"]: r for r in report["languages"]["php"]["unit_size"]}[30]
+
+    def test_five_star_is_half_of_every_four_star_limit(self):
+        four, five = sig.PROFILES["four-star"], sig.PROFILES["five-star"]
+        for prop, rows in four["limits"].items():
+            for (b4, c4), (b5, c5) in zip(rows, five["limits"][prop]):
+                self.assertEqual(b4, b5, prop)
+                self.assertAlmostEqual(c5, c4 / 2, delta=.00051, msg=f"{prop} >{b4}")
+        self.assertAlmostEqual(five["duplication"], four["duplication"] / 2, delta=.00051)
+        self.assertAlmostEqual(1 - five["independence_min"], (1 - four["independence_min"]) / 2, delta=.00051)
+        self.assertAlmostEqual(five["entanglement"], four["entanglement"] / 2, delta=.00005)
+
+    def test_default_is_four_star(self):
+        report, out = self.report()
+        self.assertEqual(report["profile"], "four-star")
+        row = self.above_30(report)
+        self.assertAlmostEqual(row["share"], round(nloc(40) / (nloc(40) + 24 * nloc(5)), 4))
+        self.assertEqual(row["limit"], .231)
+        self.assertTrue(row["ok"])
+        self.assertEqual(report["languages"]["php"]["duplication"]["limit"], .056)
+        self.assertIn("4-star checks met", out)
+
+    def test_five_star_flag_holds_the_same_code_to_half_the_limits(self):
+        report, out = self.report("--profile", "five-star")
+        self.assertEqual(report["profile"], "five-star")
+        row = self.above_30(report)
+        self.assertEqual(row["limit"], .116)
+        self.assertFalse(row["ok"])
+        self.assertEqual(report["languages"]["php"]["duplication"]["limit"], .028)
+        self.assertEqual(report["structure"]["php"]["component_independence"]["limit_min"], .969)
+        self.assertEqual(report["structure"]["php"]["component_entanglement"]["limit"], .0385)
+        self.assertIn("5-star checks met; missed: ", out)
+        self.assertIn("php unit_size >30", out)
+        self.assertIn("against the 5-star limit", out)
+
+    def test_env_var_selects_the_profile_and_the_flag_overrides_it(self):
+        os.environ["HYDRA_GATE_SIG_PROFILE"] = "five-star"
+        report, _out = self.report()
+        self.assertEqual(report["profile"], "five-star")
+        report, _out = self.report("--profile", "four-star")
+        self.assertEqual(report["profile"], "four-star")
+
+    def test_unknown_profile_is_exit_2(self):
+        rc, out = run("report", self.repo.dir, "--profile", "six-star")
+        self.assertEqual(rc, 2, out)
+        self.assertIn("unknown profile 'six-star'", out)
+
+    def test_the_ratchet_ignores_the_profile(self):
+        os.environ["HYDRA_GATE_SIG_PROFILE"] = "six-star"
+        self.repo.write("lib/Service/B.php", php_class("B", [php_method("small", lines=3)]))
+        self.repo.commit("head")
+        rc, out = run("ratchet", self.repo.dir, "--base-ref", "HEAD~1")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("0 finding(s)", out)
 
 
 class Structure(unittest.TestCase):
