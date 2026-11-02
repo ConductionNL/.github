@@ -65,9 +65,14 @@ loaded or installed into the tool cache (HYDRA_GATE_TOOLS_DIR, default
 ~/.cache/hydra-gates/tools) and any other version is refused. Set
 HYDRA_GATE_SIG_NO_INSTALL=1 to forbid the install.
 
-Two lizard traps are handled here:
+Four lizard traps are handled here:
   * PHP parameter counts: lizard's PHP reader keeps only the last parameter in
     `parameters`. The count is the number of unique `$names` in `long_name`.
+  * Vue files: only the <script> blocks are read, with the file's own line
+    numbers. lizard's Vue reader tokenises the template too, so a `=>` in a
+    template handler or a quote in an HTML comment hid every unit of a file.
+  * `get()` / `set()` method shorthand made lizard's JavaScript and TypeScript
+    readers drop every unit of the file; the name is aliased while lizard reads.
   * Crashes: lizard raises on some files (a Vue component in openconnector).
     Each file is analysed on its own with a time limit, and a file lizard
     cannot read is listed as skipped, never silently dropped.
@@ -100,6 +105,9 @@ import tempfile
 
 GATE = "[gate-122] sig-maintainability"
 LIZARD_VERSION = "1.24.3"
+# Raised whenever UnitReader reads the same source into different units, so
+# a unit cache written by an older reader is not reused.
+UNIT_READER_VERSION = 2
 JSCPD_VERSION = "4.0.5"
 
 LANG_OF_EXT = {
@@ -333,7 +341,38 @@ def unit_params(lang, func):
     return len(params)
 
 
+VUE_BLOCK = re.compile(r"<!--.*?-->|<script\b[^>]*>(.*?)</script\s*>", re.S | re.I)
+ACCESSOR_SHORTHAND = re.compile(r"(?<![\w$.])(get|set)(?=\s*\()")
+ACCESSOR_ALIAS = "__sig_accessor_"
+
+
+def vue_script(code):
+    """The <script> blocks of a Vue SFC as (text, extension for lizard). Every
+    character outside them is dropped except newlines, so a unit keeps the
+    line numbers of the file itself. Template, style and HTML comments never
+    reach lizard."""
+    out, pos = [], 0
+    for m in VUE_BLOCK.finditer(code):
+        out.append("\n" * code.count("\n", pos, m.start(1) if m.group(1) is not None else m.end()))
+        if m.group(1) is not None:
+            out.append(m.group(1))
+            out.append("\n" * code.count("\n", m.end(1), m.end()))
+        pos = m.end()
+    out.append("\n" * code.count("\n", pos))
+    return "".join(out), ".ts"
+
+
 class UnitReader:
+    """lizard units of one file. Two lizard traps are worked around before
+    lizard reads the code:
+      * A Vue file is cut down to its <script> blocks (vue_script). lizard's
+        own Vue reader tokenises the whole file, so a `=>` in a template
+        handler, or a quote in an HTML comment, can hide every unit, and it
+        numbers units from the <script> tag rather than the file.
+      * Method shorthand named get or set (`get() {}`, a computed proxy) makes
+        lizard's JavaScript and TypeScript readers drop every unit of the
+        file. The name is aliased for lizard and restored in the result."""
+
     def __init__(self, lizard):
         self.analyzer = lizard.FileAnalyzer(lizard.get_extensions([]))
         self.skipped = []
@@ -341,12 +380,18 @@ class UnitReader:
     def units(self, rel, lang, code):
         """Units of one file's source. A file lizard cannot read is recorded in
         self.skipped and yields no units."""
+        name = rel
+        if lang == "vue":
+            code, ext = vue_script(code)
+            name = rel + ext
+        if lang in ("vue", "javascript", "typescript"):
+            code = ACCESSOR_SHORTHAND.sub(ACCESSOR_ALIAS + r"\1", code)
         use_alarm = hasattr(signal, "SIGALRM")
         if use_alarm:
             old = signal.signal(signal.SIGALRM, _alarm)
             signal.alarm(FILE_TIMEOUT)
         try:
-            info = self.analyzer.analyze_source_code(rel, code)
+            info = self.analyzer.analyze_source_code(name, code)
         except _Timeout:
             self.skipped.append({"file": rel, "reason": f"lizard did not finish within {FILE_TIMEOUT}s"})
             return []
@@ -360,7 +405,8 @@ class UnitReader:
         out = []
         for f in info.function_list:
             out.append({
-                "file": rel, "lang": lang, "name": f.name, "start": f.start_line, "end": f.end_line,
+                "file": rel, "lang": lang, "name": f.name.replace(ACCESSOR_ALIAS, ""),
+                "start": f.start_line, "end": f.end_line,
                 "nloc": f.nloc, "ccn": f.cyclomatic_complexity, "params": unit_params(lang, f),
             })
         return out

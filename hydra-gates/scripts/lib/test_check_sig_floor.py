@@ -21,7 +21,7 @@
   4. RAISE: a head that meets checks the floor does not list writes the
      raised floor to --proposed, and writes nothing when it fails.
   5. CACHE: a cached run reads the same units as an uncached one and reads
-     no file twice.
+     no file twice; a cache written by an older unit reader is not reused.
 
 Run: python3 scripts/lib/test_check_sig_floor.py
 """
@@ -439,6 +439,21 @@ class Cache(unittest.TestCase):
                 os.remove(path)
         finally:
             repo.close()
+
+    def test_a_cache_written_by_an_older_unit_reader_is_not_reused(self):
+        fd, path = tempfile.mkstemp(prefix="gate123-cache-", suffix=".json")
+        os.close(fd)
+        try:
+            with open(path, "w") as fh:
+                json.dump({"lizard": sig.LIZARD_VERSION, "files": {"k": {"units": []}}}, fh)
+            self.assertEqual(floor.load_cache(path), {})
+            with open(path, "w") as fh:
+                json.dump({"lizard": sig.LIZARD_VERSION, "reader": sig.UNIT_READER_VERSION,
+                           "files": {"k": {"units": []}}}, fh)
+            self.assertEqual(floor.load_cache(path), {"k": {"units": []}})
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
 
 
 if __name__ == "__main__":

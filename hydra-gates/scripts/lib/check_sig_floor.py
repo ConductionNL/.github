@@ -48,8 +48,8 @@ receives the raised floor file, for the workflow to offer as a pull request.
 UNIT CACHE
 ----------
 lizard is the slow part. `--cache FILE` keeps each file's units keyed by
-(lizard version, extension, content), so a run re-reads only the files whose
-content it has not seen. The base and the head share almost every file.
+(lizard version, unit reader version, extension, content), so a run re-reads
+only the files whose content it has not seen. The base and the head share almost every file.
 
 Usage:
     check_sig_floor.py check <app-dir> [--base-ref REF] [--floor PATH]
@@ -98,7 +98,7 @@ class CachedUnitReader(sig.UnitReader):
     @staticmethod
     def key(rel, lang, code):
         h = hashlib.sha256()
-        h.update(f"{sig.LIZARD_VERSION}\0{os.path.splitext(rel)[1].lower()}\0{lang}\0".encode())
+        h.update(f"{sig.LIZARD_VERSION}\0{sig.UNIT_READER_VERSION}\0{os.path.splitext(rel)[1].lower()}\0{lang}\0".encode())
         h.update(code.encode("utf-8", errors="replace"))
         return h.hexdigest()
 
@@ -132,7 +132,7 @@ def load_cache(path):
             data = json.load(fh)
     except (OSError, ValueError):
         return {}
-    if data.get("lizard") != sig.LIZARD_VERSION:
+    if data.get("lizard") != sig.LIZARD_VERSION or data.get("reader") != sig.UNIT_READER_VERSION:
         return {}
     return data.get("files", {})
 
@@ -142,7 +142,7 @@ def save_cache(path, cache, used):
         return
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "w") as fh:
-        json.dump({"lizard": sig.LIZARD_VERSION, "files": {k: v for k, v in cache.items() if k in used}}, fh)
+        json.dump({"lizard": sig.LIZARD_VERSION, "reader": sig.UNIT_READER_VERSION, "files": {k: v for k, v in cache.items() if k in used}}, fh)
 
 
 def measure(app, lizard, reader):
