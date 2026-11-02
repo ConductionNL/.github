@@ -108,6 +108,13 @@ class Units(unittest.TestCase):
         (u,) = self.reader.units("A.php", "php", src)
         self.assertEqual(u["params"], 5)
 
+    def test_code_lines_skip_licence_headers_and_comments(self):
+        php = "<?php\n/**\n * SPDX-License-Identifier: EUPL-1.2\n */\n\ndeclare(strict_types=1);\n// note\n$a = 1; // end\n"
+        self.assertEqual(sig.code_lines(php, "php"), {1, 6, 8})
+        vue = ("<!--\n  SPDX-License-Identifier: EUPL-1.2\n  - copyright\n-->\n<template>\n"
+               "\t<!-- one line -->\n\t<div />\n\t<!-- open\n\tclose --> <span />\n</template>\n")
+        self.assertEqual(sig.code_lines(vue, "vue"), {5, 7, 9, 10})
+
     def test_python_self_and_cls_are_not_parameters(self):
         src = "class K:\n    def m(self, x, y):\n        return x\n\n    @classmethod\n    def c(cls, x):\n        return x\n\ndef f(self_like, b):\n    return b\n"
         got = {u["name"]: u["params"] for u in self.reader.units("k.py", "python", src)}

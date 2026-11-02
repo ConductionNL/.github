@@ -530,6 +530,11 @@ jobs:
       - name: "Exercise the shipped coverage guard"
         run: python3 quality-config/tests/test-coverage-guard.py
 
+      # Every message, exit code and written floor must match the recording in
+      # quality-config/tests/fixtures/coverage-guard-golden.json.
+      - name: "The coverage guard's output matches its golden recording"
+        run: python3 quality-config/tests/test-coverage-guard-golden.py
+
       # POSITIVE CONTROL FOR THE HARNESS ITSELF. The suite above shells out to
       # `php`; if php were missing, or the guard path wrong, a harness that
       # treated "could not run" as "nothing to report" would print a clean pass
@@ -541,6 +546,10 @@ jobs:
           if python3 quality-config/tests/test-coverage-guard.py "$RUNNER_TEMP/not-the-guard.php" > /dev/null 2>&1; then
             echo "::error::the coverage-guard suite reported PASS against a program that exits 0 and \
           measures nothing. It is not executing the subject, so its verdict above means nothing."
+            exit 1
+          fi
+          if python3 quality-config/tests/test-coverage-guard-golden.py "$RUNNER_TEMP/not-the-guard.php" > /dev/null 2>&1; then
+            echo "::error::the coverage-guard golden reported PASS against a program that exits 0 and prints nothing."
             exit 1
           fi
           echo "OK — the suite fails when handed the wrong program. Its clean pass above is a verdict."
