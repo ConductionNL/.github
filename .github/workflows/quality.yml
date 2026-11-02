@@ -914,7 +914,7 @@ jobs:
             # The Quality Report is the last job. Once it has completed there
             # is nothing left to save by cancelling.
             REPORT="$(gh api --paginate "${RUN_URL}/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name | endswith("Quality Report")) | .status' 2>/dev/null | head -1)"
+              --jq '.jobs[] | select(.name | endswith("Quality Report")) | .status' 2>/dev/null | head -1 || true)"
             if [ "$REPORT" = "completed" ]; then
               echo "Quality Report has completed — this run was not superseded."
               exit 0
