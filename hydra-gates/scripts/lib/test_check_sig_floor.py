@@ -184,6 +184,16 @@ class Check(FloorCase):
         self.assertIn("already missed at the base", out)
         self.assertIn("makes it worse", out)
 
+    def test_an_equal_share_on_an_inherited_breach_is_not_worse(self):
+        self.repo.git("checkout", "-q", "base")
+        self.repo.write("lib/Service/Big.php", php_class("Big", [php_method("huge", lines=70, tag="h")]))
+        self.repo.commit("development broke it")
+        self.repo.git("checkout", "-q", "-B", "change")
+        self.repo.write("README.md", "docs only\n")
+        rc, out = self.check()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("inherited, not counted: php unit_size >60", out)
+
     def test_removing_a_check_from_the_floor_file_fails(self):
         checks = self.repo.floor_file()["checks"]
         self.repo.set_floor([c for c in checks if c != "php unit_size >60"])
@@ -269,6 +279,21 @@ class Raise(FloorCase):
         with open(self.proposed) as fh:
             self.assertEqual(json.load(fh)["checks"], checks)
 
+    def test_the_proposal_keeps_committed_checks_the_head_misses(self):
+        self.repo.git("checkout", "-q", "base")
+        checks = self.repo.floor_file()["checks"]
+        self.repo.set_floor([c for c in checks if c != "php unit_interfacing >6"])
+        self.repo.write("lib/Service/Big.php", php_class("Big", [php_method("huge", lines=70, tag="h")]))
+        self.repo.commit("development broke a floored check and the file misses another")
+        self.repo.git("checkout", "-q", "-B", "change")
+        self.repo.write("README.md", "docs\n")
+        rc, out = self.check("--proposed", self.proposed)
+        self.assertEqual(rc, 0, out)
+        with open(self.proposed) as fh:
+            proposed = json.load(fh)["checks"]
+        self.assertIn("php unit_size >60", proposed)
+        self.assertIn("php unit_interfacing >6", proposed)
+
     def test_a_failing_change_proposes_nothing(self):
         self.repo.git("checkout", "-q", "base")
         self.repo.set_floor([c for c in self.repo.floor_file()["checks"] if c != "php unit_interfacing >6"])
@@ -279,6 +304,113 @@ class Raise(FloorCase):
         self.assertEqual(rc, 1, out)
         self.assertIn("1 check(s) above the committed floor", out)
         self.assertFalse(os.path.exists(self.proposed))
+
+
+class FloorFirst(FloorCase):
+    def test_no_floor_is_not_applicable_before_any_tool_or_base(self):
+        self.repo.remove(floor.FLOOR_PATH)
+        self.repo.commit("drop")
+        real = sig.load_lizard
+        sig.load_lizard = lambda: (None, "tools must not be loaded without a floor")
+        try:
+            rc, out = run("check", self.repo.dir)
+            self.assertEqual(rc, 4, out)
+            rc, out = run("check", self.repo.dir, "--base-ref", "no-such-ref")
+            self.assertEqual(rc, 4, out)
+            self.assertNotIn("tooling", out)
+        finally:
+            sig.load_lizard = real
+
+    def test_with_a_floor_missing_tools_are_wiring(self):
+        real = sig.load_lizard
+        sig.load_lizard = lambda: (None, "no lizard")
+        try:
+            rc, out = run("check", self.repo.dir, "--base-ref", "base")
+            self.assertEqual(rc, 5, out)
+        finally:
+            sig.load_lizard = real
+
+
+class Boundaries(unittest.TestCase):
+    def report(self, size, dup, coupling, hidden):
+        rows = lambda prop: [{"above": b, "share": size if i == 0 else 0.0}
+                             for i, (b, _cap) in enumerate(sig.LIMITS[prop])]
+        return {"languages": {"php": {"unit_size": rows("unit_size"), "unit_complexity": rows("unit_complexity"),
+                                      "unit_interfacing": rows("unit_interfacing"),
+                                      "duplication": {"share": dup}}},
+                "structure": {"php": {"module_coupling": [{"above": 10, "share": coupling},
+                                                          {"above": 20, "share": 0.0}, {"above": 50, "share": 0.0}],
+                                      "component_independence": {"hidden_share": hidden}}}}
+
+    def test_a_share_equal_to_the_limit_meets_it(self):
+        rows = floor.check_rows(self.report(.471, .056, .100, .937), "four-star")
+        for label in ("php unit_size >15", "php duplication", "php module_coupling >10",
+                      "php component_independence"):
+            self.assertTrue(rows[label]["ok"], label)
+
+    def test_an_equal_share_is_not_worse_in_either_direction(self):
+        for better_high in (False, True):
+            row = {"share": .5, "higher_is_better": better_high}
+            self.assertFalse(floor.worse(row, dict(row)))
+            self.assertTrue(floor.worse(row, dict(row, share=.6 if better_high else .4)))
+
+    def test_just_past_the_limit_misses_it(self):
+        rows = floor.check_rows(self.report(.4711, .0561, .1001, .9369), "four-star")
+        for label in ("php unit_size >15", "php duplication", "php module_coupling >10",
+                      "php component_independence"):
+            self.assertFalse(rows[label]["ok"], label)
+
+
+class Scope(FloorCase):
+    def setUp(self):
+        super().setUp()
+        self.repo.git("checkout", "-q", "base")
+        self.repo.write("src/a.js", "export function f(a) {\n  if (a) { return 1 }\n  return 2\n}\n")
+        self.repo.commit("a js file")
+        rc, out = run("write", self.repo.dir)
+        self.assertEqual(rc, 0, out)
+        self.repo.commit("floor with javascript")
+        self.assertIn("javascript unit_size >15", self.repo.floor_file()["checks"])
+        self.repo.git("checkout", "-q", "-B", "change")
+
+    def test_a_language_that_leaves_without_a_scope_change_fails(self):
+        self.repo.remove("src/a.js")
+        rc, out = self.check()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("javascript unit_size >15: no longer measured", out)
+
+    def test_a_sigrid_yaml_exclude_takes_the_checks_out_of_the_floor(self):
+        self.repo.write("sigrid.yaml", "exclude:\n  - \".*/src/.*\"\n")
+        js = [c for c in self.repo.floor_file()["checks"] if c.startswith("javascript")]
+        self.repo.set_floor([c for c in self.repo.floor_file()["checks"] if c not in js])
+        rc, out = self.check()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("left the measured scope through sigrid.yaml", out)
+
+        # The next change, on a base that already excludes it, is not judged on it again.
+        self.repo.git("branch", "-f", "base", "HEAD")
+        self.repo.write("README.md", "next\n")
+        rc, out = self.check()
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("javascript", out.split("[gate-123]")[0])
+
+    def test_a_check_the_base_no_longer_measures_is_not_judged_again(self):
+        self.repo.write("sigrid.yaml", "exclude:\n  - \".*/src/.*\"\n")
+        rc, out = self.check()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("javascript unit_size >15", self.repo.floor_file()["checks"])
+        self.repo.git("branch", "-f", "base", "HEAD")
+        self.repo.write("README.md", "next\n")
+        rc, out = self.check()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("inherited, not counted: javascript unit_size >15", out)
+
+    def test_removing_a_still_measured_check_fails_even_with_a_sigrid_change(self):
+        self.repo.write("sigrid.yaml", "exclude:\n  - \".*/docs/.*\"\n")
+        self.repo.set_floor([c for c in self.repo.floor_file()["checks"] if c != "javascript unit_size >15"])
+        rc, out = self.check()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("removes 1 check(s) from the committed floor: javascript unit_size >15", out)
 
 
 class Cache(unittest.TestCase):

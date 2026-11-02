@@ -31,6 +31,14 @@ VERDICT, per floored check that the head misses
                                         forward; reported, not counted
 A change that removes a check from the committed floor file fails as well.
 
+A floored check the head no longer measures at all (its language left the
+measured scope) fails, unless the same change edits sigrid.yaml: an explicit
+scope change may take checks out of the floor, file included. A check that the
+base did not measure either left in an earlier change and is not judged again.
+
+Without a floor file the gate is NOT APPLICABLE (exit 4) before any tool is
+loaded or any base resolved.
+
 The 5-star checks (half of every 4-star limit, gate 122's five-star profile)
 are reported next to the 4-star ones and never block.
 
@@ -218,6 +226,20 @@ def floor_document(app, labels):
     }
 
 
+def floor_present(app, path, base_ref):
+    """Whether a floor file exists at the head or at `base_ref`. Asked before
+    any tool is loaded or any merge base resolved, so an app without a floor
+    is NOT APPLICABLE however its tooling or history looks."""
+    if os.path.isfile(os.path.join(app, path)):
+        return True
+    return bool(base_ref) and git(app, "cat-file", "-e", f"{base_ref}:{path}")[0] == 0
+
+
+def sigrid_changed(app, mb):
+    rc, out = git(app, "diff", "--name-only", mb, "HEAD", "--", "sigrid.yaml", "sigrid.yml")
+    return rc == 0 and bool(out.strip())
+
+
 def measure_base(app, mb, lizard, reader):
     """Measure the tree at commit `mb` in a temporary worktree."""
     tmp = tempfile.mkdtemp(prefix="sig-floor-base-")
@@ -237,14 +259,22 @@ def measure_base(app, mb, lizard, reader):
 # verdict
 # --------------------------------------------------------------------------
 
-def judge(floor, head4, base4):
-    """(new, inherited) breaches of `floor`: lists of (label, why)."""
+def judge(floor, head4, base4, scope_changed=False):
+    """(new, inherited) breaches of `floor`: lists of (label, why).
+
+    A floored check the head no longer measures may leave the floor only when
+    the change edits sigrid.yaml (an explicit scope change), or when the base
+    did not measure it either (it left in an earlier change)."""
     new, inherited = [], []
     for label in sorted(floor):
         h = head4.get(label)
         b = base4.get(label) if base4 is not None else None
         if h is None:
-            new.append((label, "no longer measured (its language or module structure left the measured scope)"))
+            if scope_changed or (base4 is not None and b is None):
+                inherited.append((label, "no longer measured; it left the measured scope through sigrid.yaml"))
+            else:
+                new.append((label, "no longer measured (its language or module structure left the measured scope "
+                                   "without a sigrid.yaml change)"))
             continue
         if h["ok"]:
             continue
@@ -319,6 +349,12 @@ def cmd_write(args, lizard):
     return 0
 
 
+def no_floor(path):
+    print(f"{GATE}: this repository has no {path}; generate it with "
+          f"`check_sig_floor.py write .` to adopt the floor")
+    return 4
+
+
 def cmd_check(args, lizard):
     app = args.app
     mb = None
@@ -334,10 +370,9 @@ def cmd_check(args, lizard):
     base_floor = floor_at(app, mb, args.floor) if mb else None
     committed = base_floor if base_floor is not None else head_floor
     if committed is None:
-        print(f"{GATE}: this repository has no {args.floor}; generate it with "
-              f"`check_sig_floor.py write .` to adopt the floor")
-        return 4
-    lowered = sorted(set(base_floor) - set(head_floor or [])) if base_floor is not None else []
+        return no_floor(args.floor)
+    scope_changed = bool(mb) and sigrid_changed(app, mb)
+    removed = sorted(set(base_floor) - set(head_floor or [])) if base_floor is not None else []
 
     cache = load_cache(args.cache)
     reader = CachedUnitReader(lizard, cache)
@@ -353,12 +388,16 @@ def cmd_check(args, lizard):
     save_cache(args.cache, cache, reader.used)
 
     floor = set(committed) | ({lbl for lbl, r in base4.items() if r["ok"]} if base4 else set())
-    new, inherited = judge(floor, head4, base4)
+    new, inherited = judge(floor, head4, base4, scope_changed)
+    # A check may leave the file only when it also left the measurement, as judge() allows.
+    gone = {lbl for lbl, _why in inherited if lbl not in head4}
+    lowered = [lbl for lbl in removed if lbl not in gone]
     met_head = {lbl for lbl, r in head4.items() if r["ok"]}
     raise_to = sorted(met_head - set(committed))
-    if args.proposed and raise_to and not new and not lowered:
+    proposal = (set(committed) - gone) | met_head
+    if args.proposed and proposal != set(committed) and not new and not lowered:
         with open(args.proposed, "w") as fh:
-            json.dump(floor_document(app, set(committed) | met_head), fh, indent=1)
+            json.dump(floor_document(app, proposal), fh, indent=1)
             fh.write("\n")
 
     md = markdown(os.path.basename(os.path.abspath(app)), floor, head4, head5, base4,
@@ -409,6 +448,8 @@ def main(argv):
     w.add_argument("--cache")
     args = ap.parse_args(argv)
     args.app = os.path.abspath(args.app)
+    if args.mode == "check" and not floor_present(args.app, args.floor, args.base_ref):
+        return no_floor(args.floor)
     lizard, why = sig.load_lizard()
     if not lizard:
         print(f"{GATE}: tooling: {why}")

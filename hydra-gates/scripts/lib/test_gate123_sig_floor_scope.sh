@@ -32,6 +32,7 @@ mkdir -p "${APP}/appinfo" "${APP}/lib/Service"
 _method() {  # <name> <lines> -> a one-parameter PHP method with <lines> statements
     local _b="" _i
     for _i in $(seq 1 "$2"); do _b="${_b}        \$v${_i} = ${_i} + strlen('$1');\n"; done
+    # shellcheck disable=SC2016  # $p is PHP source text and must stay literal.
     printf '    public function %s(int $p): int\n    {\n%b        return $p;\n    }\n' "$1" "${_b}"
 }
 _class() {  # <name> <methods...>
