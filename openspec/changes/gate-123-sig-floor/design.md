@@ -27,7 +27,11 @@ For each floored check the head misses:
 | missed (only possible via the file) | worse | FAIL: it erodes a floor development already breaks |
 | missed | not worse | inherited: printed, not counted |
 
-A check that disappears from the head (its language left the measured scope) fails, because nothing proves it is still met. A pull request that removes a check from the floor file fails as well.
+A check that disappears from the head (its language left the measured scope) fails, because nothing proves it is still met, unless the same pull request changes `sigrid.yaml` (Ruben, 2 November 2026). An explicit scope change may take checks out of the floor and out of the floor file in that pull request. A check the base no longer measures either left in an earlier pull request and is not judged again.
+
+A pull request that removes a check that is still measured from the floor file fails, with or without a `sigrid.yaml` change.
+
+Without a floor file the gate is NOT APPLICABLE before it loads a tool or resolves a base, so a missing tool never turns an app without a floor into SKIPPED (wiring).
 
 Inherited breaches exist only after an admin merge past a red gate. They do not fail unrelated pull requests, in line with the inherited-debt rule; development fixes them forward.
 

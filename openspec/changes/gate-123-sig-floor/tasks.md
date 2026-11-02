@@ -20,4 +20,4 @@
 
 ## 4. Adoption
 
-- [ ] 4.1 One pull request per fleet app with `.github/sig-floor.json` from its development head, together with `hydra-gates-sig-blocking: true`
+- [x] 4.1 One pull request per fleet app with `.github/sig-floor.json` from its development head, together with `hydra-gates-sig-blocking: true`
