@@ -73,3 +73,20 @@ The gate SHALL measure exactly what gate 122 measures, including the app's `sigr
 - **GIVEN** `sigrid.yaml` excludes `lib/Generated/`
 - **WHEN** a pull request adds a 74-line unit there
 - **THEN** the gate passes
+
+### Requirement: A check leaves the floor only through sigrid.yaml
+
+A floored check the head no longer measures SHALL fail the gate, unless the same change edits `sigrid.yaml` or `sigrid.yml`, or the base does not measure it either. A change that edits `sigrid.yaml` MAY remove the checks it takes out of scope from the floor file. Removing a check that is still measured SHALL fail.
+
+#### Scenario: A language leaves without a scope change
+
+- **GIVEN** the floor lists `javascript unit_size >15`
+- **WHEN** a pull request deletes the app's only JavaScript file
+- **THEN** the gate fails with `javascript unit_size >15: no longer measured`
+
+#### Scenario: An exclude in sigrid.yaml
+
+- **WHEN** a pull request adds `.*/src/.*` to `sigrid.yaml` and removes the JavaScript checks from the floor file
+- **THEN** the gate passes and reports the checks as having left the scope through sigrid.yaml
+- **AND** the next pull request is not judged on them
+
