@@ -1,0 +1,602 @@
+{
+ "against-dropped": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Coverage current:       55.00%  (55/100 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nFAIL: coverage dropped by 6% against the merge base.\n      merge base 61/100 -> head 55/100 statements.\n"
+ },
+ "against-dropped-added": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Coverage current:       43.57%  (61/140 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nFAIL: coverage dropped by 17.43% against the merge base.\n      merge base 61/100 -> head 61/140 statements.\n      This change adds 40 statements. Adding code without tests drops coverage.\n"
+ },
+ "against-dropped-added-with-floor": {
+  "exit": 1,
+  "floor_after": "61.10\n",
+  "stderr": "",
+  "stdout": "Coverage current:       43.57%  (61/140 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nCommitted .coverage-baseline: 61.10% \u2014 recorded only, NOT enforced on this run.\nThe merge base is measured, so it is the floor; see the header of this script.\nFAIL: coverage dropped by 17.43% against the merge base.\n      merge base 61/100 -> head 61/140 statements.\n      This change adds 40 statements. Adding code without tests drops coverage.\n"
+ },
+ "against-dropped-tiny": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Coverage current:       58.83%  (8228/13987 statements)\nCoverage merge base:    58.83%  (8229/13987 statements)\nFAIL: coverage dropped against the merge base by less than 0.01% \u2014 too little to show in the percentage, but a real loss in the counts below.\n      merge base 8229/13987 -> head 8228/13987 statements.\n"
+ },
+ "against-dropped-tiny-with-floor": {
+  "exit": 1,
+  "floor_after": "61.10\n",
+  "stderr": "",
+  "stdout": "Coverage current:       58.83%  (8228/13987 statements)\nCoverage merge base:    58.83%  (8229/13987 statements)\nCommitted .coverage-baseline: 61.10% \u2014 recorded only, NOT enforced on this run.\nThe merge base is measured, so it is the floor; see the header of this script.\nFAIL: coverage dropped against the merge base by less than 0.01% \u2014 too little to show in the percentage, but a real loss in the counts below.\n      merge base 8229/13987 -> head 8228/13987 statements.\n"
+ },
+ "against-dropped-with-floor": {
+  "exit": 1,
+  "floor_after": "61.10\n",
+  "stderr": "",
+  "stdout": "Coverage current:       55.00%  (55/100 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nCommitted .coverage-baseline: 61.10% \u2014 recorded only, NOT enforced on this run.\nThe merge base is measured, so it is the floor; see the header of this script.\nFAIL: coverage dropped by 6% against the merge base.\n      merge base 61/100 -> head 55/100 statements.\n"
+ },
+ "against-flag-without-value": {
+  "exit": 0,
+  "floor_after": "40\n",
+  "stderr": "",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\nCoverage baseline:      40.00%  (committed fail-safe floor)\nOK: coverage is 10% above the committed floor.\n"
+ },
+ "against-improved": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Coverage current:       70.00%  (70/100 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nOK: coverage improved by 9% against the merge base (61/100 -> 70/100).\n"
+ },
+ "against-improved-tiny": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Coverage current:       58.84%  (8230/13987 statements)\nCoverage merge base:    58.83%  (8229/13987 statements)\nOK: coverage improved by 0.01% against the merge base (8229/13987 -> 8230/13987).\n"
+ },
+ "against-improved-tiny-with-floor": {
+  "exit": 0,
+  "floor_after": "61.10\n",
+  "stderr": "",
+  "stdout": "Coverage current:       58.84%  (8230/13987 statements)\nCoverage merge base:    58.83%  (8229/13987 statements)\nCommitted .coverage-baseline: 61.10% \u2014 recorded only, NOT enforced on this run.\nThe merge base is measured, so it is the floor; see the header of this script.\nOK: coverage improved by 0.01% against the merge base (8229/13987 -> 8230/13987).\n"
+ },
+ "against-improved-with-floor": {
+  "exit": 0,
+  "floor_after": "61.10\n",
+  "stderr": "",
+  "stdout": "Coverage current:       70.00%  (70/100 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nCommitted .coverage-baseline: 61.10% \u2014 recorded only, NOT enforced on this run.\nThe merge base is measured, so it is the floor; see the header of this script.\nOK: coverage improved by 9% against the merge base (61/100 -> 70/100).\n"
+ },
+ "against-same-ratio-other-size": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Coverage current:       61.00%  (122/200 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nOK: coverage unchanged against the merge base.\n"
+ },
+ "against-same-ratio-other-size-with-floor": {
+  "exit": 0,
+  "floor_after": "61.10\n",
+  "stderr": "",
+  "stdout": "Coverage current:       61.00%  (122/200 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nCommitted .coverage-baseline: 61.10% \u2014 recorded only, NOT enforced on this run.\nThe merge base is measured, so it is the floor; see the header of this script.\nOK: coverage unchanged against the merge base.\n"
+ },
+ "against-unchanged": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Coverage current:       61.00%  (61/100 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nOK: coverage unchanged against the merge base.\n"
+ },
+ "against-unchanged-with-floor": {
+  "exit": 0,
+  "floor_after": "61.10\n",
+  "stderr": "",
+  "stdout": "Coverage current:       61.00%  (61/100 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nCommitted .coverage-baseline: 61.10% \u2014 recorded only, NOT enforced on this run.\nThe merge base is measured, so it is the floor; see the header of this script.\nOK: coverage unchanged against the merge base.\n"
+ },
+ "against-update-flag-ignored": {
+  "exit": 0,
+  "floor_after": "10\n",
+  "stderr": "",
+  "stdout": "Coverage current:       70.00%  (70/100 statements)\nCoverage merge base:    61.00%  (61/100 statements)\nCommitted .coverage-baseline: 10% \u2014 recorded only, NOT enforced on this run.\nThe merge base is measured, so it is the floor; see the header of this script.\nOK: coverage improved by 9% against the merge base (61/100 -> 70/100).\n"
+ },
+ "bare-double-dash": {
+  "exit": 0,
+  "floor_after": "50\n",
+  "stderr": "",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\nCoverage baseline:      50.00%  (committed fail-safe floor)\nOK: coverage unchanged.\n"
+ },
+ "base-missing": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: merge-base clover file not found: base.xml\n",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\n"
+ },
+ "base-not-xml": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: could not parse coverage metrics from merge-base report base.xml\n",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\n"
+ },
+ "base-zero-statements": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: merge-base report base.xml counts zero statements. Refusing to turn an empty report into a percentage \u2014 this is a measurement failure, not a coverage result.\n",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\n"
+ },
+ "capabilities": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "against\nupdate-baseline\ncapabilities\nchanged-files\ndeletion-neutral\n"
+ },
+ "capabilities-with-other-flags": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "against\nupdate-baseline\ncapabilities\nchanged-files\ndeletion-neutral\n"
+ },
+ "changed-list-empty-file": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "OK: this change touches no PHP files, so there is no coverage to compare.\n    (Whole-project drift between two runs of identical code is measurement noise, not a regression.)\n"
+ },
+ "changed-list-missing": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: changed-files list not found: nope.txt\n",
+  "stdout": ""
+ },
+ "changed-list-no-php": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "OK: this change touches no PHP files, so there is no coverage to compare.\n    (Whole-project drift between two runs of identical code is measurement noise, not a regression.)\n"
+ },
+ "changed-list-no-php-dn": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "OK: this change touches no PHP files, so there is no coverage to compare.\n    (Whole-project drift between two runs of identical code is measurement noise, not a regression.)\n"
+ },
+ "changed-with-empty-against": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: --changed-files requires --against; a file subset has no meaning against the committed whole-project baseline.\n",
+  "stdout": ""
+ },
+ "changed-without-against": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: --changed-files requires --against; a file subset has no meaning against the committed whole-project baseline.\n",
+  "stdout": ""
+ },
+ "default-clover-path-missing": {
+  "exit": 2,
+  "floor_after": "50.00\n",
+  "stderr": "Error: current clover file not found: coverage/clover.xml\n",
+  "stdout": ""
+ },
+ "default-clover-path-present": {
+  "exit": 0,
+  "floor_after": "50.00\n",
+  "stderr": "",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\nCoverage baseline:      50.00%  (committed fail-safe floor)\nOK: coverage unchanged.\n"
+ },
+ "deletion-neutral-alone": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: --deletion-neutral requires --changed-files (and therefore --against). It refines the file-scoped comparison; it has no meaning against the whole project.\n",
+  "stdout": ""
+ },
+ "deletion-neutral-changed-flag-no-value": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: --deletion-neutral requires --changed-files (and therefore --against). It refines the file-scoped comparison; it has no meaning against the whole project.\n",
+  "stdout": ""
+ },
+ "deletion-neutral-empty-changed": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: --deletion-neutral requires --changed-files (and therefore --against). It refines the file-scoped comparison; it has no meaning against the whole project.\n",
+  "stdout": ""
+ },
+ "dn-absent-both": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 0 file(s), base 0 file(s), 0 head method(s), 0 base method(s)).\nOK: none of the changed PHP files appear in either coverage report.\n    Nothing was measured, so nothing is claimed about them.\n"
+ },
+ "dn-added-untested": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 16 head method(s), 15 base method(s)).\nSurviving code, head:   62.24%  (183/294 statements)\nSurviving code, base:   72.05%  (183/254 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 9.81%.\n      base 183/254 -> head 183/294 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      This change adds 40 statements to those files. Adding code without tests drops coverage.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-base-missing": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: merge-base clover file not found: base.xml\n",
+  "stdout": "Scoped to 1 changed PHP file(s).\n    note: current report declares 1 statement(s) for lib/Service/WidgetService.php but emits 254 attributable line(s); the attributable ones are what is compared.\n"
+ },
+ "dn-base-no-lines": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\n    note: merge-base report carries no line data for lib/Service/WidgetService.php; falling back to its file-level metric (220/304).\nFalling back to file-level metrics on both sides for: lib/Service/WidgetService.php\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 1 head method(s), 1 base method(s)).\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.37%  (220/304 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 0.32%.\n      base 220/304 -> head 183/254 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-base-not-xml": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: could not parse merge-base report base.xml\n",
+  "stdout": "Scoped to 1 changed PHP file(s).\n"
+ },
+ "dn-both-no-lines": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\n    note: current report carries no line data for lib/Service/WidgetService.php; falling back to its file-level metric (183/254).\n    note: merge-base report carries no line data for lib/Service/WidgetService.php; falling back to its file-level metric (220/304).\nFalling back to file-level metrics on both sides for: lib/Service/WidgetService.php\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 1 head method(s), 1 base method(s)).\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.37%  (220/304 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 0.32%.\n      base 220/304 -> head 183/254 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-declared-mismatch": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\n    note: current report declares 260 statement(s) for lib/Service/WidgetService.php but emits 254 attributable line(s); the attributable ones are what is compared.\n    note: merge-base report declares 300 statement(s) for lib/Service/WidgetService.php but emits 304 attributable line(s); the attributable ones are what is compared.\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 15 head method(s), 16 base method(s)).\nRemoved from the base side: 1 method(s) absent from head, 37/50 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.05%  (183/254 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-delete-and-add": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 16 head method(s), 16 base method(s)).\nRemoved from the base side: 1 method(s) absent from head, 37/50 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   62.24%  (183/294 statements)\nSurviving code, base:   72.05%  (183/254 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 9.81%.\n      base 183/254 -> head 183/294 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      This change adds 40 statements to those files. Adding code without tests drops coverage.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-deleted-file": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 2 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 2 file(s), 2 head method(s), 17 base method(s)).\nMeasured at the merge base and absent from the head report: lib/Service/WidgetService.php\n    Treated as deleted. If one of those files still exists, it has been dropped from\n    coverage measurement and that is the thing to fix, not this guard.\nRemoved from the base side: 15 method(s) absent from head, 183/254 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   83.33%  (15/18 statements)\nSurviving code, base:   83.33%  (15/18 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-empty-clover": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 0 file(s), base 0 file(s), 0 head method(s), 0 base method(s)).\nOK: none of the changed PHP files appear in either coverage report.\n    Nothing was measured, so nothing is claimed about them.\n"
+ },
+ "dn-head-empty-clover": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 0 file(s), base 1 file(s), 0 head method(s), 16 base method(s)).\nMeasured at the merge base and absent from the head report: lib/Service/WidgetService.php\n    Treated as deleted. If one of those files still exists, it has been dropped from\n    coverage measurement and that is the thing to fix, not this guard.\nRemoved from the base side: 16 method(s) absent from head, 220/304 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:    0.00%  (0/0 statements)\nSurviving code, base:    0.00%  (0/0 statements)\nOK: none of the changed PHP existed at the merge base, so there is no prior figure to drop below.\n"
+ },
+ "dn-head-missing": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: current clover file not found: head.xml\n",
+  "stdout": "Scoped to 1 changed PHP file(s).\n"
+ },
+ "dn-head-no-lines": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\n    note: current report carries no line data for lib/Service/WidgetService.php; falling back to its file-level metric (183/254).\nFalling back to file-level metrics on both sides for: lib/Service/WidgetService.php\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 1 head method(s), 1 base method(s)).\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.37%  (220/304 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 0.32%.\n      base 220/304 -> head 183/254 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-improved": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 15 head method(s), 16 base method(s)).\nRemoved from the base side: 1 method(s) absent from head, 37/50 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   75.98%  (193/254 statements)\nSurviving code, base:   72.05%  (183/254 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-lines-nested-in-class": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\n    note: current report carries no line data for lib/Service/WidgetService.php; falling back to its file-level metric (183/254).\nFalling back to file-level metrics on both sides for: lib/Service/WidgetService.php\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 1 head method(s), 1 base method(s)).\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.37%  (220/304 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 0.32%.\n      base 220/304 -> head 183/254 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-new-file": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 0 file(s), 15 head method(s), 0 base method(s)).\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:    0.00%  (0/0 statements)\nOK: none of the changed PHP existed at the merge base, so there is no prior figure to drop below.\n"
+ },
+ "dn-no-file-metrics": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\n    note: current report declares 0 statement(s) for lib/Service/WidgetService.php but emits 254 attributable line(s); the attributable ones are what is compared.\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 15 head method(s), 16 base method(s)).\nRemoved from the base side: 1 method(s) absent from head, 37/50 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.05%  (183/254 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-no-lines-other-file-kept": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 2 changed PHP file(s).\n    note: current report carries no line data for lib/Service/WidgetService.php; falling back to its file-level metric (183/254).\nFalling back to file-level metrics on both sides for: lib/Service/WidgetService.php\nDeletion-neutral: attributed by method name (head 2 file(s), base 2 file(s), 3 head method(s), 3 base method(s)).\nSurviving code, head:   72.79%  (198/272 statements)\nSurviving code, base:   73.60%  (237/322 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 0.81%.\n      base 237/322 -> head 198/272 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-no-lines-raw-covered-attr": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\n    note: current report carries no line data for lib/Service/WidgetService.php; falling back to its file-level metric (0183/254).\nFalling back to file-level metrics on both sides for: lib/Service/WidgetService.php\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 1 head method(s), 1 base method(s)).\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.37%  (220/304 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 0.32%.\n      base 220/304 -> head 183/254 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-package-wrapped": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 15 head method(s), 16 base method(s)).\nRemoved from the base side: 1 method(s) absent from head, 37/50 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.05%  (183/254 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-pure-deletion": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 15 head method(s), 16 base method(s)).\nRemoved from the base side: 1 method(s) absent from head, 37/50 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.05%  (183/254 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-regression": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 15 head method(s), 16 base method(s)).\nRemoved from the base side: 1 method(s) absent from head, 37/50 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   70.87%  (180/254 statements)\nSurviving code, base:   72.05%  (183/254 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 1.18%.\n      base 183/254 -> head 180/254 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-rename": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 2 head method(s), 2 base method(s)).\nRemoved from the base side: 1 method(s) absent from head, 10/10 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   75.00%  (15/20 statements)\nSurviving code, base:   50.00%  (5/10 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-same-name-twice": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 1 head method(s), 1 base method(s)).\nSurviving code, head:   62.50%  (5/8 statements)\nSurviving code, base:   75.00%  (6/8 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 12.5%.\n      base 6/8 -> head 5/8 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-statements-before-first-method": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 2 head method(s), 2 base method(s)).\nSurviving code, head:  100.00%  (7/7 statements)\nSurviving code, base:  100.00%  (5/5 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-suffix-matches-many": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 3 head method(s), 2 base method(s)).\nSurviving code, head:   69.57%  (16/23 statements)\nSurviving code, base:   83.33%  (15/18 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 13.76%.\n      base 15/18 -> head 16/23 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      This change adds 5 statements to those files. Adding code without tests drops coverage.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-tiny-drop": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 1 head method(s), 1 base method(s)).\nSurviving code, head:   58.83%  (8228/13987 statements)\nSurviving code, base:   58.83%  (8229/13987 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by less than 0.01% \u2014 too little to show in the percentage, but a real loss in the counts below.\n      base 8229/13987 -> head 8228/13987 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-two-wanted-one-entry": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 2 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 15 head method(s), 16 base method(s)).\nRemoved from the base side: 1 method(s) absent from head, 37/50 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.05%  (183/254 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-unnamed-file-entry": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 15 head method(s), 16 base method(s)).\nRemoved from the base side: 1 method(s) absent from head, 37/50 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:   72.05%  (183/254 statements)\nSurviving code, base:   72.05%  (183/254 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-unnamed-method-meets-leading-statements": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 2 head method(s), 2 base method(s)).\nSurviving code, head:  100.00%  (7/7 statements)\nSurviving code, base:  100.00%  (7/7 statements)\nOK: coverage of the surviving and added code did not drop.\n"
+ },
+ "dn-unnamed-methods": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 2 head method(s), 2 base method(s)).\nSurviving code, head:   75.00%  (9/12 statements)\nSurviving code, base:   83.33%  (10/12 statements)\nFAIL: coverage of the code this change KEEPS or ADDS dropped by 8.33%.\n      base 10/12 -> head 9/12 statements, comparing only methods that exist on BOTH sides plus everything new on this branch.\n      Deleted methods were already excluded, so this is not a deletion penalty. If you\n      RENAMED a method, note that a rename reads as a delete plus an add: the new name is\n      new code here and has to be covered.\n"
+ },
+ "dn-zero-declared-zero-lines": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nDeletion-neutral: attributed by method name (head 1 file(s), base 1 file(s), 0 head method(s), 16 base method(s)).\nRemoved from the base side: 16 method(s) absent from head, 220/304 statements.\n    A method that no longer exists is not a coverage regression; it is deleted code.\nSurviving code, head:    0.00%  (0/0 statements)\nSurviving code, base:    0.00%  (0/0 statements)\nOK: none of the changed PHP existed at the merge base, so there is no prior figure to drop below.\n"
+ },
+ "floor-above": {
+  "exit": 0,
+  "floor_after": "50.00\n",
+  "stderr": "",
+  "stdout": "Coverage current:       60.00%  (6/10 statements)\nCoverage baseline:      50.00%  (committed fail-safe floor)\nOK: coverage is 10% above the committed floor.\n"
+ },
+ "floor-above-update": {
+  "exit": 0,
+  "floor_after": "66.67\n",
+  "stderr": "",
+  "stdout": "Coverage current:       66.67%  (2/3 statements)\nCoverage baseline:      50.00%  (committed fail-safe floor)\nOK: coverage is 16.67% above the committed floor.\nRecomputed floor written: 66.67%\n"
+ },
+ "floor-below": {
+  "exit": 1,
+  "floor_after": "50.00\n",
+  "stderr": "",
+  "stdout": "Coverage current:       40.00%  (4/10 statements)\nCoverage baseline:      50.00%  (committed fail-safe floor)\nFAIL: coverage dropped by 10% below the committed floor.\n"
+ },
+ "floor-below-tiny": {
+  "exit": 1,
+  "floor_after": "50.00\n",
+  "stderr": "",
+  "stdout": "Coverage current:       49.99%  (4999/10000 statements)\nCoverage baseline:      50.00%  (committed fail-safe floor)\nFAIL: coverage dropped by 0.01% below the committed floor.\n"
+ },
+ "floor-below-update": {
+  "exit": 1,
+  "floor_after": "50\n",
+  "stderr": "",
+  "stdout": "Coverage current:       10.00%  (1/10 statements)\nCoverage baseline:      50.00%  (committed fail-safe floor)\nFAIL: coverage dropped by 40% below the committed floor.\n"
+ },
+ "floor-equal": {
+  "exit": 0,
+  "floor_after": "50.00\n",
+  "stderr": "",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\nCoverage baseline:      50.00%  (committed fail-safe floor)\nOK: coverage unchanged.\n"
+ },
+ "floor-equal-rounding": {
+  "exit": 0,
+  "floor_after": "33.33\n",
+  "stderr": "",
+  "stdout": "Coverage current:       33.33%  (1/3 statements)\nCoverage baseline:      33.33%  (committed fail-safe floor)\nOK: coverage unchanged.\n"
+ },
+ "floor-equal-update": {
+  "exit": 0,
+  "floor_after": "50\n",
+  "stderr": "",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\nCoverage baseline:      50.00%  (committed fail-safe floor)\nOK: coverage unchanged.\n"
+ },
+ "floor-integer-value": {
+  "exit": 0,
+  "floor_after": "99\n",
+  "stderr": "",
+  "stdout": "Coverage current:      100.00%  (7/7 statements)\nCoverage baseline:      99.00%  (committed fail-safe floor)\nOK: coverage is 1% above the committed floor.\n"
+ },
+ "floor-missing": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: baseline file not found: <case>/scripts/../.coverage-baseline\n",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\n"
+ },
+ "floor-negative": {
+  "exit": 2,
+  "floor_after": "-5\n",
+  "stderr": "Error: unparseable coverage baseline value '-5' \u2014 refusing to guess.\n",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\n"
+ },
+ "floor-unparseable": {
+  "exit": 2,
+  "floor_after": "about 50%\n",
+  "stderr": "Error: unparseable coverage baseline value 'about 50%' \u2014 refusing to guess.\n",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\n"
+ },
+ "floor-whitespace": {
+  "exit": 0,
+  "floor_after": "  12.5  \n\n",
+  "stderr": "",
+  "stdout": "Coverage current:      100.00%  (7/7 statements)\nCoverage baseline:      12.50%  (committed fail-safe floor)\nOK: coverage is 87.5% above the committed floor.\n"
+ },
+ "fs-absent-both": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nOK: none of the changed PHP files appear in either coverage report.\n    Nothing was measured, so nothing is claimed about them.\n"
+ },
+ "fs-added-untested": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:    62.24%  (183/294 statements)\nChanged files, base:    72.05%  (183/254 statements)\nFAIL: coverage of the files this change touches dropped by 9.81%.\n      base 183/254 -> head 183/294 statements.\n      This change adds 40 statements to those files. Adding code without tests drops coverage.\n"
+ },
+ "fs-base-not-xml": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: could not parse merge-base report base.xml\n",
+  "stdout": "Scoped to 1 changed PHP file(s).\n"
+ },
+ "fs-head-missing": {
+  "exit": 2,
+  "floor_after": null,
+  "stderr": "Error: current clover file not found: head.xml\n",
+  "stdout": "Scoped to 1 changed PHP file(s).\n"
+ },
+ "fs-head-zero-statements": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:     0.00%  (0/0 statements)\nChanged files, base:    50.00%  (2/4 statements)\nOK: coverage of the changed files did not drop.\n"
+ },
+ "fs-improved": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:    75.98%  (193/254 statements)\nChanged files, base:    72.05%  (183/254 statements)\nOK: coverage of the changed files did not drop.\n"
+ },
+ "fs-list-noise": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:    72.05%  (183/254 statements)\nChanged files, base:    72.37%  (220/304 statements)\nFAIL: coverage of the files this change touches dropped by 0.32%.\n      base 220/304 -> head 183/254 statements.\n"
+ },
+ "fs-new-file": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:    72.05%  (183/254 statements)\nChanged files, base:     0.00%  (0/0 statements)\nOK: the changed PHP is new at the merge base, so there is no prior figure to drop below.\n"
+ },
+ "fs-package-wrapped": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:    72.05%  (183/254 statements)\nChanged files, base:    72.37%  (220/304 statements)\nFAIL: coverage of the files this change touches dropped by 0.32%.\n      base 220/304 -> head 183/254 statements.\n"
+ },
+ "fs-pure-deletion": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:    72.05%  (183/254 statements)\nChanged files, base:    72.37%  (220/304 statements)\nFAIL: coverage of the files this change touches dropped by 0.32%.\n      base 220/304 -> head 183/254 statements.\n"
+ },
+ "fs-suffix-matches-many": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:    69.57%  (16/23 statements)\nChanged files, base:    83.33%  (15/18 statements)\nFAIL: coverage of the files this change touches dropped by 13.76%.\n      base 15/18 -> head 16/23 statements.\n      This change adds 5 statements to those files. Adding code without tests drops coverage.\n"
+ },
+ "fs-tiny-drop": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:    58.83%  (8228/13987 statements)\nChanged files, base:    58.83%  (8229/13987 statements)\nFAIL: coverage of the files this change touches dropped by 0%.\n      base 8229/13987 -> head 8228/13987 statements.\n"
+ },
+ "fs-two-files": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 2 changed PHP file(s).\nChanged files, head:    72.79%  (198/272 statements)\nChanged files, base:    73.53%  (200/272 statements)\nFAIL: coverage of the files this change touches dropped by 0.74%.\n      base 200/272 -> head 198/272 statements.\n"
+ },
+ "fs-unchanged": {
+  "exit": 0,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:    72.05%  (183/254 statements)\nChanged files, base:    72.05%  (183/254 statements)\nOK: coverage of the changed files did not drop.\n"
+ },
+ "fs-unnamed-file-entry": {
+  "exit": 1,
+  "floor_after": null,
+  "stderr": "",
+  "stdout": "Scoped to 1 changed PHP file(s).\nChanged files, head:    72.05%  (183/254 statements)\nChanged files, base:    72.37%  (220/304 statements)\nFAIL: coverage of the files this change touches dropped by 0.32%.\n      base 220/304 -> head 183/254 statements.\n"
+ },
+ "head-empty-file": {
+  "exit": 2,
+  "floor_after": "50\n",
+  "stderr": "Error: could not parse coverage metrics from current report head.xml\n",
+  "stdout": ""
+ },
+ "head-missing": {
+  "exit": 2,
+  "floor_after": "50\n",
+  "stderr": "Error: current clover file not found: absent.xml\n",
+  "stdout": ""
+ },
+ "head-negative-statements": {
+  "exit": 2,
+  "floor_after": "50\n",
+  "stderr": "Error: current report head.xml counts zero statements. Refusing to turn an empty report into a percentage \u2014 this is a measurement failure, not a coverage result.\n",
+  "stdout": ""
+ },
+ "head-no-project-metrics": {
+  "exit": 2,
+  "floor_after": "50\n",
+  "stderr": "Error: could not parse coverage metrics from current report head.xml\n",
+  "stdout": ""
+ },
+ "head-not-xml": {
+  "exit": 2,
+  "floor_after": "50\n",
+  "stderr": "Error: could not parse coverage metrics from current report head.xml\n",
+  "stdout": ""
+ },
+ "head-zero-statements": {
+  "exit": 2,
+  "floor_after": "50\n",
+  "stderr": "Error: current report head.xml counts zero statements. Refusing to turn an empty report into a percentage \u2014 this is a measurement failure, not a coverage result.\n",
+  "stdout": ""
+ },
+ "positional-after-options": {
+  "exit": 0,
+  "floor_after": "50\n",
+  "stderr": "",
+  "stdout": "Coverage current:       50.00%  (5/10 statements)\nCoverage baseline:      50.00%  (committed fail-safe floor)\nOK: coverage unchanged.\n"
+ }
+}
