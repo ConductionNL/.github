@@ -50,6 +50,36 @@ def script():
     raise SystemExit("decide step not found")
 
 
+# A push run asks the Actions API for the head of the last push run on the
+# branch that finished uncancelled, and diffs from there. These cases run
+# offline, so a fake `gh` answers both calls: FAKE_GH_LAST is the head it
+# reports ("" = no such run), FAKE_GH_FAIL makes every call fail.
+FAKE_GH = """#!/usr/bin/env bash
+[ -n "${FAKE_GH_FAIL:-}" ] && exit 1
+case "$*" in
+  *"/actions/runs/"*) echo "1 2" ;;
+  *"/actions/workflows/"*) echo "${FAKE_GH_LAST:-}" ;;
+  *) exit 1 ;;
+esac
+"""
+
+
+def push_env(d, last, fail=False):
+    """The env a push run's filter reads besides the diff: the fake `gh` on
+    PATH, the run ids it looks itself up with, and the branch."""
+    bindir = os.path.join(d, ".fakebin")
+    os.makedirs(bindir, exist_ok=True)
+    gh = os.path.join(bindir, "gh")
+    open(gh, "w").write(FAKE_GH)
+    os.chmod(gh, 0o755)
+    env = {"PATH": bindir + os.pathsep + os.environ.get("PATH", ""),
+           "GITHUB_REPOSITORY": "ConductionNL/example", "GITHUB_RUN_ID": "1",
+           "BRANCH": "development", "FAKE_GH_LAST": last}
+    if fail:
+        env["FAKE_GH_FAIL"] = "1"
+    return env
+
+
 def git(*a, cwd):
     return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True,
                           check=True).stdout.strip()
@@ -74,10 +104,14 @@ def commit(d, files, msg):
 
 def run_case(name, files_before, files_after, event, filter_on="true",
              globs="lib/** src/** tests/** appinfo/** composer.json composer.lock package.json package-lock.json .github/workflows/**",
-             expect=None):
+             expect=None, last_finished=None, gh_fails=False):
+    """`last_finished` is the head of the last finished push run, "base" by
+    default (nothing cancelled in between); "root" puts an earlier commit there,
+    as when the run for the push before this one was cancelled."""
     d = tempfile.mkdtemp()
     try:
         make_repo(d)
+        root = commit(d, {"README.md": "root"}, "root")
         base = commit(d, files_before, "base")
         head = commit(d, files_after, "head") if files_after else base
         out_f = os.path.join(d, "gh_out")
@@ -92,6 +126,9 @@ def run_case(name, files_before, files_after, event, filter_on="true",
             "HEAD_SHA": head,
             "BEFORE": base if event == "push" else "",
         })
+        if event == "push":
+            env.update(push_env(d, root if last_finished == "root" else base,
+                                fail=gh_fails))
         r = subprocess.run(["bash", "-c", script()], cwd=d, env=env,
                            capture_output=True, text=True)
         outs = dict(l.split("=", 1) for l in open(out_f).read().splitlines() if "=" in l)
@@ -156,6 +193,12 @@ print("── FAIL-SAFE: uncertainty must resolve to RUN ───────�
 results.append(run_case("filtering disabled", {"docs/a.md": "a"},
                         {"docs/a.md": "b"}, "pull_request",
                         filter_on="false", expect="true"))
+results.append(run_case("docs-only push after a cancelled code push",
+                        {"lib/A.php": PHP}, {"docs/x.md": "b"}, "push",
+                        last_finished="root", expect="true"))
+results.append(run_case("push whose last finished run cannot be read",
+                        {"docs/x.md": "a"}, {"docs/x.md": "b"}, "push",
+                        gh_fails=True, expect="true"))
 results.append(special("push that created the branch (BEFORE=zeros)",
                        "push", ZERO, "true", "true"))
 results.append(special("workflow_dispatch (no diff defined)",
