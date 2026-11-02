@@ -58,8 +58,14 @@ RESULT_GATE_RE = re.compile(
     r"needs(?:\.[A-Za-z0-9_-]+|\[['\"][A-Za-z0-9_-]+['\"]\])\.result\s*(?:!=|==)"
 )
 
-# job-id -> reason. Empty on purpose.
-ALLOWLIST: dict[str, str] = {}
+# job-id -> reason. Each entry argues why the job renders no verdict.
+ALLOWLIST: dict[str, str] = {
+    "sig-floor-raise": (
+        "renders no verdict: it runs only after a successful hydra-gates job on "
+        "a push to development, to offer gate 123's raised floor file as a pull "
+        "request. Skipping it loses no verdict; the floor is judged by gate 123."
+    ),
+}
 
 
 def check(workflow: dict, injected: dict | None = None) -> list[str]:
