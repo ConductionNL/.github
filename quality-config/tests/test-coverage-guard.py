@@ -402,22 +402,22 @@ def mutation_battery() -> int:
     mutants: list[tuple[str, str, str, bool]] = [
         (
             "the SYMMETRIC rule — head-only methods dropped too (the openconnector#1265 hole)",
-            "        [$statements, $covered]         = cgSumBuckets($headBuckets);",
-            "        $mutantKeep = [];\n"
-            "        foreach ($baseBuckets as $mutantKey => $mutantPair) { $mutantKeep[$mutantKey] = true; }\n"
-            "        [$statements, $covered]         = cgSumBuckets($headBuckets, $mutantKeep);",
+            "    $head   = cgSumBuckets($headBuckets);",
+            "    $mutantKeep = [];\n"
+            "    foreach ($baseBuckets as $mutantKey => $mutantPair) { $mutantKeep[$mutantKey] = true; }\n"
+            "    $head   = cgSumBuckets($headBuckets, $mutantKeep);",
             True,
         ),
         (
             "base-only methods KEPT — i.e. the deletion penalty put back",
-            "        [$baseStatements, $baseCovered] = cgSumBuckets($baseBuckets, $keep);",
-            "        [$baseStatements, $baseCovered] = cgSumBuckets($baseBuckets);",
+            "    $base   = cgSumBuckets($baseBuckets, $keep);",
+            "    $base   = cgSumBuckets($baseBuckets);",
             True,
         ),
         (
             "attribution by ordinal instead of name — every bucket key made unique",
-            "                $method = ($named === '' ? CG_WHOLE_FILE : $named);",
-            "                $method = ($named === '' ? CG_WHOLE_FILE : ($named . '@' . (string) $line['num']));",
+            "    return $named;",
+            "    return ($named . '@' . (string) $line['num']);",
             True,
         ),
         (
@@ -428,8 +428,8 @@ def mutation_battery() -> int:
         ),
         (
             "ANTI-WIDENING: a log string nothing asserts on is reworded",
-            "            echo \"    A method that no longer exists is not a coverage regression; it is deleted code.\\n\";",
-            "            echo \"    Deleted methods are not regressions.\\n\";",
+            "    echo \"    A method that no longer exists is not a coverage regression; it is deleted code.\\n\";",
+            "    echo \"    Deleted methods are not regressions.\\n\";",
             False,
         ),
     ]
