@@ -57,6 +57,11 @@ ALLOWLIST: dict[str, str] = {
         "waits for the Quality Report to complete, so the report cannot also "
         "wait for it."
     ),
+    "sig-floor-raise": (
+        "renders no verdict: after a push to development it offers gate 123's "
+        "raised floor file as a pull request. The floor's verdict is gate 123 "
+        "inside the hydra-gates job, which the report already gates on."
+    ),
 }
 
 
