@@ -36,6 +36,13 @@ measured scope) fails, unless the same change edits sigrid.yaml: an explicit
 scope change may take checks out of the floor, file included. A check that the
 base did not measure either left in an earlier change and is not judged again.
 
+A unit reader change is a scope change for the checks it re-measures. The
+floor file records the reader it was written with (`unit_reader`; a file
+without the field was written by reader 1). A change that re-records the floor
+with the current reader, on a base whose floor an older reader wrote, may drop
+the unit checks (size, complexity, interfacing) of the languages a newer
+reader measures differently (UNIT_READER_RE_MEASURED). Every other check stays.
+
 Without a floor file the gate is NOT APPLICABLE (exit 4) before any tool is
 loaded or any base resolved.
 
@@ -199,10 +206,33 @@ def git(app, *args):
 
 def floor_at(app, ref, path):
     """The committed floor (a list of labels) at `ref`, or None when absent."""
+    doc = floor_doc_at(app, ref, path)
+    return None if doc is None else parse_floor(json.dumps(doc), f"{ref}:{path}")
+
+
+def floor_doc_at(app, ref, path):
+    """The floor file at `ref` as a dict, or None when absent."""
     rc, out = git(app, "show", f"{ref}:{path}")
-    if rc != 0:
-        return None
-    return parse_floor(out, f"{ref}:{path}")
+    return json.loads(out) if rc == 0 else None
+
+
+def unit_reader_of(doc):
+    """The unit reader version a floor was recorded with; a floor written
+    before the field existed was recorded by reader 1."""
+    return int(doc.get("unit_reader", 1))
+
+
+def re_measured_checks(labels, since):
+    """The unit checks among `labels` that a unit reader newer than `since`
+    measures differently. Duplication and structure checks never are."""
+    langs = {lang for v, ls in sig.UNIT_READER_RE_MEASURED.items()
+             if since < v <= sig.UNIT_READER_VERSION for lang in ls}
+    out = set()
+    for label in labels:
+        parts = label.split()
+        if len(parts) == 3 and parts[0] in langs and parts[1] in ("unit_size", "unit_complexity", "unit_interfacing"):
+            out.add(label)
+    return out
 
 
 def parse_floor(text, where):
@@ -221,6 +251,7 @@ def floor_document(app, labels):
         "schema": SCHEMA,
         "profile": "four-star",
         "tools": {"lizard": sig.LIZARD_VERSION},
+        "unit_reader": sig.UNIT_READER_VERSION,
         "measured_at": head,
         "checks": sorted(labels),
     }
@@ -366,13 +397,20 @@ def cmd_check(args, lizard):
         mb = out.strip()
 
     head_file = os.path.join(app, args.floor)
-    head_floor = parse_floor(sig.read_text(head_file), args.floor) if os.path.isfile(head_file) else None
-    base_floor = floor_at(app, mb, args.floor) if mb else None
+    head_doc = json.loads(sig.read_text(head_file)) if os.path.isfile(head_file) else None
+    head_floor = parse_floor(json.dumps(head_doc), args.floor) if head_doc is not None else None
+    base_doc = floor_doc_at(app, mb, args.floor) if mb else None
+    base_floor = parse_floor(json.dumps(base_doc), f"{mb}:{args.floor}") if base_doc is not None else None
     committed = base_floor if base_floor is not None else head_floor
     if committed is None:
         return no_floor(args.floor)
     scope_changed = bool(mb) and sigrid_changed(app, mb)
     removed = sorted(set(base_floor) - set(head_floor or [])) if base_floor is not None else []
+    # A floor re-recorded by a newer unit reader may drop the checks that reader re-measures.
+    reread = set()
+    if base_doc is not None and head_doc is not None \
+            and unit_reader_of(base_doc) < sig.UNIT_READER_VERSION == unit_reader_of(head_doc):
+        reread = re_measured_checks(removed, unit_reader_of(base_doc))
 
     cache = load_cache(args.cache)
     reader = CachedUnitReader(lizard, cache)
@@ -391,10 +429,11 @@ def cmd_check(args, lizard):
     new, inherited = judge(floor, head4, base4, scope_changed)
     # A check may leave the file only when it also left the measurement, as judge() allows.
     gone = {lbl for lbl, _why in inherited if lbl not in head4}
-    lowered = [lbl for lbl in removed if lbl not in gone]
+    reread &= set(head4)
+    lowered = [lbl for lbl in removed if lbl not in gone and lbl not in reread]
     met_head = {lbl for lbl, r in head4.items() if r["ok"]}
     raise_to = sorted(met_head - set(committed))
-    proposal = (set(committed) - gone) | met_head
+    proposal = (set(committed) - gone - reread) | met_head
     if args.proposed and proposal != set(committed) and not new and not lowered:
         with open(args.proposed, "w") as fh:
             json.dump(floor_document(app, proposal), fh, indent=1)
@@ -415,6 +454,8 @@ def cmd_check(args, lizard):
         print(f"  unverified (lizard could not read it): {s['file']}: {s['reason']}")
     for lbl, why in new:
         print(f"  {lbl}: {why}")
+    for lbl in sorted(reread):
+        print(f"  re-measured by unit reader {sig.UNIT_READER_VERSION}, leaves the floor: {lbl}")
     if lowered:
         print(f"  this change removes {len(lowered)} check(s) from the committed floor: {', '.join(lowered)}")
     for lbl, why in inherited:

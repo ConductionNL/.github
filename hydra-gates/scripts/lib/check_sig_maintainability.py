@@ -108,6 +108,11 @@ LIZARD_VERSION = "1.24.3"
 # Raised whenever UnitReader reads the same source into different units, so
 # a unit cache written by an older reader is not reused.
 UNIT_READER_VERSION = 2
+# The languages whose unit checks (size, complexity, interfacing) each reader
+# version measures differently from the version before it.
+UNIT_READER_RE_MEASURED = {
+    2: ("vue", "javascript", "typescript"),  # Vue <script> extraction, get/set shorthand
+}
 JSCPD_VERSION = "4.0.5"
 
 LANG_OF_EXT = {
