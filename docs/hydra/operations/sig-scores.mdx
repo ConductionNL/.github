@@ -4,7 +4,7 @@ sidebar_label: SIG scores
 description: Our own estimate, per app and per check, of the maintainability stars Sigrid will give the fleet.
 ---
 
-import SigMatrix from '@site/src/components/SigMatrix';
+import SigMatrix, {SigFloors} from '@site/src/components/SigMatrix';
 import matrix from '@site/src/data/sig-matrix.json';
 
 # SIG scores
@@ -17,6 +17,15 @@ numbers can differ.
 
 **Measured on {matrix.measured}.** The commit under each app name is the head
 that was measured.
+
+:::note Why the scores jump from 1 November 2026
+
+Until 31 October 2026 the fleet followed the Nextcloud coding standards. From
+1 November 2026 we apply the SIG maintainability rules of the SIG/TÜV NORD
+guidance. Gates 122 and 123 check them on every change. That is why the scores
+rise from 1 November.
+
+:::
 
 ## How to read the matrix
 
@@ -40,7 +49,25 @@ misses 4 stars is therefore shown as `<4`, not as an estimated lower star.
 The totals at the top count the checks per app. An app is only measured on the
 languages it contains, so the totals differ between apps.
 
+A cell with a ring and a lock is floored. Gate 123 holds that check: the app
+met it when its floor was recorded, and a change that loses it fails. The
+"floored checks" row counts them and shows the commit the floor was recorded
+at. Floors come from each app's `.github/sig-floor.json` on `development`, read
+on {matrix.floors.read}. They can be newer than the measurement, so a floored
+cell can still show `<4` until the next measurement.
+
 <SigMatrix />
+
+## Floors and ratchets per app
+
+Besides the SIG floor, each app keeps its own floors and baselines on
+`development`. A baseline lists debt that may stay, so a lower count is
+better. A coverage floor is a minimum, so a higher value is better. A `·`
+means the app has no such file. Hover a cell for the file it came from. The
+commit under each app name is the `development` head that was read on
+{matrix.floors.read}.
+
+<SigFloors />
 
 ## Refresh the data
 
@@ -62,7 +89,11 @@ from gate 122 reports.
    python3 website/scripts/build-sig-matrix.py <report-dir> --date YYYY-MM-DD
    ```
 
-   Leave out `--date` to use the date of the newest report.
+   Leave out `--date` to use the date of the newest report. The generator then
+   reads each app's floors and baselines from `development` through `gh api`,
+   so it needs a logged-in GitHub CLI. Add `--clones DIR` to read them from
+   local clones in `DIR/<app>` instead, or `--no-floors` to keep the floors
+   already in the file.
 3. Commit the new `sig-matrix.json`.
 
 The generator takes the limits from gate 122 itself, so the matrix follows any

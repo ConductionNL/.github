@@ -6,121 +6,798 @@
    "head": "22af2e4230be32b3cd22f375a6c2ea37e547e011",
    "checks": 48,
    "four": 29,
-   "five": 20
+   "five": 20,
+   "floor": {
+    "measured_at": "298c85a4e080103b184098c56e1757f36190fb87",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "decidiq": {
    "head": "4242e8e192f874b7d3bf42142ade288f5b16d571",
    "checks": 34,
    "four": 24,
-   "five": 16
+   "five": 16,
+   "floor": {
+    "measured_at": "4242e8e192f874b7d3bf42142ade288f5b16d571",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.duplication",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "dossiq": {
    "head": "e8ca6054ee5d8407c4475a305c44746a1efc825e",
    "checks": 34,
    "four": 20,
-   "five": 13
+   "five": 13,
+   "floor": {
+    "measured_at": "2438ce27c846b955c6ec0f9742e33112e9cfa0a3",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "filinq": {
    "head": "a60a7a3e2567c5406df99ef09e0c0fd984b4c521",
    "checks": 44,
    "four": 39,
-   "five": 31
+   "five": 31,
+   "floor": {
+    "measured_at": "aff2d60506416dc8e1fd4fdd9460b6b013de1b22",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_complexity.5",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.component_independence",
+     "php.duplication",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_complexity.5",
+     "php.unit_interfacing.6",
+     "php.unit_size.30",
+     "php.unit_size.60",
+     "typescript.duplication",
+     "typescript.unit_complexity.10",
+     "typescript.unit_complexity.25",
+     "typescript.unit_complexity.5",
+     "typescript.unit_interfacing.2",
+     "typescript.unit_interfacing.4",
+     "typescript.unit_interfacing.6",
+     "typescript.unit_size.15",
+     "typescript.unit_size.30",
+     "typescript.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "hermiq": {
    "head": "e3a2eebf047cb01900aed9d4aa0628e373e83df2",
    "checks": 34,
    "four": 19,
-   "five": 11
+   "five": 11,
+   "floor": {
+    "measured_at": "ecc7128290f465a8a311a02d28c940996ad6b0d8",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "humaniq": {
    "head": "e308862cbbf8cdbc02caf1c13e91d240855e392f",
    "checks": 34,
    "four": 26,
-   "five": 21
+   "five": 21,
+   "floor": {
+    "measured_at": "1deaaae6e82a0effae0c961ec2349dad2cea83b0",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_complexity.5",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_interfacing.6",
+     "php.unit_size.30",
+     "php.unit_size.60",
+     "vue.duplication",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "integriq": {
    "head": "b4dd6fb2d5c42546fea486185ee53aa4d2255c81",
    "checks": 34,
    "four": 24,
-   "five": 18
+   "five": 18,
+   "floor": {
+    "measured_at": "c2a00c809105f16179a9349f1773695e1634eb36",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_complexity.5",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.component_independence",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "keepiq": {
    "head": "035850fbf4156c5a50bc514f9e9ace25a3d4c810",
    "checks": 58,
    "four": 41,
-   "five": 30
+   "five": 30,
+   "floor": {
+    "measured_at": "e00746766441dedf944f9a4783b87b6f9b39886a",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_size.30",
+     "php.unit_size.60",
+     "python.component_independence",
+     "python.duplication",
+     "python.module_coupling.10",
+     "python.module_coupling.20",
+     "python.module_coupling.50",
+     "python.unit_complexity.10",
+     "python.unit_complexity.25",
+     "python.unit_complexity.5",
+     "python.unit_interfacing.2",
+     "python.unit_interfacing.4",
+     "python.unit_interfacing.6",
+     "python.unit_size.15",
+     "python.unit_size.30",
+     "python.unit_size.60",
+     "typescript.duplication",
+     "typescript.unit_complexity.25",
+     "typescript.unit_interfacing.2",
+     "typescript.unit_interfacing.4",
+     "typescript.unit_interfacing.6",
+     "typescript.unit_size.15",
+     "typescript.unit_size.30",
+     "typescript.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "larpinq": {
    "head": "ebf9d6ef989a31f93f3946824db270dfaa36a91d",
    "checks": 34,
    "four": 29,
-   "five": 21
+   "five": 21,
+   "floor": {
+    "measured_at": "ebf9d6ef989a31f93f3946824db270dfaa36a91d",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_complexity.5",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.duplication",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_interfacing.6",
+     "php.unit_size.30",
+     "php.unit_size.60",
+     "vue.duplication",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "launchpad": {
    "head": "b8b01542219e94f910f85711bcea97747570d7ce",
    "checks": 34,
    "four": 24,
-   "five": 18
+   "five": 18,
+   "floor": {
+    "measured_at": "b8b01542219e94f910f85711bcea97747570d7ce",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "learniq": {
    "head": "ebf8acd3b382e6cc4604049f3b4ed58dbce718d4",
    "checks": 48,
    "four": 28,
-   "five": 19
+   "five": 19,
+   "floor": {
+    "measured_at": "200757f8834f18fa88289f092709fcbaa757dd3e",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_interfacing.6",
+     "php.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "opencatalogi": {
    "head": "e68953c10883acad6c77666de3cbf6d751f690c7",
    "checks": 44,
    "four": 38,
-   "five": 19
+   "five": 19,
+   "floor": {
+    "measured_at": "f804ce280134acf17b647930575ddf034d20bf4a",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.duplication",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_interfacing.2",
+     "php.unit_interfacing.4",
+     "php.unit_size.30",
+     "php.unit_size.60",
+     "typescript.duplication",
+     "typescript.unit_complexity.10",
+     "typescript.unit_complexity.25",
+     "typescript.unit_complexity.5",
+     "typescript.unit_interfacing.2",
+     "typescript.unit_interfacing.4",
+     "typescript.unit_interfacing.6",
+     "typescript.unit_size.15",
+     "typescript.unit_size.30",
+     "typescript.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "openregister": {
    "head": "728fc42fd35de06133bec3ca321d14e3b8649c13",
    "checks": 58,
    "four": 39,
-   "five": 29
+   "five": 29,
+   "floor": {
+    "measured_at": "a45cfebd17cdbca925d20155464c28a1b8e2fd45",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_complexity.5",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.unit_complexity.25",
+     "python.component_independence",
+     "python.duplication",
+     "python.module_coupling.10",
+     "python.module_coupling.20",
+     "python.module_coupling.50",
+     "python.unit_complexity.10",
+     "python.unit_complexity.25",
+     "python.unit_interfacing.2",
+     "python.unit_interfacing.4",
+     "python.unit_interfacing.6",
+     "python.unit_size.15",
+     "python.unit_size.30",
+     "python.unit_size.60",
+     "typescript.unit_complexity.10",
+     "typescript.unit_complexity.25",
+     "typescript.unit_complexity.5",
+     "typescript.unit_interfacing.2",
+     "typescript.unit_interfacing.4",
+     "typescript.unit_interfacing.6",
+     "typescript.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "pipelinq": {
    "head": "edffbc533c22ff52993cdac96208419a4d58d0cd",
    "checks": 34,
    "four": 21,
-   "five": 12
+   "five": 12,
+   "floor": {
+    "measured_at": "fb8abf5f28f7debf6d18f5c17016823ebb8af7a1",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "planninq": {
    "head": "c8f26f821f9945c900f2ffb9825206134a6bc647",
    "checks": 34,
    "four": 28,
-   "five": 19
+   "five": 19,
+   "floor": {
+    "measured_at": "f6e092b8eb1c0388dccf51bc76b84f4311e704e5",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.duplication",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_interfacing.4",
+     "php.unit_interfacing.6",
+     "php.unit_size.15",
+     "php.unit_size.30",
+     "php.unit_size.60",
+     "vue.duplication",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "portaliq": {
    "head": "204ab0cff50409adb00e589e951f0333591ea52e",
    "checks": 34,
    "four": 24,
-   "five": 14
+   "five": 14,
+   "floor": {
+    "measured_at": "debf1d9bac8f85144ed09973036d68b9baf394aa",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_size.30",
+     "php.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "shillinq": {
    "head": "5683727f9971d3aa682d1c4b95b62fb08583e635",
    "checks": 44,
    "four": 31,
-   "five": 26
+   "five": 26,
+   "floor": {
+    "measured_at": "7a3bf1b6b94534fd339ed77926a8c19c9469890f",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.25",
+     "typescript.duplication",
+     "typescript.unit_complexity.10",
+     "typescript.unit_complexity.25",
+     "typescript.unit_complexity.5",
+     "typescript.unit_interfacing.2",
+     "typescript.unit_interfacing.4",
+     "typescript.unit_interfacing.6",
+     "typescript.unit_size.15",
+     "typescript.unit_size.30",
+     "typescript.unit_size.60",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "stackiq": {
    "head": "1c3dff98d36e23cc2e3b6c30b7dbe2d1af5aff84",
    "checks": 48,
    "four": 28,
-   "five": 22
+   "five": 22,
+   "floor": {
+    "measured_at": "dd80cc1c259151f94ad7fcc2abe0b9d617237aff",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.25",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "php.module_coupling.10",
+     "php.unit_interfacing.4",
+     "php.unit_interfacing.6",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   },
   "thematiq": {
    "head": "f9d4f9f5d648246b645c1b1f7759810eca140942",
    "checks": 24,
    "four": 17,
-   "five": 14
+   "five": 14,
+   "floor": {
+    "measured_at": "7e4f0134f7212489673e930cefe2d6288670c0f9",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_complexity.5",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.duplication",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.10",
+     "php.unit_complexity.25",
+     "php.unit_size.30",
+     "php.unit_size.60"
+    ]
+   }
   },
   "versioniq": {
    "head": "e0236185d8e6a129699b1e54df007e58ca482dcc",
    "checks": 44,
    "four": 35,
-   "five": 28
+   "five": 28,
+   "floor": {
+    "measured_at": "54583728bf86ecce68b8f3b39d1ccbbaf5f5aaf3",
+    "profile": "four-star",
+    "checks": [
+     "javascript.duplication",
+     "javascript.unit_complexity.10",
+     "javascript.unit_complexity.25",
+     "javascript.unit_complexity.5",
+     "javascript.unit_interfacing.2",
+     "javascript.unit_interfacing.4",
+     "javascript.unit_interfacing.6",
+     "javascript.unit_size.15",
+     "javascript.unit_size.30",
+     "javascript.unit_size.60",
+     "php.duplication",
+     "php.module_coupling.10",
+     "php.module_coupling.20",
+     "php.module_coupling.50",
+     "php.unit_complexity.25",
+     "php.unit_size.30",
+     "php.unit_size.60",
+     "typescript.duplication",
+     "typescript.unit_complexity.10",
+     "typescript.unit_complexity.25",
+     "typescript.unit_complexity.5",
+     "typescript.unit_interfacing.2",
+     "typescript.unit_interfacing.4",
+     "typescript.unit_interfacing.6",
+     "typescript.unit_size.15",
+     "typescript.unit_size.30",
+     "typescript.unit_size.60",
+     "vue.duplication",
+     "vue.unit_complexity.10",
+     "vue.unit_complexity.25",
+     "vue.unit_complexity.5",
+     "vue.unit_interfacing.2",
+     "vue.unit_interfacing.4",
+     "vue.unit_interfacing.6",
+     "vue.unit_size.15",
+     "vue.unit_size.30",
+     "vue.unit_size.60"
+    ]
+   }
   }
  },
  "groups": [
@@ -3871,5 +4548,667 @@
     }
    ]
   }
- ]
+ ],
+ "floors": {
+  "rows": [
+   {
+    "id": "sig_floor",
+    "label": "SIG floor (gate 123)",
+    "what": "4-star checks the app must keep",
+    "cells": {
+     "buildiq": {
+      "value": 24,
+      "detail": ".github/sig-floor.json"
+     },
+     "decidiq": {
+      "value": 24,
+      "detail": ".github/sig-floor.json"
+     },
+     "dossiq": {
+      "value": 21,
+      "detail": ".github/sig-floor.json"
+     },
+     "filinq": {
+      "value": 40,
+      "detail": ".github/sig-floor.json"
+     },
+     "hermiq": {
+      "value": 19,
+      "detail": ".github/sig-floor.json"
+     },
+     "humaniq": {
+      "value": 28,
+      "detail": ".github/sig-floor.json"
+     },
+     "integriq": {
+      "value": 25,
+      "detail": ".github/sig-floor.json"
+     },
+     "keepiq": {
+      "value": 45,
+      "detail": ".github/sig-floor.json"
+     },
+     "larpinq": {
+      "value": 29,
+      "detail": ".github/sig-floor.json"
+     },
+     "launchpad": {
+      "value": 24,
+      "detail": ".github/sig-floor.json"
+     },
+     "learniq": {
+      "value": 22,
+      "detail": ".github/sig-floor.json"
+     },
+     "opencatalogi": {
+      "value": 37,
+      "detail": ".github/sig-floor.json"
+     },
+     "openregister": {
+      "value": 39,
+      "detail": ".github/sig-floor.json"
+     },
+     "pipelinq": {
+      "value": 22,
+      "detail": ".github/sig-floor.json"
+     },
+     "planninq": {
+      "value": 30,
+      "detail": ".github/sig-floor.json"
+     },
+     "portaliq": {
+      "value": 24,
+      "detail": ".github/sig-floor.json"
+     },
+     "shillinq": {
+      "value": 32,
+      "detail": ".github/sig-floor.json"
+     },
+     "stackiq": {
+      "value": 17,
+      "detail": ".github/sig-floor.json"
+     },
+     "thematiq": {
+      "value": 18,
+      "detail": ".github/sig-floor.json"
+     },
+     "versioniq": {
+      "value": 37,
+      "detail": ".github/sig-floor.json"
+     }
+    }
+   },
+   {
+    "id": "procedure_code",
+    "label": "procedure code (gate 119)",
+    "what": "procedure-named classes allowed",
+    "cells": {
+     "buildiq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "decidiq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "dossiq": {
+      "value": 181,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "filinq": {
+      "value": 1,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "hermiq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "humaniq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "integriq": {
+      "value": 10,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "keepiq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "larpinq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "launchpad": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "learniq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "opencatalogi": {
+      "value": 27,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "openregister": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "pipelinq": {
+      "value": 3,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "planninq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "portaliq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "shillinq": {
+      "value": 10,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "stackiq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "thematiq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     },
+     "versioniq": {
+      "value": 0,
+      "detail": ".procedure-code-baseline.json"
+     }
+    }
+   },
+   {
+    "id": "php_coverage",
+    "label": "PHP coverage (coverage-guard)",
+    "what": "line coverage the PHP suite may not drop below",
+    "cells": {
+     "buildiq": {
+      "value": "57.39%",
+      "detail": ".coverage-baseline"
+     },
+     "decidiq": {
+      "value": "57.66%",
+      "detail": ".coverage-baseline"
+     },
+     "dossiq": {
+      "value": "29.69%",
+      "detail": ".coverage-baseline"
+     },
+     "filinq": {
+      "value": "61.41%",
+      "detail": ".coverage-baseline"
+     },
+     "hermiq": {
+      "value": "68.25%",
+      "detail": ".coverage-baseline"
+     },
+     "humaniq": {
+      "value": "77.60%",
+      "detail": ".coverage-baseline"
+     },
+     "integriq": {
+      "value": "60.65%",
+      "detail": ".coverage-baseline"
+     },
+     "keepiq": {
+      "value": "55.79%",
+      "detail": ".coverage-baseline"
+     },
+     "larpinq": {
+      "value": "67.68%",
+      "detail": ".coverage-baseline"
+     },
+     "launchpad": {
+      "value": "49.47%",
+      "detail": ".coverage-baseline"
+     },
+     "learniq": {
+      "value": "71.16%",
+      "detail": ".coverage-baseline"
+     },
+     "opencatalogi": {
+      "value": "70.69%",
+      "detail": ".coverage-baseline"
+     },
+     "openregister": {
+      "value": "58.88%",
+      "detail": ".coverage-baseline"
+     },
+     "pipelinq": {
+      "value": "45.36%",
+      "detail": ".coverage-baseline"
+     },
+     "planninq": {
+      "value": "69.15%",
+      "detail": ".coverage-baseline"
+     },
+     "portaliq": {
+      "value": "79.70%",
+      "detail": ".coverage-baseline"
+     },
+     "shillinq": {
+      "value": "57.71%",
+      "detail": ".coverage-baseline"
+     },
+     "stackiq": {
+      "value": "13.01%",
+      "detail": ".coverage-baseline"
+     },
+     "thematiq": {
+      "value": "77.48%",
+      "detail": ".coverage-baseline"
+     }
+    }
+   },
+   {
+    "id": "test_coverage",
+    "label": "test coverage ratchet",
+    "what": "suite coverage per runner, raised on every gain",
+    "cells": {
+     "buildiq": {
+      "value": "vitest 64.72%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "decidiq": {
+      "value": "phpunit 52.25% / vitest 1.62%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "dossiq": {
+      "value": "phpunit 22.48% / vitest 1.03%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "filinq": {
+      "value": "phpunit 46.68% / vitest 4.24%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "integriq": {
+      "value": "vitest 2.34%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "keepiq": {
+      "value": "phpunit 57.59% / vitest 18.31%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "larpinq": {
+      "value": "phpunit 57.34% / vitest 8.48%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "opencatalogi": {
+      "value": "phpunit 82.39% / vitest 1.59%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "openregister": {
+      "value": "phpunit 54.55%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "shillinq": {
+      "value": "phpunit 55.42% / vitest 0.37%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "stackiq": {
+      "value": "phpunit 0.38%",
+      "detail": "tests/.coverage-baseline.json"
+     },
+     "thematiq": {
+      "value": "phpunit 11.37% / vitest 66.25%",
+      "detail": "tests/.coverage-baseline.json"
+     }
+    }
+   },
+   {
+    "id": "debt_ratchet",
+    "label": "debt ratchet",
+    "what": "suppressions and ignores counted by check:debt-ratchet",
+    "cells": {
+     "dossiq": {
+      "value": 862,
+      "detail": "eslint.inlineDisables 14, eslint.suppressedViolations 302, phpcs.inlineIgnores 3, phpmd.suppressWarnings 178, phpstan.ignorePatterns 11, phpstan.inlineIgnores 4, phpunit.skips 6, psalm.blanketHandlers 17, psalm.inlineSuppressions 249, psalm.referencedClasses 78"
+     }
+    }
+   },
+   {
+    "id": "eslint",
+    "label": "eslint suppressions",
+    "what": "suppressed eslint violations",
+    "cells": {
+     "buildiq": {
+      "value": 137,
+      "detail": "eslint-suppressions.json"
+     },
+     "decidiq": {
+      "value": 182,
+      "detail": "eslint-suppressions.json"
+     },
+     "dossiq": {
+      "value": 242,
+      "detail": "eslint-suppressions.json"
+     },
+     "filinq": {
+      "value": 152,
+      "detail": "eslint-suppressions.json"
+     },
+     "hermiq": {
+      "value": 165,
+      "detail": "eslint-suppressions.json"
+     },
+     "integriq": {
+      "value": 162,
+      "detail": "eslint-suppressions.json"
+     },
+     "keepiq": {
+      "value": 110,
+      "detail": "eslint-suppressions.json"
+     },
+     "launchpad": {
+      "value": 0,
+      "detail": "eslint-suppressions.json"
+     },
+     "learniq": {
+      "value": 62,
+      "detail": "eslint-suppressions.json"
+     },
+     "opencatalogi": {
+      "value": 582,
+      "detail": "eslint-suppressions.json"
+     },
+     "openregister": {
+      "value": 1128,
+      "detail": "eslint-suppressions.json"
+     },
+     "portaliq": {
+      "value": 5,
+      "detail": "eslint-suppressions.json"
+     },
+     "shillinq": {
+      "value": 122,
+      "detail": "eslint-suppressions.json"
+     },
+     "stackiq": {
+      "value": 416,
+      "detail": "eslint-suppressions.json"
+     }
+    }
+   },
+   {
+    "id": "phpstan",
+    "label": "phpstan baseline",
+    "what": "ignored phpstan errors, all baseline files",
+    "cells": {
+     "buildiq": {
+      "value": 2,
+      "detail": "phpstan-baseline.neon"
+     },
+     "decidiq": {
+      "value": 1,
+      "detail": "phpstan-baseline.neon"
+     },
+     "filinq": {
+      "value": 0,
+      "detail": "phpstan-baseline.neon"
+     },
+     "hermiq": {
+      "value": 2,
+      "detail": "phpstan-baseline.neon"
+     },
+     "humaniq": {
+      "value": 6,
+      "detail": "phpstan-baseline.neon"
+     },
+     "integriq": {
+      "value": 62,
+      "detail": "phpstan-baseline.neon"
+     },
+     "larpinq": {
+      "value": 0,
+      "detail": "phpstan-baseline.neon"
+     },
+     "opencatalogi": {
+      "value": 0,
+      "detail": "phpstan-baseline.neon"
+     },
+     "openregister": {
+      "value": 1391,
+      "detail": "phpstan-baseline-jsonresponse-invariance.neon, phpstan-baseline-nc34-ocp.neon, phpstan-baseline-nc35-ocp.neon, phpstan-baseline.neon"
+     },
+     "pipelinq": {
+      "value": 79,
+      "detail": "phpstan-baseline.neon"
+     },
+     "planninq": {
+      "value": 0,
+      "detail": "phpstan-baseline.neon"
+     },
+     "portaliq": {
+      "value": 0,
+      "detail": "phpstan-baseline.neon"
+     },
+     "shillinq": {
+      "value": 0,
+      "detail": "phpstan-baseline.neon"
+     },
+     "stackiq": {
+      "value": 146,
+      "detail": "phpstan-baseline.neon"
+     }
+    }
+   },
+   {
+    "id": "psalm",
+    "label": "psalm baseline",
+    "what": "baselined psalm issues",
+    "cells": {
+     "filinq": {
+      "value": 0,
+      "detail": "psalm-baseline.xml"
+     },
+     "hermiq": {
+      "value": 0,
+      "detail": "psalm-baseline.xml"
+     },
+     "humaniq": {
+      "value": 4,
+      "detail": "psalm-baseline.xml"
+     },
+     "opencatalogi": {
+      "value": 0,
+      "detail": "psalm-baseline.xml"
+     },
+     "openregister": {
+      "value": 99,
+      "detail": "psalm-baseline.xml"
+     },
+     "portaliq": {
+      "value": 0,
+      "detail": "psalm-baseline.xml"
+     },
+     "versioniq": {
+      "value": 57,
+      "detail": "psalm-baseline.xml"
+     }
+    }
+   },
+   {
+    "id": "phpmd",
+    "label": "phpmd baseline",
+    "what": "baselined phpmd violations",
+    "cells": {
+     "buildiq": {
+      "value": 171,
+      "detail": "phpmd.baseline.xml"
+     },
+     "humaniq": {
+      "value": 199,
+      "detail": "phpmd.baseline.xml"
+     },
+     "integriq": {
+      "value": 388,
+      "detail": "phpmd.baseline.xml"
+     },
+     "launchpad": {
+      "value": 106,
+      "detail": "phpmd.baseline.xml"
+     },
+     "opencatalogi": {
+      "value": 43,
+      "detail": "phpmd.baseline.xml"
+     },
+     "openregister": {
+      "value": 480,
+      "detail": "phpmd.baseline.xml"
+     },
+     "pipelinq": {
+      "value": 26,
+      "detail": "phpmd.baseline.xml"
+     },
+     "stackiq": {
+      "value": 8,
+      "detail": "phpmd.baseline.xml"
+     }
+    }
+   },
+   {
+    "id": "schema_l10n",
+    "label": "schema l10n baseline",
+    "what": "untranslated schema strings allowed",
+    "cells": {
+     "buildiq": {
+      "value": 404,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "decidiq": {
+      "value": 1590,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "dossiq": {
+      "value": 0,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "filinq": {
+      "value": 213,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "hermiq": {
+      "value": 0,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "humaniq": {
+      "value": 0,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "integriq": {
+      "value": 0,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "keepiq": {
+      "value": 0,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "larpinq": {
+      "value": 84,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "launchpad": {
+      "value": 15,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "learniq": {
+      "value": 2151,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "opencatalogi": {
+      "value": 219,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "openregister": {
+      "value": 569,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "pipelinq": {
+      "value": 0,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "planninq": {
+      "value": 123,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "portaliq": {
+      "value": 0,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "shillinq": {
+      "value": 12173,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     },
+     "stackiq": {
+      "value": 479,
+      "detail": "l10n/.schema-l10n-baseline.json"
+     }
+    }
+   },
+   {
+    "id": "other:.reuse-baseline.json",
+    "label": ".reuse-baseline.json",
+    "what": "other floor-like file",
+    "cells": {
+     "portaliq": {
+      "value": "present",
+      "detail": ".reuse-baseline.json"
+     }
+    }
+   },
+   {
+    "id": "other:l10n/.l10n-parity-baseline.json",
+    "label": "l10n/.l10n-parity-baseline.json",
+    "what": "other floor-like file",
+    "cells": {
+     "learniq": {
+      "value": "present",
+      "detail": "l10n/.l10n-parity-baseline.json"
+     }
+    }
+   },
+   {
+    "id": "other:tests/nav-reachability-baseline.json",
+    "label": "tests/nav-reachability-baseline.json",
+    "what": "other floor-like file",
+    "cells": {
+     "shillinq": {
+      "value": "present",
+      "detail": "tests/nav-reachability-baseline.json"
+     }
+    }
+   }
+  ],
+  "refs": {
+   "buildiq": "d9acc6d7bb19c6c9455d4cc52c2a15c14477c408",
+   "decidiq": "d1420637decbc49952dca6f21780cdc428718131",
+   "dossiq": "65325d92011cc45a1176014a7b645d02b4246507",
+   "filinq": "862f1193870048a6457b2209afe76fd679868f28",
+   "hermiq": "266ad4eb486d394099527be70884304c16847f30",
+   "humaniq": "70d68ec32e59c77d82cef673c4609152963cf768",
+   "integriq": "419b65ec1f82a5cc030217241ce726f89a92f74f",
+   "keepiq": "9478ab177588d1d460c253c9eb991cceac2f4a0d",
+   "larpinq": "8611d1ee46676886d62de32fff8d19c6cb0d1f53",
+   "launchpad": "cfabefa3f6b3af80b83db6faf2e328c236beaa6a",
+   "learniq": "9e7724de3a5c37531d77a91e93291ec3997f9aa6",
+   "opencatalogi": "295ea62c990005b18e2c5d04967a2c603d7ec80e",
+   "openregister": "9f54620d7d6b7dd18e429ee3f45ecb73e64b5e20",
+   "pipelinq": "305ce4dee020e7a68fab08e87aba5671983bc997",
+   "planninq": "934d2e5cb4b9606799ac78d2af0a30599e7382be",
+   "portaliq": "2dadb96df494bcb386c355bc5eebb10be4ffa983",
+   "shillinq": "39cdd9809da4064e04f9187516d8974fe218d594",
+   "stackiq": "4276f9d957a300f9999592b24e4bf624ae5f6828",
+   "thematiq": "60db973fdf28726f23b4ea2d9d6267a416ab2e01",
+   "versioniq": "dcbc581da1d6e6b1f6bb8df91fdba04e4bfbf5e1"
+  },
+  "read": "2026-11-03"
+ }
 }

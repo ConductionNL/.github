@@ -134,6 +134,16 @@
   color: var(--sig-empty-fg);
 }
 
+/* A floored check gets a ring in its own text colour plus a mark, so it reads without colour. */
+.floored {
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.lock {
+  margin-left: 0.1875rem;
+  vertical-align: baseline;
+}
+
 .total td {
   font-weight: 700;
 }

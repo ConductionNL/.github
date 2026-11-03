@@ -12,8 +12,21 @@ function limitText(row) {
   return `4-star ${op} ${pct(row.four)}, 5-star ${op} ${pct(row.five)}`;
 }
 
+function Lock({label}) {
+  return (
+    <>
+      <svg className={styles.lock} viewBox="0 0 10 12" width="9" height="11" aria-hidden="true" focusable="false">
+        <path d="M2.5 5V3.5a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        <rect x="1" y="5" width="8" height="6.5" rx="1" fill="currentColor" />
+      </svg>
+      {label && <span className={styles.srOnly}>{label}</span>}
+    </>
+  );
+}
+
 function Cell({app, language, row}) {
   const cell = row.cells[app];
+  const floored = (matrix.apps[app].floor?.checks || []).includes(row.id);
   if (!cell) {
     return (
       <td className={styles.empty} title={`${app} has no ${language} code`}>
@@ -22,10 +35,16 @@ function Cell({app, language, row}) {
       </td>
     );
   }
-  const title = `${app}, ${language} ${row.label}: ${pct(cell.share)} (${limitText(row)})`;
+  const floorText = floored ? ', floored by gate 123' : '';
+  const title = `${app}, ${language} ${row.label}: ${pct(cell.share)} (${limitText(row)})${floorText}`;
   return (
-    <td className={`${styles.cell} ${STAR_CLASS[cell.stars]}`} title={title}>
-      <span className={styles.star}>{STAR_TEXT[cell.stars]}</span>
+    <td
+      className={`${styles.cell} ${STAR_CLASS[cell.stars]} ${floored ? styles.floored : ''}`}
+      title={title}>
+      <span className={styles.star}>
+        {STAR_TEXT[cell.stars]}
+        {floored && <Lock label="floored" />}
+      </span>
       <span className={styles.value}>{pct(cell.share)}</span>
     </td>
   );
@@ -37,6 +56,7 @@ function Legend() {
       <li><span className={`${styles.swatch} ${styles.s5}`}>5</span> meets our 5-star yardstick, half of each 4-star limit</li>
       <li><span className={`${styles.swatch} ${styles.s4}`}>4</span> meets the 4-star limit of the guidance</li>
       <li><span className={`${styles.swatch} ${styles.below}`}>&lt;4</span> misses the 4-star limit; the guidance gives no limits for 3, 2 or 1 stars</li>
+      <li><span className={`${styles.swatch} ${styles.s4} ${styles.floored}`}>4<Lock /></span> floored: gate 123 refuses a change that loses this check</li>
       <li><span className={`${styles.swatch} ${styles.empty}`}>·</span> the app has no code in this language</li>
     </ul>
   );
@@ -78,6 +98,21 @@ export default function SigMatrix() {
                 <td key={app}>{matrix.apps[app].five}/{matrix.apps[app].checks}</td>
               ))}
             </tr>
+            <tr className={styles.total}>
+              <th scope="row" className={styles.sticky}>
+                floored checks
+                <span className={styles.value}>floor recorded at commit</span>
+              </th>
+              {apps.map((app) => {
+                const floor = matrix.apps[app].floor;
+                return (
+                  <td key={app}>
+                    {floor ? floor.checks.length : '·'}
+                    {floor?.measured_at && <span className={styles.value}>{floor.measured_at.slice(0, 8)}</span>}
+                  </td>
+                );
+              })}
+            </tr>
             {matrix.groups.map((group) => (
               <React.Fragment key={group.language}>
                 <tr className={styles.group}>
@@ -96,6 +131,59 @@ export default function SigMatrix() {
                   </tr>
                 ))}
               </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export function SigFloors() {
+  const floors = matrix.floors;
+  if (!floors) return null;
+  const apps = Object.keys(matrix.apps);
+  return (
+    <div className={styles.matrix}>
+      <div
+        className={styles.scroller}
+        role="region"
+        aria-label={`Floors and ratchets per app, read ${floors.read}`}
+        tabIndex={0}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th scope="col" className={styles.sticky}>floor</th>
+              {apps.map((app) => (
+                <th scope="col" key={app} className={styles.app}>
+                  <a href={`https://github.com/ConductionNL/${app}/tree/${floors.refs[app]}`}>{app}</a>
+                  <span className={styles.value}>{floors.refs[app].slice(0, 8)}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {floors.rows.map((row) => (
+              <tr key={row.id}>
+                <th scope="row" className={styles.sticky}>
+                  {row.label}
+                  <span className={styles.value}>{row.what}</span>
+                </th>
+                {apps.map((app) => {
+                  const cell = row.cells[app];
+                  if (!cell) {
+                    return (
+                      <td key={app} className={styles.empty} title={`${app} has no ${row.label}`}>
+                        <span aria-hidden="true">·</span>
+                        <span className={styles.srOnly}>none</span>
+                      </td>
+                    );
+                  }
+                  return (
+                    <td key={app} title={`${app}: ${cell.detail}`}>{String(cell.value)}</td>
+                  );
+                })}
+              </tr>
             ))}
           </tbody>
         </table>

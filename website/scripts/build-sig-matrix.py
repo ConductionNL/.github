@@ -5,6 +5,7 @@
 
 Usage:
     python3 website/scripts/build-sig-matrix.py <report-dir> [--date YYYY-MM-DD]
+        [--clones DIR | --no-floors]
 
 <report-dir> holds one `<app>.json` per app, written by
 `check_sig_maintainability.py --profile five-star` (gate 122). Files with a
@@ -14,6 +15,10 @@ The date defaults to the newest report's modification date.
 Each check is rated against the gate's own profiles: 5 when it meets the
 five-star yardstick, 4 when it meets the 4-star limit, and "below" otherwise.
 The guidance gives no limits under 4 stars, so lower stars are not estimated.
+
+The floors, baselines and ratchets of each app (sig_floors.py) are read from
+its `development` branch through `gh api`, or from local clones under
+`--clones DIR/<app>`. `--no-floors` keeps the floors already in the output.
 """
 import argparse
 import datetime
@@ -24,6 +29,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "hydra-gates", "scripts", "lib"))
 import check_sig_maintainability as sig  # noqa: E402
+import sig_floors  # noqa: E402
 
 OUT = os.path.join(ROOT, "website", "src", "data", "sig-matrix.json")
 FOUR, FIVE = sig.PROFILES["four-star"], sig.PROFILES["five-star"]
@@ -120,12 +126,26 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("report_dir")
     parser.add_argument("--date", help="measurement date, YYYY-MM-DD")
+    parser.add_argument("--clones", help="read floors from local clones in DIR/<app> instead of GitHub")
+    parser.add_argument("--no-floors", action="store_true", help="keep the floors already in the output")
     args = parser.parse_args()
     date = args.date
     if not date:
         newest = max(os.path.getmtime(os.path.join(args.report_dir, f)) for f in os.listdir(args.report_dir))
         date = datetime.date.fromtimestamp(newest).isoformat()
     data = build(args.report_dir, date)
+    if args.no_floors:
+        with open(OUT, encoding="utf-8") as fh:
+            old = json.load(fh)
+        data["floors"] = old.get("floors")
+        for app, info in data["apps"].items():
+            info["floor"] = old["apps"].get(app, {}).get("floor")
+    else:
+        floors, per_app = sig_floors.collect(list(data["apps"]), args.clones)
+        floors["read"] = datetime.date.today().isoformat()
+        data["floors"] = floors
+        for app, floor in per_app.items():
+            data["apps"][app]["floor"] = floor
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=1, sort_keys=False)
         fh.write("\n")
