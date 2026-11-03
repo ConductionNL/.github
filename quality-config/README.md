@@ -95,6 +95,30 @@ Both were established with a positive control against phpcs 3.13.6 and 4.0.4 in 
 | `frontend/eslint.config.js` | the flat config (see caveat below) |
 | `frontend/stylelint.config.js` | the whole config — 8 of 18 apps already match it byte-for-byte |
 | `stubs/` | what an app's file becomes after adoption |
+| `assert-lockfile-matches-install.js` | `scripts/assert-lockfile-matches-install.js`, the `prebuild` check of ADR-090 (see below) |
+
+## Shared scripts an app copies
+
+Some files run inside the app's own build or test step, before `composer install`
+has run or without it at all, so they cannot be read from `vendor/`. Those live
+here as the canonical copy and an app carries a byte-identical copy under
+`scripts/`, the same way `coverage-guard.php` reaches `scripts/coverage-guard.php`.
+
+**`assert-lockfile-matches-install.js`** fails a local build when the installed
+`node_modules` tree disagrees with `package-lock.json` on a runtime dependency
+(hydra ADR-090, dependency integrity gates). An app picks it up like this:
+
+1. Copy the file: `cp vendor/conduction/hydra-gates/quality-config/assert-lockfile-matches-install.js scripts/`
+   (or take it from this directory on `main`). Do not edit the copy; a fix goes
+   here first.
+2. Run it before every build: `"prebuild": "node scripts/assert-lockfile-matches-install.js"`
+   in `package.json`.
+3. Lint the copy with the app's own eslint config. The canonical copy is clean
+   under `@nextcloud/eslint-config` 9 with the fleet's `scripts/` overrides.
+
+`quality-config/tests/test-assert-lockfile.py` runs the canonical copy against
+built trees on every pull request here (the `lockfile-guard` job of
+`quality-resolve-probe.yml`).
 
 ## Not yet centralised, and why
 
