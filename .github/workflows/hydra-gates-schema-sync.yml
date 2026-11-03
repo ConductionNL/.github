@@ -197,14 +197,15 @@ jobs:
             --body-file pr-body.md)
           echo "${NEW_PR}"
 
-          # A pull request opened with GITHUB_TOKEN triggers no `pull_request`
-          # workflow, so the three required checks on main never report and
-          # the sync PR sits BLOCKED until a human pushes to it. Measured
-          # 2026-11-03: #859 to #889 (2.126.0 to 2.170.0) were each opened,
-          # never checked, and closed by the next run, while the vendored copy
-          # stayed at 2.138.0. workflow_dispatch is the one trigger
-          # GITHUB_TOKEN may fire, and the check runs it creates land on the
-          # branch's head commit, which is what the ruleset reads.
+          # The `pull_request` runs of a PR opened with GITHUB_TOKEN wait for
+          # approval and start no job, so the three required checks on main
+          # never report and the sync PR sits BLOCKED until a human pushes to
+          # it. Measured 2026-11-03: #859 to #894 (2.126.0 to 2.171.0) were
+          # each opened, never checked (runs `action_required` or zero jobs),
+          # and closed by the next run, while the vendored copy stayed at
+          # 2.138.0. A workflow_dispatch fired with GITHUB_TOKEN runs without
+          # approval, and its check runs land on the branch's head commit,
+          # which is what the ruleset reads.
           for WF in hydra-gates-package.yml quality-resolve-probe.yml; do
             gh workflow run "${WF}" --ref "${BRANCH}"
           done
