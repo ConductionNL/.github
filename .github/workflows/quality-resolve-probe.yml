@@ -554,6 +554,30 @@ jobs:
           fi
           echo "OK — the suite fails when handed the wrong program. Its clean pass above is a verdict."
 
+  lockfile-guard:
+    name: "The lockfile guard catches runtime drift"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # quality-config/assert-lockfile-matches-install.js is copied into the
+      # app repos as scripts/assert-lockfile-matches-install.js and runs as
+      # their `prebuild`. The suite runs the shipped program against built
+      # node_modules trees.
+      - name: "Exercise the shipped lockfile guard"
+        run: python3 quality-config/tests/test-assert-lockfile.py
+
+      - name: "Positive control, the suite must fail against a program that is not the guard"
+        run: |
+          set -eu
+          echo 'process.exit(0)' > "$RUNNER_TEMP/not-the-guard.js"
+          if python3 quality-config/tests/test-assert-lockfile.py "$RUNNER_TEMP/not-the-guard.js" > /dev/null 2>&1; then
+            echo "::error::the lockfile-guard suite reported PASS against a program that exits 0 and checks nothing."
+            exit 1
+          fi
+          echo "OK, the suite fails when handed the wrong program."
+
   probe:
     name: "quality.yml resolves (job count > 0)"
     runs-on: ubuntu-latest
@@ -631,7 +655,7 @@ jobs:
   guard:
     name: "Shared-workflow guard"
     runs-on: ubuntu-latest
-    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, probe, changed-path-filter, e2e-trigger-filter, consolidated-tool-legs, e2e-shard-partition, quality-test-counts, sibling-jobs-read-only-token]
+    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, lockfile-guard, probe, changed-path-filter, e2e-trigger-filter, consolidated-tool-legs, e2e-shard-partition, quality-test-counts, sibling-jobs-read-only-token]
     if: ${{ !cancelled() }}
     steps:
       - name: Assert both guards reached a verdict
@@ -641,6 +665,7 @@ jobs:
           LEGS: ${{ needs.gate-completeness.result }}
           MATRIX: ${{ needs.matrix-derivation.result }}
           COVERAGE: ${{ needs.coverage-guard.result }}
+          LOCKFILE: ${{ needs['lockfile-guard'].result }}
           PROBE: ${{ needs.probe.result }}
           FILTER: ${{ needs['changed-path-filter'].result }}
           LEGS_CONSOLIDATED: ${{ needs['consolidated-tool-legs'].result }}
@@ -650,10 +675,10 @@ jobs:
           SIBLING_TOKEN: ${{ needs['sibling-jobs-read-only-token'].result }}
         run: |
           set -eu
-          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} probe=${PROBE} changed-path-filter=${FILTER} e2e-trigger-filter=${E2E_TRIGGER} consolidated-tool-legs=${LEGS_CONSOLIDATED} e2e-shard-partition=${SHARD_PARTITION} quality-test-counts=${TEST_COUNTS} sibling-jobs-read-only-token=${SIBLING_TOKEN}"
+          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} lockfile-guard=${LOCKFILE} probe=${PROBE} changed-path-filter=${FILTER} e2e-trigger-filter=${E2E_TRIGGER} consolidated-tool-legs=${LEGS_CONSOLIDATED} e2e-shard-partition=${SHARD_PARTITION} quality-test-counts=${TEST_COUNTS} sibling-jobs-read-only-token=${SIBLING_TOKEN}"
           # `skipped` is failed here on purpose. A guard that did not run is
           # not a guard that passed.
-          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "probe:${PROBE}" "changed-path-filter:${FILTER}" "e2e-trigger-filter:${E2E_TRIGGER}" "consolidated-tool-legs:${LEGS_CONSOLIDATED}" "e2e-shard-partition:${SHARD_PARTITION}" "quality-test-counts:${TEST_COUNTS}" "sibling-jobs-read-only-token:${SIBLING_TOKEN}"; do
+          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "lockfile-guard:${LOCKFILE}" "probe:${PROBE}" "changed-path-filter:${FILTER}" "e2e-trigger-filter:${E2E_TRIGGER}" "consolidated-tool-legs:${LEGS_CONSOLIDATED}" "e2e-shard-partition:${SHARD_PARTITION}" "quality-test-counts:${TEST_COUNTS}" "sibling-jobs-read-only-token:${SIBLING_TOKEN}"; do
             name="${pair%%:*}"; result="${pair##*:}"
             [ "${result}" = "success" ] || {
               echo "::error::${name} did not succeed (result=${result}). A guard that \
