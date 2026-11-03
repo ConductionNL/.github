@@ -9,6 +9,9 @@ update themselves — click one to open that branch's runs.
 Every app is checked by the same `Code Quality` workflow. **Category** is the
 role an app plays in the fleet; **Type** is its domain.
 
+For the maintainability stars we expect from the Software Improvement Group
+(SIG), per app and per check, see [SIG scores](./sig-scores.mdx).
+
 | App | Category | Type | Latest release | main | beta | development |
 | --- | --- | --- | --- | --- | --- | --- |
 | [decidiq](https://github.com/ConductionNL/decidiq) | Application | Decision-making | 2026-08-17 | [![main](https://img.shields.io/github/actions/workflow/status/ConductionNL/decidiq/code-quality.yml?branch=main&event=push&label=main)](https://github.com/ConductionNL/decidiq/actions/workflows/code-quality.yml?query=branch%3Amain+event%3Apush) | [![beta](https://img.shields.io/github/actions/workflow/status/ConductionNL/decidiq/code-quality.yml?branch=beta&event=push&label=beta)](https://github.com/ConductionNL/decidiq/actions/workflows/code-quality.yml?query=branch%3Abeta+event%3Apush) | [![development](https://img.shields.io/github/actions/workflow/status/ConductionNL/decidiq/code-quality.yml?branch=development&event=push&label=development)](https://github.com/ConductionNL/decidiq/actions/workflows/code-quality.yml?query=branch%3Adevelopment+event%3Apush) |
