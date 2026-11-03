@@ -13,3 +13,4 @@ How to run, debug, and understand the Hydra pipeline containers.
 | [retry-and-rebuild.md](retry-and-rebuild.md) | When and how to apply `retry:queued` / `rebuild:queued`, label cleanup checklist    |
 | [troubleshooting.md](troubleshooting.md)     | Common errors and fixes                                                             |
 | [app-health.md](app-health.md)               | Live `Code Quality` status per app, per branch — and how to read a red badge        |
+| [sig-scores.mdx](sig-scores.mdx)             | Our estimate of the SIG maintainability stars, per app and per check                |

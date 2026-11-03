@@ -1,0 +1,103 @@
+---
+title: SIG scores
+sidebar_label: SIG scores
+description: Our own estimate, per app and per check, of the maintainability stars Sigrid will give the fleet.
+---
+
+import SigMatrix, {SigFloors} from '@site/src/components/SigMatrix';
+import matrix from '@site/src/data/sig-matrix.json';
+
+# SIG scores
+
+This page is our own measurement, not Sigrid. We run gate 122
+(`check_sig_maintainability.py --profile five-star`) on each app's
+`development` branch. The result estimates what the Software Improvement Group
+(SIG) will say in Sigrid. Sigrid uses its own parsers and scoping, so its
+numbers can differ.
+
+**Measured on {matrix.measured}.** The commit under each app name is the head
+that was measured.
+
+:::note Why the scores jump from 1 November 2026
+
+Until 31 October 2026 the fleet followed the Nextcloud coding standards. From
+1 November 2026 we apply the SIG maintainability rules of the SIG/TÜV NORD
+guidance. Gates 122 and 123 check them on every change. That is why the scores
+rise from 1 November.
+
+:::
+
+## How to read the matrix
+
+Each column is an app. Each row is one SIG check for one language. A cell shows
+the star level the check earns, with the measured share under it. Hover a cell
+for the value and both limits.
+
+- **Unit size, complexity and interfacing:** the share of unit code above the
+  bound, for example the code in units longer than 15 lines.
+- **Duplication:** the share of redundant lines, in fragments of 6 lines or more.
+- **Module coupling:** the share of module code in files with more than 10, 20
+  or 50 incoming dependencies.
+- **Component independence:** the share of code that no other component calls.
+  Higher is better here. For every other check, lower is better.
+
+The 4-star limits come from the SIG/TUV NORD CERT Guidance for Producers v17.0.
+SIG publishes no 5-star limits, so our 5-star yardstick is half of each 4-star
+limit. The guidance also gives no limits for 3, 2 or 1 stars. A check that
+misses 4 stars is therefore shown as `<4`, not as an estimated lower star.
+
+The totals at the top count the checks per app. An app is only measured on the
+languages it contains, so the totals differ between apps.
+
+A cell with a ring and a lock is floored. Gate 123 holds that check: the app
+met it when its floor was recorded, and a change that loses it fails. The
+"floored checks" row counts them and shows the commit the floor was recorded
+at. Floors come from each app's `.github/sig-floor.json` on `development`, read
+on {matrix.floors.read}. They can be newer than the measurement, so a floored
+cell can still show `<4` until the next measurement.
+
+<SigMatrix />
+
+## Floors and ratchets per app
+
+Besides the SIG floor, each app keeps its own floors and baselines on
+`development`. A baseline lists debt that may stay, so a lower count is
+better. A coverage floor is a minimum, so a higher value is better. A `·`
+means the app has no such file. Hover a cell for the file it came from. The
+commit under each app name is the `development` head that was read on
+{matrix.floors.read}.
+
+<SigFloors />
+
+## Refresh the data
+
+The matrix reads `website/src/data/sig-matrix.json`. A script writes that file
+from gate 122 reports.
+
+1. Clone each app's `development` branch and run gate 122 on it in report mode.
+   Write one `<app>.json` per app into one directory:
+
+   ```bash
+   python3 hydra-gates/scripts/lib/check_sig_maintainability.py report <app-dir> \
+     --profile five-star --json <report-dir>/<app>.json
+   ```
+
+   The file name sets the column name, so name it after the app.
+2. Run the generator from the repository root:
+
+   ```bash
+   python3 website/scripts/build-sig-matrix.py <report-dir> --date YYYY-MM-DD
+   ```
+
+   Leave out `--date` to use the date of the newest report. The generator then
+   reads each app's floors and baselines from `development` through `gh api`,
+   so it needs a logged-in GitHub CLI. Add `--clones DIR` to read them from
+   local clones in `DIR/<app>` instead, or `--no-floors` to keep the floors
+   already in the file.
+3. Commit the new `sig-matrix.json`.
+
+The generator takes the limits from gate 122 itself, so the matrix follows any
+change to the profiles. It stops when its five-star count for an app differs
+from the count in the gate's own report.
+
+Back to [app health](./app-health.md).
