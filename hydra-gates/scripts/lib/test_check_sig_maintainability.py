@@ -188,6 +188,14 @@ class VueAndAccessorUnits(unittest.TestCase):
                                     "<style>\np > a { color: red; }\n</style>\n")
         self.assertEqual(text.splitlines(), ["", "", "", "", "const a = 1", "", "", "", ""])
 
+    def test_script_end_tags_with_whitespace_attributes_or_capitals(self):
+        for end in ("</script >", "</SCRIPT\n>", "</script\t\n bar>"):
+            with self.subTest(end=end):
+                src = f"<script>\nconst a = 1\n{end}\n<template>\n\t<p>a => b</p>\n</template>\n<script setup>\nconst b = 2\n</script>\n"
+                text, _ext = sig.vue_script(src)
+                self.assertEqual(text.count("\n"), src.count("\n"))
+                self.assertEqual([line for line in text.splitlines() if line], ["const a = 1", "const b = 2"])
+
 
 class ScopeRules(unittest.TestCase):
     def setUp(self):

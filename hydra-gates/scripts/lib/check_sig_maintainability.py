@@ -346,7 +346,7 @@ def unit_params(lang, func):
     return len(params)
 
 
-VUE_BLOCK = re.compile(r"<!--.*?-->|<script\b[^>]*>(.*?)</script\s*>", re.S | re.I)
+VUE_BLOCK = re.compile(r"<!--.*?--!?>|<script\b[^>]*>(.*?)</script\b[^>]*>", re.S | re.I)
 ACCESSOR_SHORTHAND = re.compile(r"(?<![\w$.])(get|set)(?=\s*\()")
 ACCESSOR_ALIAS = "__sig_accessor_"
 
