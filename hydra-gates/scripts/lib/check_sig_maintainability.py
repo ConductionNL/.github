@@ -795,23 +795,26 @@ def structure(app, files, deps, prof=PROFILES[DEFAULT_PROFILE]):
     }
 
 
-def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE):
+def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE, reader=None):
+    """The risk profile of one app. `jscpd` None skips the jscpd cross-check
+    (duplication_jscpd is then None); `reader` replaces the plain UnitReader,
+    for a caller that caches units."""
     prof = PROFILES[profile_name]
     scope = Scope(app)
     files = production_files(app, scope)
-    reader = UnitReader(lizard)
+    reader = reader or UnitReader(lizard)
     units = []
     for rel, lang in sorted(files.items()):
         units.extend(reader.units(rel, lang, read_text(os.path.join(app, rel))))
     by_lang = collections.defaultdict(list)
     for u in units:
         by_lang[u["lang"]].append(u)
-    clones = run_jscpd(app, jscpd, sorted(files)) if files else []
+    clones = run_jscpd(app, jscpd, sorted(files)) if files and jscpd else []
     dup = duplication_profile(app, clones, files, prof["duplication"])
     report = {
         "app": os.path.basename(os.path.abspath(app)),
         "head": (git(app, "rev-parse", "HEAD")[1] or "").strip() or None,
-        "tools": {"lizard": LIZARD_VERSION, "jscpd": JSCPD_VERSION},
+        "tools": {"lizard": LIZARD_VERSION, "jscpd": JSCPD_VERSION if jscpd else None},
         "profile": profile_name,
         "stars": prof["stars"],
         "limits": prof["source"],
@@ -829,7 +832,7 @@ def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE):
             "unit_complexity": profile(rows, "ccn", prof["limits"]["unit_complexity"]),
             "unit_interfacing": profile(rows, "params", prof["limits"]["unit_interfacing"]),
             "duplication": dup[lang][0] if lang in dup else None,
-            "duplication_jscpd": dup[lang][1] if lang in dup else None,
+            "duplication_jscpd": dup[lang][1] if lang in dup and jscpd else None,
             "largest_units": worst(rows, "nloc"),
             "most_complex_units": worst(rows, "ccn"),
             "widest_units": worst(rows, "params"),

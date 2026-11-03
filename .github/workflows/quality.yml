@@ -914,7 +914,7 @@ jobs:
             # The Quality Report is the last job. Once it has completed there
             # is nothing left to save by cancelling.
             REPORT="$(gh api --paginate "${RUN_URL}/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name | endswith("Quality Report")) | .status' 2>/dev/null | head -1)"
+              --jq '.jobs[] | select(.name | endswith("Quality Report")) | .status' 2>/dev/null | head -1 || true)"
             if [ "$REPORT" = "completed" ]; then
               echo "Quality Report has completed — this run was not superseded."
               exit 0
@@ -8388,6 +8388,20 @@ jobs:
       # `--full`. It therefore needs none of the capability probing that
       # `--axe-enabled` and `--require-full-coverage` require, whose parsers
       # would otherwise swallow an unknown flag as the app directory.
+      # Gates 122 and 123 measure with pinned lizard and jscpd, installed into
+      # this tool cache, and gate 123 keeps every file's units keyed by content
+      # (sig-units.json). A restored cache means a PR re-reads only the files
+      # it changed. The key moves on every run, so the newest cache of the repo
+      # is restored. Only a push saves one (step "Save the SIG measuring
+      # cache"), so pull requests read development's cache and add none.
+      - name: Restore the SIG measuring cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/hydra-sig-cache
+          key: hydra-sig-${{ github.repository }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            hydra-sig-${{ github.repository }}-
+
       - name: Resolve the diff base and the scope
         id: base
         env:
@@ -8539,6 +8553,8 @@ jobs:
           # ratcheting; the step after the gates publishes it.
           HYDRA_GATE_SIG_MAINTAINABILITY_BLOCKING: ${{ inputs.hydra-gates-sig-blocking && '1' || '0' }}
           HYDRA_GATE_SIG_REPORT_DIR: ${{ runner.temp }}/sig-profile
+          HYDRA_GATE_TOOLS_DIR: ${{ runner.temp }}/hydra-sig-cache/tools
+          HYDRA_GATE_SIG_CACHE: ${{ runner.temp }}/hydra-sig-cache/sig-units.json
           # Gate 109: the apps this caller's CI installs (both lists, as two
           # JSON arrays). Passed even when both are `[]`, so "installs nothing"
           # and "was not told" stay different answers.
@@ -8663,13 +8679,32 @@ jobs:
           else
             echo "No SIG profile was written by this run. Read the [gate-122] line in the gate output for why (not applicable, or a tool that could not run)." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
+      - name: Publish the SIG score floor
+        # Every run of an app with a .github/sig-floor.json: the 4-star checks
+        # at the base and the head, which of them are floored, and the 5-star
+        # findings, which are reported and never block (gate 123).
+        if: ${{ always() }}
+        run: |
+          FLOOR="${RUNNER_TEMP}/sig-profile/sig-floor.md"
+          if [ -s "${FLOOR}" ]; then
+            cat "${FLOOR}" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Upload the SIG maintainability profile
-        if: ${{ always() && steps.base.outputs.scope == 'full' }}
+        # The full-scope profile, and gate 123's floor files on every run.
+        # sig-floor.proposed.json, when present, is what the floor-raise job
+        # below offers as a pull request.
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: sig-profile
           path: ${{ runner.temp }}/sig-profile/
           if-no-files-found: ignore
+      - name: Save the SIG measuring cache
+        if: ${{ always() && github.event_name != 'pull_request' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/hydra-sig-cache
+          key: hydra-sig-${{ github.repository }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Record result
         if: always()
         run: |
@@ -8681,6 +8716,87 @@ jobs:
         with:
           name: result-hydra-gates
           path: quality-results/
+
+  # ── gate-123's floor, raised after a push to development ────────────────
+  #
+  # When development meets 4-star checks its .github/sig-floor.json does not
+  # list, the hydra-gates job writes the raised floor as
+  # sig-floor.proposed.json. This job offers it as a pull request that changes
+  # only that file. Pushing to development itself is refused by the org
+  # ruleset (pull request and review required), so a pull request is the only
+  # route. A pull request opened with GITHUB_TOKEN starts no workflow, so it
+  # carries no checks and is merged by an admin.
+  #
+  # The floor is safe while that pull request is open: gate 123 also guards
+  # every check the merge base measures as met, so a raise that waits loses
+  # nothing.
+  #
+  # Deliberately NO `permissions:` block. A caller caps what a called job may
+  # declare, and a job that declares more than the cap makes the whole call
+  # fail to start. This job inherits the caller's grant instead: with
+  # contents and pull-requests write it opens the pull request, without them
+  # it says so in a warning and the proposed file stays in the sig-profile
+  # artifact.
+  sig-floor-raise:
+    needs: [hydra-gates]
+    if: ${{ !cancelled() && needs.hydra-gates.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/development' }}
+    runs-on: ubuntu-latest
+    name: "SIG floor raise"
+    timeout-minutes: 5
+    steps:
+      - name: Download the proposed floor
+        uses: actions/download-artifact@v4
+        with:
+          name: sig-profile
+          path: ${{ runner.temp }}/sig-profile
+        continue-on-error: true
+      - name: Is there a raise?
+        id: raise
+        run: |
+          if [ -s "${RUNNER_TEMP}/sig-profile/sig-floor.proposed.json" ]; then
+            echo "raise=1" >> "$GITHUB_OUTPUT"
+            jq -r '"Proposed floor: \(.checks | length) checks."' "${RUNNER_TEMP}/sig-profile/sig-floor.proposed.json"
+          else
+            echo "raise=0" >> "$GITHUB_OUTPUT"
+            echo "development meets no 4-star check beyond its committed floor."
+          fi
+      - name: Checkout app
+        if: ${{ steps.raise.outputs.raise == '1' }}
+        uses: actions/checkout@v4
+      - name: Open the floor-raise pull request
+        if: ${{ steps.raise.outputs.raise == '1' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -u
+          BRANCH="bot/sig-floor-${SHA:0:12}"
+          cp "${RUNNER_TEMP}/sig-profile/sig-floor.proposed.json" .github/sig-floor.json
+          if git diff --quiet -- .github/sig-floor.json; then
+            echo "The committed floor already equals the proposal."
+            exit 0
+          fi
+          ADDED=$(jq -r --slurpfile old <(git show HEAD:.github/sig-floor.json) \
+            '[.checks[] | select(. as $c | $old[0].checks | index($c) | not)] | join(", ")' .github/sig-floor.json)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "${BRANCH}"
+          git add .github/sig-floor.json
+          git commit -q -m "chore(sig): raise the SIG score floor" -m "development now meets: ${ADDED}."
+          if ! git push -q origin "${BRANCH}"; then
+            echo "::warning::Could not push ${BRANCH}: the caller does not grant contents: write to this job. The raised floor is in the sig-profile artifact as sig-floor.proposed.json."
+            exit 0
+          fi
+          BODY="development at ${SHA} meets SIG 4-star checks that .github/sig-floor.json does not list yet: ${ADDED}. This pull request adds them to the floor (gate 123), so a later change cannot lose them. It changes only that file."
+          if ! URL=$(gh pr create --base development --head "${BRANCH}" --title "chore(sig): raise the SIG score floor" --body "${BODY}"); then
+            echo "::warning::Pushed ${BRANCH}, but could not open a pull request: the caller does not grant pull-requests: write to this job. Open it by hand from that branch."
+            exit 0
+          fi
+          echo "Opened ${URL}"
+          for n in $(gh pr list --state open --limit 100 --json number,headRefName \
+                     --jq ".[] | select(.headRefName | startswith(\"bot/sig-floor-\")) | select(.headRefName != \"${BRANCH}\") | .number"); do
+            gh pr close "${n}" --delete-branch --comment "Superseded by ${URL}." || true
+          done
 
   # ── gate-33, the one gate that needs a browser ──────────────────────────
   #
