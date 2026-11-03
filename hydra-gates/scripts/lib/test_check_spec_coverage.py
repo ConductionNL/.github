@@ -1234,5 +1234,74 @@ class MultiLineAttributeTest(unittest.TestCase):
         ]
         self.assertEqual(csc._docblock_block(lines, 5), [])
 
+    # dossiq#5151: the createTask tool, as written.
+    _MCP_ATTR = (
+        "    #[McpTool(\n"
+        "        name: 'createTask',\n"
+        "        description: 'Create a task on a case (the handler, the default),'\n"
+        "            . ' or \"me\" (the current user).',\n"
+        "        readOnlyHint: false,\n"
+        "        action: 'create'\n"
+        "    )]\n"
+    )
+
+    def test_mcp_tool_attribute_with_spec_passes(self):
+        self.assertEqual(self._findings(self._MCP_ATTR, self._SPEC_DOC), [])
+
+    def test_CONTROL_mcp_tool_attribute_without_spec_still_fails(self):
+        doc = (
+            "    /**\n"
+            "     * Create a task.\n"
+            "     */\n"
+        )
+        out = self._findings(self._MCP_ATTR, doc)
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("missing @spec", out[0])
+
+    def test_string_containing_close_paren_bracket_on_its_own_line(self):
+        attr = (
+            "    #[McpTool(\n"
+            "        name: 'odd',\n"
+            "        description: '\n"
+            ")]\n"
+            "        ',\n"
+            "    )]\n"
+        )
+        self.assertEqual(self._findings(attr, self._SPEC_DOC), [])
+
+    def test_stacked_multi_line_attributes(self):
+        attr = (
+            "    #[NoAdminRequired]\n"
+            "    #[McpTool(\n"
+            "        name: 'a',\n"
+            "        tags: ['x', ['y']],\n"
+            "    )]\n"
+            "    #[RateLimit(\n"
+            "        limit: 5,\n"
+            "    )] #[NoCSRFRequired]\n"
+        )
+        self.assertEqual(self._findings(attr, self._SPEC_DOC), [])
+
+    def test_attributes_with_trailing_and_inner_comments(self):
+        attr = (
+            "    #[McpTool( // registered by the scanner\n"
+            "        name: 'a', /* ) ] */\n"
+            "        # a hash comment )]\n"
+            "    )] // trailing note\n"
+            "    #[NoAdminRequired] /* note */\n"
+        )
+        self.assertEqual(self._findings(attr, self._SPEC_DOC), [])
+
+    def test_CONTROL_attributes_without_spec_still_fail(self):
+        attr = (
+            "    #[McpTool(\n"
+            "        name: 'a',\n"
+            "    )] // trailing note\n"
+            "    #[NoAdminRequired]\n"
+        )
+        out = self._findings(attr, "    /**\n     * No tag.\n     */\n")
+        self.assertEqual(len(out), 1, out)
+
+
 if __name__ == "__main__":
     unittest.main()

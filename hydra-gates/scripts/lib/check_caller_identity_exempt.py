@@ -82,6 +82,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from php_attributes import attribute_block_start  # noqa: E402
+
 # `final class X`, `abstract class X`, `readonly final class X`, `interface X`,
 # `trait X` — capture the kind and the name.
 TYPE_DECL = re.compile(
@@ -105,8 +108,14 @@ def docblock_above(lines, idx):
     preceding non-skippable line is not a docblock terminator.
     """
     i = idx - 1
-    while i >= 0 and (lines[i].strip() == '' or lines[i].strip().startswith('#[')):
-        i -= 1
+    while i >= 0:
+        attr = attribute_block_start(lines, i)
+        if attr is not None:
+            i = attr - 1
+        elif lines[i].strip() == '' or lines[i].strip().startswith('#['):
+            i -= 1
+        else:
+            break
     if i < 0 or not lines[i].strip().endswith('*/'):
         return []
     end = i
