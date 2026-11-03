@@ -107,12 +107,46 @@ echo "== runner declares ${#DECLARED[@]} gates =="
 # ---------------------------------------------------------------------------
 _OUT=""
 _LOGDIR=""
+# Every bundle arm is a read-only fixture and an independent runner process, so
+# _prefetch runs them all up front, HYDRA_ACCEPT_JOBS at a time (default: the
+# CPU count; 1 runs nothing up front). _run then reads the stored output
+# instead of starting the runner again; grading is unchanged and in order.
+_PREFETCH=""
+_prefetch_one() {  # <fixture-dir> <key>
+    mkdir -p "${_PREFETCH}/$2.logs"
+    HYDRA_GATE_LOG_DIR="${_PREFETCH}/$2.logs" \
+        HYDRA_OR_GATE_BLOCK_AFTER_EPOCH=0 \
+        bash "${RUNNER}" "$1" > "${_PREFETCH}/$2.out" 2>&1 || true
+}
+_prefetch() {  # <fixture-dir>...
+    local _jobs="${HYDRA_ACCEPT_JOBS:-$(nproc 2>/dev/null || echo 1)}" _d _n=0
+    [ "${_jobs}" -gt 1 ] 2>/dev/null || return 0
+    _PREFETCH="$(mktemp -d "${TMPDIR:-/tmp}/hydra-accept-pre.XXXXXXXX")"
+    for _d in "$@"; do
+        _prefetch_one "${_d}" "$(_key "${_d}")" &
+        _n=$((_n + 1))
+        if [ "${_n}" -ge "${_jobs}" ]; then
+            wait -n
+            _n=$((_n - 1))
+        fi
+    done
+    wait
+}
+_key() { printf '%s' "${1#"${BUNDLES}/"}" | tr '/' '_'; }
+
 _run() {  # <fixture-dir> [runner args...]
     local _dir="$1"; shift
-    _LOGDIR="$(mktemp -d "${TMPDIR:-/tmp}/hydra-accept.XXXXXXXX")"
-    _OUT="$(HYDRA_GATE_LOG_DIR="${_LOGDIR}" \
-        HYDRA_OR_GATE_BLOCK_AFTER_EPOCH=0 \
-        bash "${RUNNER}" "$@" "${_dir}" 2>&1 || true)"
+    local _k
+    _k="$(_key "${_dir}")"
+    if [ -n "${_PREFETCH}" ] && [ "$#" -eq 0 ] && [ -f "${_PREFETCH}/${_k}.out" ]; then
+        _LOGDIR="${_PREFETCH}/${_k}.logs"
+        _OUT="$(cat "${_PREFETCH}/${_k}.out")"
+    else
+        _LOGDIR="$(mktemp -d "${TMPDIR:-/tmp}/hydra-accept.XXXXXXXX")"
+        _OUT="$(HYDRA_GATE_LOG_DIR="${_LOGDIR}" \
+            HYDRA_OR_GATE_BLOCK_AFTER_EPOCH=0 \
+            bash "${RUNNER}" "$@" "${_dir}" 2>&1 || true)"
+    fi
     # An abort before the summary leaves per-gate PASS lines on stdout and
     # reads exactly like a clean run. Refuse to grade a run that did not finish.
     if ! printf '%s' "${_OUT}" | grep -q '^\[hydra-gates\] COVERAGE:'; then
@@ -258,6 +292,14 @@ if [ "${#BUNDLE_DIRS[@]}" -eq 0 ]; then
 fi
 echo "== discovered ${#BUNDLE_DIRS[@]} fixture bundle(s) =="
 echo
+
+_ARMS=()
+for _bundle in "${BUNDLE_DIRS[@]}"; do
+    for _arm in planted clean; do
+        [ -d "${BUNDLES}/${_bundle}/${_arm}" ] && _ARMS+=("${BUNDLES}/${_bundle}/${_arm}")
+    done
+done
+_prefetch "${_ARMS[@]}"
 
 COVERED=()
 
