@@ -70,6 +70,9 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # Needed to dispatch the required checks onto the sync branch; see the
+  # "Run the required checks" step.
+  actions: write
 
 concurrency:
   group: hydra-gates-schema-sync
@@ -193,6 +196,18 @@ jobs:
             --title "chore(hydra-gates): vendor manifest schema ${WANT}" \
             --body-file pr-body.md)
           echo "${NEW_PR}"
+
+          # A pull request opened with GITHUB_TOKEN triggers no `pull_request`
+          # workflow, so the three required checks on main never report and
+          # the sync PR sits BLOCKED until a human pushes to it. Measured
+          # 2026-11-03: #859 to #889 (2.126.0 to 2.170.0) were each opened,
+          # never checked, and closed by the next run, while the vendored copy
+          # stayed at 2.138.0. workflow_dispatch is the one trigger
+          # GITHUB_TOKEN may fire, and the check runs it creates land on the
+          # branch's head commit, which is what the ruleset reads.
+          for WF in hydra-gates-package.yml quality-resolve-probe.yml; do
+            gh workflow run "${WF}" --ref "${BRANCH}"
+          done
 
           # An older sync PR left open is how the copy stayed behind: each run
           # opened a new branch and the previous one sat unmerged. Close the
