@@ -684,5 +684,81 @@ class PolymorphicReferenceTest(_Base):
         self.assertEqual(msgs, [], f"expected a clean run, got {msgs}")
 
 
+class FragmentMergeTest(unittest.TestCase):
+    """A register.d fragment is deep-merged onto the base register (ADR-037).
+
+    pipelinq's ``register.d/97-task-contact-moment.json`` adds one property to
+    ``crmTask`` and filters it by ``@object.clientId``, a field the base
+    register declares. The fragment alone does not carry ``clientId``, so the
+    token must be resolved against the merged schema.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.settings = Path(self._tmp.name) / "lib" / "Settings"
+        (self.settings / "register.d").mkdir(parents=True)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    @staticmethod
+    def _schema(props):
+        return {"components": {"schemas": {"crmTask": {"slug": "crmTask", "properties": props},
+                                           "ticket": {"slug": "ticket", "properties": {}}}}}
+
+    def _write(self, rel, doc):
+        path = self.settings / rel
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        return str(path)
+
+    def _fragment(self):
+        return self._write("register.d/97-task-contact-moment.json", self._schema({
+            "contactMoment": {
+                "type": "string",
+                "format": "uuid",
+                "$ref": "ticket",
+                "x-relation-filter": {"client": "@object.clientId"},
+                "title": "Original contact moment",
+            },
+        }))
+
+    def _run(self, paths):
+        log = Path(self._tmp.name) / "gate.log"
+        g.main(["check", str(log)] + paths)
+        return [line for line in log.read_text(encoding="utf-8").splitlines() if line]
+
+    def test_a_field_declared_by_the_base_register_resolves(self):
+        base = self._write("app_register.json", self._schema({"clientId": {"type": "string"}}))
+        self.assertEqual(self._run([base, self._fragment()]), [])
+
+    def test_a_field_declared_by_another_fragment_resolves(self):
+        base = self._write("app_register.json", self._schema({}))
+        other = self._write("register.d/10-client.json", self._schema({"clientId": {"type": "string"}}))
+        self.assertEqual(self._run([base, other, self._fragment()]), [])
+
+    def test_control_a_field_nobody_declares_is_still_reported(self):
+        base = self._write("app_register.json", self._schema({"title": {"type": "string"}}))
+        found = self._run([base, self._fragment()])
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("nonexistent field 'clientId'", found[0])
+
+    def test_control_a_mock_register_is_not_merged(self):
+        base = self._write("app_register.json", self._schema({}))
+        mock = self._write("app_mock_register.json", self._schema({"clientId": {"type": "string"}}))
+        found = self._run([base, mock, self._fragment()])
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("nonexistent field 'clientId'", found[0])
+
+    def test_control_a_mock_register_does_not_borrow_merged_fields(self):
+        self._write("app_register.json", self._schema({"clientId": {"type": "string"}}))
+        mock = self._write("app_mock_register.json", self._schema({
+            "contactMoment": {"type": "string", "format": "uuid", "$ref": "ticket",
+                              "x-relation-filter": {"client": "@object.clientId"}},
+        }))
+        found = self._run([mock])
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("nonexistent field 'clientId'", found[0])
+
+
 if __name__ == "__main__":
     unittest.main()

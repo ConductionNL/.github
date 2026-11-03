@@ -455,6 +455,54 @@ def _global_schema_keys(paths):
     return keys
 
 
+def _is_merged_register(path):
+    """Whether a register file is part of the app's deep-merged register.
+
+    The app loads its base register (``lib/Settings/<name>_register.json``) and
+    deep-merges every ``register.d/*.json`` fragment onto it (ADR-037). Mock and
+    example registers are separate documents and are never merged.
+    """
+    norm = os.path.normpath(path)
+    if os.path.basename(os.path.dirname(norm)) == "register.d":
+        return True
+    name = os.path.basename(norm)
+    return "register" in name and "mock" not in name and "example" not in name
+
+
+def _merged_property_names(paths):
+    """Property names per schema key across the base register and its fragments.
+
+    A fragment that adds one property to ``crmTask`` carries only that property,
+    so a filter token in it naming a field the base schema declares
+    (``@object.clientId``) must be checked against the merged schema, which is
+    what OpenRegister imports. The base register's names cannot be told apart
+    by file name alone, so every non-mock, non-example ``*register*.json`` in
+    ``lib/Settings`` counts as a base.
+    """
+    merged = {}
+    seen = set()
+    for p in paths:
+        sd = _settings_dir(p)
+        if not sd or sd in seen:
+            continue
+        seen.add(sd)
+        candidates = glob.glob(os.path.join(sd, "*register*.json"))
+        candidates += glob.glob(os.path.join(sd, "register.d", "*.json"))
+        for c in candidates:
+            if not _is_merged_register(c):
+                continue
+            try:
+                with open(c, encoding="utf-8") as fh:
+                    doc = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            for name, schema in _schemas_of(doc).items():
+                props = schema.get("properties") if isinstance(schema, dict) else None
+                if isinstance(props, dict):
+                    merged.setdefault(name, set()).update(props.keys())
+    return merged
+
+
 # --------------------------------------------------------------------------
 # Relation helpers.
 # --------------------------------------------------------------------------
@@ -689,8 +737,9 @@ def _collect_properties(props, prefix, depth, seen, out, parents=None):
 # --------------------------------------------------------------------------
 # Per-file checks.
 # --------------------------------------------------------------------------
-def check_file(path, keys, findings, base_ref):
+def check_file(path, keys, findings, base_ref, merged=None):
     _first = len(findings)
+    merged = (merged or {}) if _is_merged_register(path) else {}
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
@@ -785,7 +834,7 @@ def check_file(path, keys, findings, base_ref):
                                 f"[{fk}]={token} — two-hop tokens unsupported "
                                 f"(ADR-062 rule 6)"
                             )))
-                        elif field not in props:
+                        elif field not in props and field not in merged.get(sname, ()):
                             findings.append((path, (
                                 f"{path}: {sname}.{pname} x-relation-filter "
                                 f"[{fk}]={token} — references nonexistent field "
@@ -915,9 +964,10 @@ def main(argv):
     paths = argv[2:]
     base_ref = os.environ.get("HYDRA_GATE_BASE_REF", "").strip()
     keys = _global_schema_keys(paths)
+    merged = _merged_property_names(paths)
     findings = []
     for p in paths:
-        check_file(p, keys, findings, base_ref)
+        check_file(p, keys, findings, base_ref, merged)
     with open(log_path, "a", encoding="utf-8") as g:
         for _p, msg in findings:
             g.write(msg + "\n")

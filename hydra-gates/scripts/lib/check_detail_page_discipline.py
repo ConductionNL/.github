@@ -535,6 +535,31 @@ def _side_column_widget_ids(cfg):
     return [entry for entry in entries if isinstance(entry, str) and entry]
 
 
+def _band_widget_ids(cfg):
+    """
+    Widget ids the page places in its band (`config.band`).
+
+    The band is a row of widgets across the whole detail page, above the body
+    and the side column. An entry is a declared widget's id, an inline widget
+    definition, or `{widgetId, span, chrome}`. The id string and the
+    `widgetId` object both place a widget from `config.widgets`; an inline
+    definition is not in `config.widgets` and is no concern of this check.
+
+    :param cfg: The page's config object.
+    :return: List of widget ids named by the band, in order, duplicates kept.
+    """
+    entries = cfg.get("band")
+    if not isinstance(entries, list):
+        return []
+    ids = []
+    for entry in entries:
+        if isinstance(entry, str) and entry:
+            ids.append(entry)
+        elif isinstance(entry, dict) and isinstance(entry.get("widgetId"), str) and entry["widgetId"]:
+            ids.append(entry["widgetId"])
+    return ids
+
+
 _APP_REGISTERS_CACHE = {}
 
 
@@ -640,8 +665,33 @@ def check_page(path, page, page_ids, findings):
         # five detail pages, 2026-10-12, every one of them rendered).
         side = _side_column_widget_ids(cfg)
         side_count = Counter(side)
+        # THE BAND IS A PLACEMENT TOO, with the same two defects as the side
+        # column: a band widget that also has a layout cell renders twice, and
+        # a band entry naming no declared widget renders nothing.
+        band = _band_widget_ids(cfg)
+        band_count = Counter(band)
         for wid in sorted(set(widget_ids)):
             n = lc.get(wid, 0)
+            if wid in band_count:
+                if n:
+                    findings.append(
+                        f"{path}: page '{pid}' — widget '{wid}' is in "
+                        f"config.band AND has {n} layout cell(s), so it "
+                        f"renders twice (ADR-062 rule 8)"
+                    )
+                if band_count[wid] > 1:
+                    findings.append(
+                        f"{path}: page '{pid}' — widget '{wid}' is named "
+                        f"{band_count[wid]} times in config.band, so it "
+                        f"renders {band_count[wid]} times (ADR-062 rule 8)"
+                    )
+                if wid in side_count:
+                    findings.append(
+                        f"{path}: page '{pid}' — widget '{wid}' is in "
+                        f"config.band AND config.sideColumn, so it renders "
+                        f"twice (ADR-062 rule 8)"
+                    )
+                continue
             if wid in side_count:
                 # Placed by the side column. Still worth saying: a second
                 # placement, which renders the widget twice.
@@ -692,6 +742,13 @@ def check_page(path, page, page_ids, findings):
                     f"{path}: page '{pid}' — config.sideColumn names widget "
                     f"'{sid}' with no matching config.widgets[].id, so the "
                     f"card is never rendered"
+                )
+        for bid in sorted(set(band)):
+            if wc.get(bid, 0) == 0:
+                findings.append(
+                    f"{path}: page '{pid}' — config.band names widget "
+                    f"'{bid}' with no matching config.widgets[].id, so it "
+                    f"is never rendered"
                 )
         # overlap on the 12-col grid.
         cells = []

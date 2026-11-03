@@ -230,5 +230,76 @@ class ContainerPlacementTest(unittest.TestCase):
         self.assertIn("widget 'thing-history' maps to 0 layout cell(s)", found[0])
 
 
+class BandPlacementTest(unittest.TestCase):
+
+    def test_a_widget_named_by_the_band_is_placed(self):
+        page = _page(
+            [{"id": "thing-data", "type": "data"}, {"id": "thing-kpi", "type": "stats"},
+             {"id": "thing-strip", "type": "facts"}],
+            [_cell("thing-data")],
+            band=["thing-kpi", {"widgetId": "thing-strip", "span": 6, "chrome": "bare"}],
+        )
+        self.assertEqual(_findings(page), [])
+
+    def test_an_inline_band_widget_needs_no_declared_widget(self):
+        page = _page(
+            [{"id": "thing-data", "type": "data"}],
+            [_cell("thing-data")],
+            band=[{"type": "stats", "title": "Totals"}],
+        )
+        self.assertEqual(_findings(page), [])
+
+    def test_control_a_widget_the_band_does_not_name_still_fails(self):
+        page = _page(
+            [{"id": "thing-data", "type": "data"}, {"id": "thing-kpi", "type": "stats"}],
+            [_cell("thing-data")],
+            band=[{"type": "stats", "title": "Totals"}],
+        )
+        found = _findings(page)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("widget 'thing-kpi' maps to 0 layout cell(s)", found[0])
+
+    def test_a_band_widget_with_a_grid_cell_renders_twice(self):
+        page = _page(
+            [{"id": "thing-kpi", "type": "stats"}],
+            [_cell("thing-kpi")],
+            band=["thing-kpi"],
+        )
+        found = _findings(page)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("config.band AND has 1 layout cell(s)", found[0])
+
+    def test_a_band_widget_also_in_the_side_column_renders_twice(self):
+        page = _page(
+            [{"id": "thing-data", "type": "data"}, {"id": "thing-kpi", "type": "stats"}],
+            [_cell("thing-data")],
+            band=["thing-kpi"],
+            sideColumn=["thing-kpi"],
+        )
+        found = _findings(page)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("config.band AND config.sideColumn", found[0])
+
+    def test_a_widget_named_twice_by_the_band_renders_twice(self):
+        page = _page(
+            [{"id": "thing-data", "type": "data"}, {"id": "thing-kpi", "type": "stats"}],
+            [_cell("thing-data")],
+            band=["thing-kpi", {"widgetId": "thing-kpi"}],
+        )
+        found = _findings(page)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("named 2 times in config.band", found[0])
+
+    def test_a_band_entry_naming_no_widget_is_reported(self):
+        page = _page(
+            [{"id": "thing-data", "type": "data"}],
+            [_cell("thing-data")],
+            band=[{"widgetId": "thing-gone", "span": 4}],
+        )
+        found = _findings(page)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("config.band names widget 'thing-gone'", found[0])
+
+
 if __name__ == "__main__":
     unittest.main()

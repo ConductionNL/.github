@@ -65,6 +65,23 @@ by nextcloud-vue's fillTemplate after translation, and has no word for a
 translator to change. A template with words in it ("Invoice date
 {invoiceDate|date}") is still copy and still needs its key.
 
+Some keys that collide with a visible field are not copy, and each skip is
+narrow: the value must also have the shape of the thing it is.
+
+- Width keys (`columnWidths` and its entries, `width`, `minWidth`,
+  `maxWidth`, `paneWidth`) hold CSS lengths. `"columnWidths": {"title":
+  "275px"}` sizes the title column. A value under them is skipped only when it
+  is a CSS length (`275px`, `40%`, `1.5rem`, `auto`).
+- Value maps (`colorMap`, `variantMap`, `iconMap`, `typeMap`) map the app's
+  data values to tokens: in `"colorMap": {"task": "purple"}` the key `task` is
+  a record type and `purple` a badge variant.
+- Field-path blocks name the row field to show: a board `card`, `cardLayout`,
+  `expandableRows`, a field-list `row`, and a fields entry with an
+  `initialsPath`. A value there is skipped only when it is a field path
+  (`title`, `owner.name`); a worded string in the same place is still copy.
+- A binding token (`@object.title`, `@me`) is resolved by the renderer. A
+  string starting with `@` that has a space in it is still copy.
+
 Only nl is asserted. Dutch is the language this fleet ships to, and demanding
 every European locale would make the gate unpassable rather than useful.
 
@@ -95,6 +112,40 @@ DATA_BINDING_KEYS = (
     "bind",
 )
 
+# Keys whose value, or whose entries' values, size a layout box.
+WIDTH_KEYS = (
+    "columnWidths",
+    "width",
+    "minWidth",
+    "maxWidth",
+    "paneWidth",
+)
+
+CSS_LENGTH = re.compile(r"(?:\d+(?:\.\d+)?|\.\d+)(?:px|%|rem|em|fr|vw|ch)|auto")
+
+# Blocks whose keys are data values and whose values are tokens, never copy.
+VALUE_MAP_KEYS = (
+    "colorMap",
+    "variantMap",
+    "iconMap",
+    "typeMap",
+)
+
+# Blocks in which these visible-looking keys name a row field.
+FIELD_PATH_BLOCKS = {
+    "cardLayout": ("title", "description", "subtitle"),
+    "expandableRows": ("title", "description"),
+    "row": ("title", "titleFallback"),
+}
+
+# A board's `card` is a field-path block; `nav.card` carries real copy.
+BOARD_CARD_PARENTS = ("board",)
+
+FIELD_PATH = re.compile(r"[a-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*")
+
+# The `@` token grammar: `@me`, `@objectId`, `@object.title`, `@today+7d`, `@resolve:x`.
+BINDING_TOKEN = re.compile(r"@[A-Za-z][A-Za-z0-9_.:+-]*\??")
+
 # nextcloud-vue's fillTemplate token: `{path}`, `{path|format}`, `{path|format:arg}`.
 FIELD_TOKEN = re.compile(r"\{[^{}\s|]+(?:\|[a-z]+(?::[^{}\s]+)?)?\}")
 
@@ -110,34 +161,72 @@ def _is_pure_field_template(value):
     return count > 0 and not any(ch.isalpha() for ch in rest)
 
 
-def _walk(node, hits, counter):
+def _field_path_keys(node, parent_key, grand_key):
+    """
+    The keys of a dict that name a row field rather than carry copy.
+
+    :param node: the dict.
+    :param parent_key: the key the dict sits under, or None.
+    :param grand_key: the key the parent sits under, or None.
+    :return: tuple of key names.
+    """
+    keys = FIELD_PATH_BLOCKS.get(parent_key, ())
+    if parent_key == "card" and grand_key in BOARD_CARD_PARENTS:
+        keys = keys + ("title",)
+    if "initialsPath" in node:
+        keys = keys + ("title", "subtitle")
+    return keys
+
+
+def _is_not_copy(value, in_width, is_path_key):
+    """
+    Whether a visible-field string is a layout value, field path or binding.
+
+    :param value: the string.
+    :param in_width: True when it sits under a width key.
+    :param is_path_key: True when its key names a row field in this block.
+    :return: True to skip the string.
+    """
+    if value.startswith("{{") or _is_pure_field_template(value):
+        return True
+    if in_width and CSS_LENGTH.fullmatch(value.strip()):
+        return True
+    if is_path_key and FIELD_PATH.fullmatch(value):
+        return True
+    return BINDING_TOKEN.fullmatch(value) is not None
+
+
+def _walk(node, hits, counter, keys=(None, None)):
     """
     Collect user-visible manifest strings.
 
     :param node: current dict / list / scalar.
     :param hits: accumulator of strings.
     :param counter: single-element list used as a mutable count.
+    :param keys: the key `node` sits under and the one above it.
     :return: None
     """
-    if isinstance(node, dict):
-        for key, value in node.items():
-            if key.startswith("_"):
-                continue
-            if key in DATA_BINDING_KEYS and isinstance(value, dict):
-                continue
-            if key in VISIBLE_FIELDS and isinstance(value, str) and value.strip():
-                # `{{name}}` is substituted by the renderer, not read by a human.
-                if value.startswith("{{"):
-                    continue
-                if _is_pure_field_template(value):
-                    continue
-                counter[0] += 1
-                hits.add(value)
-            else:
-                _walk(value, hits, counter)
-    elif isinstance(node, list):
+    if isinstance(node, list):
         for value in node:
-            _walk(value, hits, counter)
+            _walk(value, hits, counter, keys)
+        return
+    if not isinstance(node, dict):
+        return
+    parent_key, grand_key = keys
+    path_keys = _field_path_keys(node, parent_key, grand_key)
+    in_width = parent_key in WIDTH_KEYS
+    for key, value in node.items():
+        if key.startswith("_"):
+            continue
+        if key in DATA_BINDING_KEYS + VALUE_MAP_KEYS and isinstance(value, dict):
+            continue
+        if key in VISIBLE_FIELDS and isinstance(value, str) and value.strip():
+            if _is_not_copy(value, in_width, key in path_keys):
+                continue
+            counter[0] += 1
+            hits.add(value)
+        else:
+            _walk(value, hits, counter, (key, parent_key))
 
 
 def _manifest_files(root):
