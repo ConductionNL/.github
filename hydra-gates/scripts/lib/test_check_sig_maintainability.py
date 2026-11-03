@@ -5,7 +5,10 @@
 
   1. UNITS: lizard's PHP parameter count is replaced by the unique $names;
      Python `self`/`cls` is not a parameter; a file lizard raises on is listed
-     as skipped and the rest is still measured.
+     as skipped and the rest is still measured. A Vue file is read from its
+     <script> blocks with the file's own line numbers, and get()/set() method
+     shorthand no longer hides a file's units (fixtures in
+     scripts/test-fixtures/sig-vue-units/).
   2. SCOPE: tests, vendor, Sigrid's default excludes, Nextcloud js/ and l10n/
      are not measured; sigrid.yaml excludes are honoured.
   3. RATCHET on a real git history:
@@ -128,6 +131,70 @@ class Units(unittest.TestCase):
         self.assertEqual(self.reader.units("src/X.vue", "vue", "<template/>"), [])
         self.assertEqual(self.reader.skipped[0]["file"], "src/X.vue")
         self.assertIn("IndexError", self.reader.skipped[0]["reason"])
+
+
+VUE_FIXTURES = os.path.join(os.path.dirname(HERE), "test-fixtures", "sig-vue-units")
+
+
+class VueAndAccessorUnits(unittest.TestCase):
+    """Each fixture holds one pattern that once made lizard read a file as
+    zero units, or number its units from the <script> tag instead of the file.
+    Expected: (name, start, end, McCabe, params) in the file's own line numbers."""
+
+    def setUp(self):
+        self.reader = sig.UnitReader(LIZARD)
+
+    def units(self, name):
+        lang = sig.LANG_OF_EXT[os.path.splitext(name)[1]]
+        with open(os.path.join(VUE_FIXTURES, name), encoding="utf-8") as fh:
+            src = fh.read()
+        got = [(u["name"], u["start"], u["end"], u["ccn"], u["params"])
+               for u in self.reader.units(name, lang, src)]
+        self.assertEqual(self.reader.skipped, [])
+        return got
+
+    def test_plain_sfc_units_carry_the_file_line_numbers(self):
+        self.assertEqual(self.units("control-plain.vue"),
+                         [("label", 13, 18, 2, 2), ("reset", 19, 21, 1, 0)])
+
+    def test_inline_arrow_handler_in_the_template(self):
+        self.assertEqual(self.units("arrow-handler.vue"),
+                         [("update", 18, 23, 2, 1), ("reset", 24, 26, 1, 0)])
+
+    def test_apostrophe_in_a_template_comment(self):
+        self.assertEqual(self.units("comment-apostrophe.vue"),
+                         [("count", 16, 21, 2, 1), ("clear", 22, 24, 1, 0)])
+
+    def test_quotes_and_backticks_in_the_header_comment(self):
+        self.assertEqual(self.units("header-apostrophe.vue"),
+                         [("status", 15, 20, 2, 1), ("refresh", 21, 23, 1, 0)])
+
+    def test_computed_get_set_shorthand(self):
+        self.assertEqual(self.units("computed-get-set.vue"),
+                         [("get", 14, 16, 1, 0), ("set", 17, 22, 2, 1), ("after", 26, 28, 2, 1)])
+
+    def test_script_setup_with_typescript_and_a_second_script_block(self):
+        got = self.units("script-setup-ts.vue")
+        self.assertIn(("shared", 14, 16, 1, 2), got)
+        self.assertIn(("pick", 24, 29, 2, 2), got)
+        self.assertFalse([u for u in got if u[1] < 14], "a unit was read from the template")
+
+    def test_accessor_shorthand_in_plain_javascript(self):
+        self.assertEqual(self.units("accessor-shorthand.js"),
+                         [("get", 4, 6, 1, 0), ("set", 7, 11, 2, 1), ("after", 12, 14, 1, 1)])
+
+    def test_style_and_template_are_not_script(self):
+        text, _ext = sig.vue_script("<template>\n\t<p>a => b</p>\n</template>\n<script>\nconst a = 1\n</script>\n"
+                                    "<style>\np > a { color: red; }\n</style>\n")
+        self.assertEqual(text.splitlines(), ["", "", "", "", "const a = 1", "", "", "", ""])
+
+    def test_script_end_tags_with_whitespace_attributes_or_capitals(self):
+        for end in ("</script >", "</SCRIPT\n>", "</script\t\n bar>"):
+            with self.subTest(end=end):
+                src = f"<script>\nconst a = 1\n{end}\n<template>\n\t<p>a => b</p>\n</template>\n<script setup>\nconst b = 2\n</script>\n"
+                text, _ext = sig.vue_script(src)
+                self.assertEqual(text.count("\n"), src.count("\n"))
+                self.assertEqual([line for line in text.splitlines() if line], ["const a = 1", "const b = 2"])
 
 
 class ScopeRules(unittest.TestCase):

@@ -20,8 +20,11 @@
      listed as a 5-star finding, never as a failure.
   4. RAISE: a head that meets checks the floor does not list writes the
      raised floor to --proposed, and writes nothing when it fails.
-  5. CACHE: a cached run reads the same units as an uncached one and reads
-     no file twice.
+  5. READER BUMP: a floor recorded by an older unit reader (no `unit_reader`
+     field is reader 1) may drop the checks the newer reader re-measures, in
+     the change that re-records it; no other check may leave.
+  6. CACHE: a cached run reads the same units as an uncached one and reads
+     no file twice; a cache written by an older unit reader is not reused.
 
 Run: python3 scripts/lib/test_check_sig_floor.py
 """
@@ -413,6 +416,82 @@ class Scope(FloorCase):
         self.assertIn("removes 1 check(s) from the committed floor: javascript unit_size >15", out)
 
 
+VUE_COMPONENT = ("<template>\n\t<input @input=\"(v) => pick(v)\">\n</template>\n\n<script>\nexport default {\n"
+                 "\tmethods: {\n\t\tpick(v) {\n\t\t\tif (v) {\n\t\t\t\treturn 1\n\t\t\t}\n\t\t\treturn 2\n\t\t},\n"
+                 "\t},\n}\n</script>\n")
+
+
+class ReaderBump(FloorCase):
+    """A unit reader change re-measures some checks, so the floor recorded
+    under the older reader may be re-recorded: a check whose measurement the
+    new reader changed may leave the floor file, any other check may not."""
+
+    def setUp(self):
+        super().setUp()
+        self.repo.git("checkout", "-q", "base")
+        self.repo.write("src/components/Pick.vue", VUE_COMPONENT)
+        self.repo.commit("a vue component")
+        rc, out = run("write", self.repo.dir)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("vue unit_size >15", self.repo.floor_file()["checks"])
+        self.assertEqual(self.repo.floor_file()["unit_reader"], sig.UNIT_READER_VERSION)
+
+    def recorded_under(self, version):
+        """Commit the base floor as recorded by reader `version` (None: no field)."""
+        doc = self.repo.floor_file()
+        doc.pop("unit_reader", None)
+        if version is not None:
+            doc["unit_reader"] = version
+        self.repo.write(floor.FLOOR_PATH, json.dumps(doc, indent=1) + "\n")
+        self.repo.commit("floor")
+        self.repo.git("checkout", "-q", "-B", "change")
+
+    def rerecord_without(self, label):
+        rc, out = run("write", self.repo.dir)
+        self.assertEqual(rc, 0, out)
+        self.repo.set_floor([c for c in self.repo.floor_file()["checks"] if c != label])
+
+    def test_a_floor_without_the_field_was_recorded_by_reader_1(self):
+        self.assertEqual(floor.unit_reader_of({"checks": []}), 1)
+        self.assertEqual(floor.unit_reader_of({"checks": [], "unit_reader": 2}), 2)
+
+    def test_a_reader_bump_lets_a_vue_unit_check_leave_the_floor(self):
+        self.recorded_under(None)
+        self.rerecord_without("vue unit_size >15")
+        rc, out = self.check()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("vue unit_size >15", out)
+        self.assertIn("re-measured by unit reader", out)
+
+    def test_a_reader_bump_does_not_let_a_php_check_leave(self):
+        self.recorded_under(None)
+        self.rerecord_without("php unit_size >60")
+        rc, out = self.check()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("removes 1 check(s) from the committed floor: php unit_size >60", out)
+
+    def test_a_reader_bump_does_not_let_vue_duplication_leave(self):
+        self.recorded_under(None)
+        self.rerecord_without("vue duplication")
+        rc, out = self.check()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("removes 1 check(s) from the committed floor: vue duplication", out)
+
+    def test_a_floor_recorded_by_the_current_reader_keeps_its_vue_checks(self):
+        self.recorded_under(sig.UNIT_READER_VERSION)
+        self.rerecord_without("vue unit_size >15")
+        rc, out = self.check()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("removes 1 check(s) from the committed floor: vue unit_size >15", out)
+
+    def test_the_bump_counts_only_when_the_head_floor_is_re_recorded(self):
+        self.recorded_under(None)
+        self.repo.set_floor([c for c in self.repo.floor_file()["checks"] if c != "vue unit_size >15"])
+        rc, out = self.check()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("removes 1 check(s) from the committed floor: vue unit_size >15", out)
+
+
 class Cache(unittest.TestCase):
     def test_a_cached_run_reads_the_same_units_and_no_file_twice(self):
         repo = Repo()
@@ -439,6 +518,21 @@ class Cache(unittest.TestCase):
                 os.remove(path)
         finally:
             repo.close()
+
+    def test_a_cache_written_by_an_older_unit_reader_is_not_reused(self):
+        fd, path = tempfile.mkstemp(prefix="gate123-cache-", suffix=".json")
+        os.close(fd)
+        try:
+            with open(path, "w") as fh:
+                json.dump({"lizard": sig.LIZARD_VERSION, "files": {"k": {"units": []}}}, fh)
+            self.assertEqual(floor.load_cache(path), {})
+            with open(path, "w") as fh:
+                json.dump({"lizard": sig.LIZARD_VERSION, "reader": sig.UNIT_READER_VERSION,
+                           "files": {"k": {"units": []}}}, fh)
+            self.assertEqual(floor.load_cache(path), {"k": {"units": []}})
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
 
 
 if __name__ == "__main__":
