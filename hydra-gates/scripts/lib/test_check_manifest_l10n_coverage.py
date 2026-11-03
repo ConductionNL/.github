@@ -149,6 +149,68 @@ check("the worded template fails the gate", rc == 1, f"rc={rc}")
 rc, out = run(RECORD_LIST, ["Open invoices", "Factuur {invoiceNumber}"])
 check("covering the worded template passes", rc == 0, f"rc={rc}\n{out}")
 
+# --- layout values, value maps, field paths and bindings are not copy --------
+NOT_COPY = {
+    "pages": [
+        {
+            "id": "Pipelines",
+            "type": "index",
+            "title": "Pipelines",
+            "config": {
+                "columnWidths": {"title": "275px", "label": "40%", "description": "auto"},
+                "cardLayout": {"title": "title", "description": "owner.name"},
+                "expandableRows": {
+                    "title": "title",
+                    "description": "description",
+                    "badge": {"label": "Default"},
+                },
+                "board": {"card": {"title": "title"}},
+                "pill": {"colorMap": {"task": "purple"}, "variantMap": {"task": "info"}},
+                "icons": {"typeMap": {"task": "CheckCircleOutline"}, "iconMap": {"task": "Check"}},
+                "groups": [{"field": "phones", "row": {"label": "Phone", "title": "value", "titleFallback": "number"}}],
+                "fields": [{"as": "lead", "initialsPath": "ownerId", "title": "ownerId", "subtitle": "role"}],
+                "props": {"title": "@object.title"},
+            },
+        },
+    ],
+}
+rc, out = run(NOT_COPY, ["Pipelines", "Default", "Phone"])
+for token in ("275px", "40%", "auto", "title", "owner.name", "description", "purple", "info",
+              "CheckCircleOutline", "Check", "value", "number", "ownerId", "role", "@object.title"):
+    check(f"{token} is not reported", f"FAIL no nl.json key: {token}\n" not in out + "\n", out)
+check("layout values, maps, paths and bindings pass", rc == 0, f"rc={rc}\n{out}")
+check("only the copy beside them is counted", "checked 3 manifest string(s)" in out, out)
+
+rc, out = run(NOT_COPY, ["Pipelines"])
+check("a badge label inside expandableRows is still copy", "FAIL no nl.json key: Default" in out, out)
+check("a row label beside a row title is still copy", "FAIL no nl.json key: Phone" in out, out)
+
+# The same keys holding real copy are still reported.
+STILL_COPY = {
+    "nav": {"card": {"title": "help"}},
+    "pages": [
+        {
+            "id": "Cases",
+            "type": "index",
+            "title": "275px",
+            "config": {
+                "columnWidths": {"title": "Open cases"},
+                "cardLayout": {"title": "Case title"},
+                "board": {"card": {"title": "Next step"}},
+                "groups": [{"row": {"title": "Phone number"}}],
+                "fields": [{"initialsPath": "ownerId", "title": "Owner"}],
+                "props": {"title": "@ mention someone"},
+                "header": {"label": "12 px wide"},
+            },
+        },
+    ],
+}
+rc, out = run(STILL_COPY, [])
+for text in ("275px", "Open cases", "Case title", "Next step", "Phone number", "Owner",
+             "@ mention someone", "12 px wide", "help"):
+    check(f"'{text}' is still reported", f"FAIL no nl.json key: {text}\n" in out + "\n", out)
+check("real copy under those keys fails the gate", rc == 1, f"rc={rc}")
+
 if _FAILED:
     print(f"\n{len(_FAILED)} assertion(s) failed")
     sys.exit(1)
