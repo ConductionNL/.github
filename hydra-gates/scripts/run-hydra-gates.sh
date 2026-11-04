@@ -8712,7 +8712,7 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
     if [ "${_csrf_cand}" -eq 0 ]; then
         _csrf_ran=0
         _csrf_removed=""
-        _skip 48 "csrf-cochange" na "the diff against '${BASE_REF}' touches NO controller file under lib/, so there was no controller for a #[NoCSRFRequired] to be dropped FROM — NOT ONE controller line was read by this run. A removal is a property of a change set, and this change set contains no candidate for one. This is NOT a clean bill of health for the app's CSRF posture; it runs on the next change that touches a controller."
+        _skip 48 "csrf-cochange" na "the diff against '${BASE_REF}' touches NO controller (NO lib/Controller/*.php, and none elsewhere under lib/), so there was no controller for a #[NoCSRFRequired] to be dropped FROM — NOT ONE controller line was read by this run. A removal is a property of a change set, and this change set contains no candidate for one. This is NOT a clean bill of health for the app's CSRF posture; it runs on the next change that touches a controller."
     elif [ ! -f "${_csrf_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147). Without it the gate
         # sees no removals at all and goes green on every diff.
