@@ -69,6 +69,7 @@ test_check_unclosable_gate.py	0
 test_check_unsafe_auth_resolver.py	0
 test_check_visual_coverage.py	2
 test_checker_patterns_match_documented_shapes.py	1
+test_controller_resolver.py	0
 test_detect_redundant_controllers.py	0
 test_diff_schema_strictness.js	1
 test_exclusion_reason.py	1
@@ -110,6 +111,7 @@ test_gate_a11y_helper_wiring.sh	122
 test_gate_a11y_markup_scope.sh	12
 test_gate_acceptance_matrix.sh	124
 test_gate_base_ref_delivery_channel.sh	14
+test_gate_component_dirs.sh	60
 test_gate_crashed_checker_is_not_a_finding.sh	210
 test_gate_diff_provenance.sh	20
 test_gate_discarded_counts_and_empty_deltas.sh	48
@@ -137,5 +139,6 @@ test_manifest_scope_filter.js	0
 test_or_abstraction_exceptions.sh	2
 test_or_abstraction_pdok.sh	1
 test_php_template_scope.py	0
+test_shipped_contracts_documented.py	0
 test_source_scope.py	0
 test_vendored_schema_freshness.js	1
