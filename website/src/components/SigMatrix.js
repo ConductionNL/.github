@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import matrix from '@site/src/data/sig-matrix.json';
 import styles from './SigMatrix.module.css';
 
@@ -6,6 +6,76 @@ const pct = (share) => `${(share * 100).toFixed(1)}%`;
 
 const STAR_TEXT = {5: '5', 4: '4', below: '<4'};
 const STAR_CLASS = {5: styles.s5, 4: styles.s4, below: styles.below};
+
+const wholePct = (part, total) => `${Math.round((part / total) * 100)}%`;
+
+function useAppFilter() {
+  const [query, setQuery] = useState('');
+  const all = Object.keys(matrix.apps);
+  const needle = query.trim().toLowerCase();
+  return {all, apps: all.filter((app) => app.includes(needle)), query, setQuery};
+}
+
+function AppFilter({filter}) {
+  return (
+    <div className={styles.filter}>
+      <label>
+        Search apps{' '}
+        <input
+          type="search"
+          value={filter.query}
+          onChange={(event) => filter.setQuery(event.target.value)}
+        />
+      </label>
+      <span role="status">Showing {filter.apps.length} of {filter.all.length} apps</span>
+    </div>
+  );
+}
+
+function FleetAverage() {
+  const apps = Object.values(matrix.apps);
+  const four = apps.reduce((sum, app) => sum + app.four, 0);
+  const checks = apps.reduce((sum, app) => sum + app.checks, 0);
+  return (
+    <p className={styles.average}>
+      All {apps.length} apps: {four} of {checks} checks at 4 stars or better ({wholePct(four, checks)}).
+      This average is our own figure, not a SIG score.
+    </p>
+  );
+}
+
+function Scroller({label, children}) {
+  const top = useRef(null);
+  const main = useRef(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const element = main.current;
+    const observer = new ResizeObserver(() => setWidth(element.scrollWidth));
+    observer.observe(element);
+    observer.observe(element.firstElementChild);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <>
+      <div
+        ref={top}
+        className={styles.topScroll}
+        aria-hidden="true"
+        onScroll={() => { main.current.scrollLeft = top.current.scrollLeft; }}>
+        <div style={{width}} />
+      </div>
+      <div
+        ref={main}
+        className={styles.scroller}
+        role="region"
+        aria-label={label}
+        tabIndex={0}
+        onScroll={() => { top.current.scrollLeft = main.current.scrollLeft; }}>
+        {children}
+      </div>
+    </>
+  );
+}
 
 function limitText(row) {
   const op = row.minimum ? 'at least' : 'at most';
@@ -63,18 +133,17 @@ function Legend() {
 }
 
 export default function SigMatrix() {
-  const apps = Object.keys(matrix.apps);
-  const span = apps.length;
+  const filter = useAppFilter();
+  const {apps} = filter;
+  const span = Math.max(apps.length, 1);
   return (
     <div className={styles.matrix}>
       <Legend />
-      <div
-        className={styles.scroller}
-        role="region"
-        aria-label={`SIG checks per app, measured ${matrix.measured}`}
-        tabIndex={0}>
+      <FleetAverage />
+      <AppFilter filter={filter} />
+      <Scroller label={`SIG checks per app, measured ${matrix.measured}`}>
         <table className={styles.table}>
-          <thead>
+          <thead className={styles.head}>
             <tr>
               <th scope="col" className={styles.sticky}>check</th>
               {apps.map((app) => (
@@ -87,9 +156,15 @@ export default function SigMatrix() {
           </thead>
           <tbody>
             <tr className={styles.total}>
-              <th scope="row" className={styles.sticky}>checks at 4 stars or better</th>
+              <th scope="row" className={styles.sticky}>
+                checks at 4 stars or better
+                <span className={styles.value}>and the share of the app's checks</span>
+              </th>
               {apps.map((app) => (
-                <td key={app}>{matrix.apps[app].four}/{matrix.apps[app].checks}</td>
+                <td key={app}>
+                  {matrix.apps[app].four}/{matrix.apps[app].checks}
+                  <span className={styles.value}>{wholePct(matrix.apps[app].four, matrix.apps[app].checks)}</span>
+                </td>
               ))}
             </tr>
             <tr className={styles.total}>
@@ -134,24 +209,22 @@ export default function SigMatrix() {
             ))}
           </tbody>
         </table>
-      </div>
+      </Scroller>
     </div>
   );
 }
 
 export function SigFloors() {
   const floors = matrix.floors;
+  const filter = useAppFilter();
   if (!floors) return null;
-  const apps = Object.keys(matrix.apps);
+  const {apps} = filter;
   return (
     <div className={styles.matrix}>
-      <div
-        className={styles.scroller}
-        role="region"
-        aria-label={`Floors and ratchets per app, read ${floors.read}`}
-        tabIndex={0}>
+      <AppFilter filter={filter} />
+      <Scroller label={`Floors and ratchets per app, read ${floors.read}`}>
         <table className={styles.table}>
-          <thead>
+          <thead className={styles.head}>
             <tr>
               <th scope="col" className={styles.sticky}>floor</th>
               {apps.map((app) => (
@@ -187,7 +260,7 @@ export function SigFloors() {
             ))}
           </tbody>
         </table>
-      </div>
+      </Scroller>
     </div>
   );
 }

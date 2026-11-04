@@ -8,7 +8,7 @@
   --sig-below-fg: #8a1f05;
   --sig-empty-fg: var(--ifm-color-emphasis-700);
   --sig-line: var(--ifm-color-emphasis-300);
-  --sig-sticky-bg: var(--ifm-background-color);
+  --sig-sticky-bg: var(--ifm-background-surface-color);
   margin-bottom: var(--ifm-spacing-vertical);
 }
 
@@ -47,9 +47,33 @@
   border: 1px solid var(--sig-line);
 }
 
-.scroller {
+.filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.average {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.topScroll {
   overflow-x: auto;
+  overflow-y: hidden;
   max-width: 100%;
+}
+
+.topScroll > div {
+  height: 1px;
+}
+
+.scroller {
+  overflow: auto;
+  max-width: 100%;
+  max-height: calc(100vh - var(--ifm-navbar-height) - 2rem);
   border: 1px solid var(--sig-line);
   border-radius: 4px;
 }
@@ -92,6 +116,17 @@
   max-width: 14rem;
   border-right: 1px solid var(--sig-line) !important;
   font-weight: 600;
+}
+
+.head th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--sig-sticky-bg);
+}
+
+.head .sticky {
+  z-index: 3;
 }
 
 .app a {
