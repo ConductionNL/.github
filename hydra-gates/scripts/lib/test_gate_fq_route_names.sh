@@ -187,9 +187,18 @@ if _run "${FIXTURES}/fq-unbound"; then
         _bad "fq-unbound: expected 2 findings, got ${_rr_n}: $(printf '%s' "${_RRLOG}" | tr '\n' '|')"
     fi
 
-    # gate-5 must not turn red on any of this: an unresolvable class is a
-    # reachability defect, not an auth finding (ConductionNL/.github#153).
-    _expect_gate 5 PASS "fq-unbound: the unresolvable class is not an auth finding either"
+    # An unresolvable class is not a missing auth attribute (.github#153), but
+    # it is not a pass either: no auth posture can be judged for a route whose
+    # controller no file declares. gate-5 fails on it under its own rule.
+    _expect_gate 5 FAIL "fq-unbound: gate-5 fails on the route whose controller no file declares"
+    case "$(_gate_line 5)" in
+        *"name a controller no file under lib/ declares"*) _ok "fq-unbound: gate-5 names it as an unfound controller" ;;
+        *) _bad "fq-unbound: gate-5 failed for another reason: $(_gate_line 5)" ;;
+    esac
+    case "$(_gate_line 5)" in
+        *"missing auth attribute"*) _bad "fq-unbound: the unresolvable class was counted as an auth finding" ;;
+        *) _ok "fq-unbound: the unresolvable class is not counted as a missing auth attribute" ;;
+    esac
 fi
 
 echo

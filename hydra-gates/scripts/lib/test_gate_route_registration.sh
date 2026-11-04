@@ -230,8 +230,13 @@ if _run "${FIXTURES}/psr4-namespaced-controller-missing-method"; then
     # THE CONTROL: the conventional sibling in the same repo still resolves.
     _expect_not_log "${_RRLOG}" "PingController" \
         "psr4-namespaced-controller-missing-method: the conventional ping#index route is unaffected"
-    _expect_lines "${_RRLOG}" 1 \
-        "psr4-namespaced-controller-missing-method: exactly ONE finding"
+    # Invariant 1 now opens controllers outside lib/Controller/ too, so the
+    # renamed method is ALSO an unrouted Response method on that class: two
+    # findings, one per invariant, both about the rename.
+    _expect_log "${_RRLOG}" "lib/AppHost/Controller/GenericHealthController\.php method=indexRenamed .*rule=missing-route" \
+        "psr4-namespaced-controller-missing-method: the renamed method is reported as unrouted"
+    _expect_lines "${_RRLOG}" 2 \
+        "psr4-namespaced-controller-missing-method: exactly TWO findings (one per invariant)"
 fi
 
 # ---------------------------------------------------------------------------

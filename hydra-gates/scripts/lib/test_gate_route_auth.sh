@@ -56,6 +56,7 @@ _bad()  { _fail_n=$((_fail_n + 1)); printf 'FAIL — %s\n' "$1"; }
 _OUT=""
 _UNRES=""
 _RRLOG=""
+_NOTFOUND=""
 _LOGDIR=""
 _run() {
     local _dir="$1"; shift
@@ -73,6 +74,7 @@ _run() {
     _OUT="$(HYDRA_GATE_LOG_DIR="${_logdir}" bash "${RUNNER}" "$@" "${_dir}" 2>&1 || true)"
     _UNRES="$(cat "${_logdir}/hydra-gate-route-auth-unresolved.log" 2>/dev/null || true)"
     _RRLOG="$(cat "${_logdir}/hydra-gate-route-reachability.log" 2>/dev/null || true)"
+    _NOTFOUND="$(cat "${_logdir}/hydra-gate-route-auth-controller-not-found.log" 2>/dev/null || true)"
     _LOGDIR="${_logdir}"
     if ! printf '%s' "${_OUT}" | grep -q '^\[hydra-gates\] COVERAGE:'; then
         _bad "run in ${_dir} ABORTED before the summary — verdicts above it are not a result"
@@ -202,8 +204,12 @@ fi
 # ---------------------------------------------------------------------------
 if _run "${FIXTURES}/apphost-unguarded"; then
     _expect_gate 5 FAIL "apphost-unguarded fixture: AppHost adoption does NOT exempt the app's own controllers"
-    _expect_out 'gate-5 route-auth: 5 routed entr\(ies\) NOT JUDGED' \
+    _expect_out 'gate-5 route-auth: 4 routed entr\(ies\) NOT JUDGED' \
         "apphost-unguarded fixture: the AppHost entries are still merely unjudged"
+    _expect_out 'also 1 routed method\(s\) missing auth attribute' \
+        "apphost-unguarded fixture: the unguarded method is still counted beside the unfound controller"
+    _expect_log "${_NOTFOUND}" '^gadget#run rule=routed-controller-not-found' \
+        "apphost-unguarded fixture: gate-5 fails gadget#run as an unfound controller, not the AppHost generics"
     # AppHost adoption excuses the FIVE generics and nothing else. `gadget#run`
     # names a class nobody provides — still a reachability defect.
     _expect_gate 14 FAIL "apphost-unguarded fixture: a NON-generic missing controller is still raised"
@@ -222,9 +228,18 @@ fi
 #    an auth finding by the gate that cannot see the class.
 # ---------------------------------------------------------------------------
 if _run "${FIXTURES}/orphan-route"; then
-    _expect_gate 5 PASS "orphan-route fixture: an unresolvable class is NOT an auth finding"
-    _expect_out 'gate-5 route-auth: 2 routed entr\(ies\) NOT JUDGED' \
-        "orphan-route fixture: both unresolvable entries are stated"
+    # An unfound class is not a missing auth attribute (.github#153), and it
+    # is not a pass either: gate-5 fails it under its own rule.
+    _expect_gate 5 FAIL "orphan-route fixture: a route whose controller no file declares fails gate-5"
+    _expect_log "${_NOTFOUND}" '^gadget#run rule=routed-controller-not-found' \
+        "orphan-route fixture: gate-5 names gadget#run as an unfound controller"
+    if printf '%s' "${_OUT}" | grep -E '^\[gate-5\]' | grep -q 'missing auth attribute'; then
+        _bad "orphan-route fixture: the unfound class was counted as a missing auth attribute"
+    else
+        _ok "orphan-route fixture: the unfound class is NOT an auth finding"
+    fi
+    _expect_out 'gate-5 route-auth: 1 routed entr\(ies\) NOT JUDGED' \
+        "orphan-route fixture: the absent method on a real class is still stated as not judged"
     _expect_gate 14 FAIL "orphan-route fixture: gate-14 DOES raise the unreachable route"
     _expect_log "${_RRLOG}" 'rule=controller-class-not-found' \
         "orphan-route fixture: gate-14 log names controller-class-not-found"
@@ -255,7 +270,14 @@ if _run "${FIXTURES}/di-registered-generic"; then
     else
         _ok "di-registered-generic fixture: the DI-registered generic is NOT reported"
     fi
-    _expect_gate 5 PASS "di-registered-generic fixture: the absent generic is not an auth finding either"
+    _expect_gate 5 FAIL "di-registered-generic fixture: gadget#run, which nobody provides, fails gate-5"
+    _expect_log "${_NOTFOUND}" '^gadget#run rule=routed-controller-not-found' \
+        "di-registered-generic fixture: gate-5 names gadget#run as an unfound controller"
+    if printf '%s' "${_NOTFOUND}" | grep -q 'genericPreferences'; then
+        _bad "di-registered-generic fixture: the DI-registered generic was reported as unfound"
+    else
+        _ok "di-registered-generic fixture: the DI-registered generic is not reported as unfound"
+    fi
     _expect_log "${_UNRES}" 'genericPreferences#getPreference' \
         "di-registered-generic fixture: gate-5 states the generic was NOT JUDGED rather than dropping it"
 fi
