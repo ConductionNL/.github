@@ -102,14 +102,25 @@ def check_file(path: str) -> list[str]:
     return findings
 
 
+def node_directories(root: str) -> list[str]:
+    """lib/Service/Flow/Nodes/ and, for a component layout, every
+    lib/<Component>/Service/Flow/Nodes/ that exists."""
+    found = [os.path.join(root, NODE_DIR)]
+    lib = os.path.join(root, "lib")
+    if os.path.isdir(lib):
+        for component in sorted(os.listdir(lib)):
+            found.append(os.path.join(lib, component, "Service", "Flow", "Nodes"))
+    return [d for d in found if os.path.isdir(d)]
+
+
 def main() -> int:
     """Run the gate."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", nargs="?", default=".", help="repository root")
     args = parser.parse_args()
 
-    node_dir = os.path.join(args.root, NODE_DIR)
-    if not os.path.isdir(node_dir):
+    node_dirs = node_directories(args.root)
+    if not node_dirs:
         # NOT APPLICABLE. This repository contributes no flow nodes of its own,
         # and a node it contributes from anywhere else is not this gate's
         # business — see the scoping note above.
@@ -118,13 +129,14 @@ def main() -> int:
 
     findings = []
     inspected = 0
-    for name in sorted(os.listdir(node_dir)):
-        if not name.endswith(".php"):
-            continue
+    for node_dir in node_dirs:
+        for name in sorted(os.listdir(node_dir)):
+            if not name.endswith(".php"):
+                continue
 
-        path = os.path.join(node_dir, name)
-        inspected += 1
-        findings.extend(check_file(path))
+            path = os.path.join(node_dir, name)
+            inspected += 1
+            findings.extend(check_file(path))
 
     for line in findings:
         print(line)

@@ -601,5 +601,52 @@ class OrphanAuthExclusion(unittest.TestCase):
         self.assertEqual(_scan_in_repo("lib/Service/T.php", src, {}), [])
 
 
+
+_MOVED_CONTROLLER = """\
+<?php
+namespace OCA\\Fx\\Search;
+
+class LiveTileController {
+    public function validateSource(string $userId, string $url): JSONResponse
+    {
+        if (!$this->service->isHostAllowed($url)) {
+            throw new \\OCP\\AppFramework\\OCS\\OCSForbiddenException('blocked host');
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+}
+"""
+
+_APP = {
+    "composer.json": '{"autoload": {"psr-4": {"OCA\\\\Fx\\\\": "lib/"}}}',
+    "lib/AppInfo/Application.php": "<?php\nnamespace OCA\\Fx\\AppInfo;\n\nclass Application {}\n",
+    "appinfo/routes.php": _ROUTES,
+}
+
+
+class RoutedControllerOutsideLibController(unittest.TestCase):
+    """A controller moved out of lib/Controller/ keeps its route name through
+    a class alias, so its path no longer spells `liveTile`. The route table is
+    resolved to files (controller_resolver.py) instead."""
+
+    def test_fp_a_moved_controller_reached_through_its_alias_is_not_an_orphan(self):
+        extra = dict(_APP)
+        extra["appinfo/class-aliases.json"] = (
+            '{"aliases": {"OCA\\\\Fx\\\\Controller\\\\LiveTileController": '
+            '{"class": "OCA\\\\Fx\\\\Search\\\\LiveTileController"}}}')
+        self.assertEqual(_scan_in_repo("lib/Search/LiveTileController.php", _MOVED_CONTROLLER, extra), [])
+
+    def test_tp_without_the_alias_the_moved_action_is_still_an_orphan(self):
+        out = _scan_in_repo("lib/Search/LiveTileController.php", _MOVED_CONTROLLER, dict(_APP))
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=validateSource rule=defined-but-never-called", out[0])
+
+    def test_fp_a_settings_namespaced_route_is_resolved(self):
+        extra = dict(_APP)
+        extra["appinfo/routes.php"] = _ROUTES.replace("'liveTile#", "'Settings\\LiveTile#")
+        src = _MOVED_CONTROLLER.replace("namespace OCA\\Fx\\Search;", "namespace OCA\\Fx\\Controller\\Settings;")
+        self.assertEqual(_scan_in_repo("lib/Controller/Settings/LiveTileController.php", src, extra), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

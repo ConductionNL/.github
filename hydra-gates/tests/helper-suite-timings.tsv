@@ -64,6 +64,7 @@ test_check_spec_coverage.py	0
 test_check_stale_fleet_app_id.py	1
 test_check_store_and_settings_surface.py	0
 test_check_stub_run_body.py	0
+test_check_system_elevation.py	0
 test_check_table_headers.py	0
 test_check_unclosable_gate.py	0
 test_check_unsafe_auth_resolver.py	0

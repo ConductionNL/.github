@@ -5666,7 +5666,7 @@ if [ -f appinfo/routes.php ]; then
         elif [ "${_cc_fail}" -eq 3 ]; then
             # EMPTY SCOPE — `na`, not structural (#268). See _skip's header.
             _cc_ran=0
-            _skip 25 "contract-coverage" na "the diff against '${BASE_REF}' touched NO lib/Controller file, so no endpoint was inspected. Diff-scoped out under ADR-020, exactly as gates 6/7 are for the same diff — not a gap: this PR exposes no new endpoint whose wire contract could be untested. This gate runs on the next PR that touches a controller. See ${_cc_log}."
+            _skip 25 "contract-coverage" na "the diff against '${BASE_REF}' touched NO controller file under lib/, so no endpoint was inspected. Diff-scoped out under ADR-020, exactly as gates 6/7 are for the same diff — not a gap: this PR exposes no new endpoint whose wire contract could be untested. This gate runs on the next PR that touches a controller. See ${_cc_log}."
         elif [ "${_cc_fail}" -eq 4 ]; then
             _cc_ran=0
             _skip 25 "contract-coverage" na "no appinfo/routes.php — this app exposes no routed endpoint whose wire contract could be tested."
@@ -6232,7 +6232,9 @@ _pm_targets=0
 _pm_scoped=0
 _pm_inspected=0
 _pm_absent=0
-if [ -f appinfo/routes.php ] && [ -d lib/Controller ]; then
+_pm_has_ctrl=0
+[ -n "$(_enum_controllers tracked | head -1)" ] && _pm_has_ctrl=1
+if [ -f appinfo/routes.php ] && [ "${_pm_has_ctrl}" -eq 1 ]; then
     # Pull every route entry as `name<TAB>url<TAB>verb`. A route's url and verb
     # are part of the evidence now (see (c) above), and grepping the name alone
     # cannot see them. Entries are one-per-line in every fleet routes.php, but
@@ -6415,8 +6417,8 @@ elif [ "${_pm_inspected}" -gt 0 ]; then
     # as gate-5's NOT-JUDGED line.
     echo "[hydra-gates] gate-30 public-monitoring: ${_pm_inspected} monitoring endpoint(s) inspected of ${_pm_candidates} name-matched candidate(s)${_pm_targets:+; ${_pm_targets} scrape target(s)}. See ${_pm_notes} for every candidate this run did NOT judge, and why."
     _pass 30 "public-monitoring"
-elif [ ! -f appinfo/routes.php ] || [ ! -d lib/Controller ]; then
-    _skip 30 "public-monitoring" na "no appinfo/routes.php + lib/Controller in this repository — there is no routed monitoring endpoint to judge."
+elif [ ! -f appinfo/routes.php ] || [ "${_pm_has_ctrl}" -eq 0 ]; then
+    _skip 30 "public-monitoring" na "no appinfo/routes.php + a controller under lib/ in this repository — there is no routed monitoring endpoint to judge."
 elif [ "${_pm_candidates}" -eq 0 ]; then
     _skip 30 "public-monitoring" na "appinfo/routes.php declares no route whose name contains metrics/health/liveness/readiness/probe."
 elif [ "${_pm_targets}" -eq 0 ]; then
@@ -8696,13 +8698,21 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
     # The pathspec is the SAME STRING the gate itself uses, on purpose: this
     # guard cannot drift away from the enumerator it defends without the two
     # visibly disagreeing in one file.
-    _csrf_cand=$(git diff --name-only "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null | grep -c . 2>/dev/null || true)
+    # Controllers anywhere under lib/: every Controller directory, plus the
+    # routed controllers the resolver found elsewhere. `-M` makes a moved
+    # controller a rename rather than a deleted file whose every attribute
+    # line reads as removed.
+    _csrf_paths=('lib/Controller/*.php' ':(glob)lib/**/Controller/**/*.php')
+    while IFS= read -r _f; do
+        [ -n "${_f}" ] && _csrf_paths+=("${_f}")
+    done <<< "${_HYDRA_ROUTED_CTRL_FILES}"
+    _csrf_cand=$(git diff -M --name-only "${BASE_REF}...HEAD" -- "${_csrf_paths[@]}" 2>/dev/null | grep -c . 2>/dev/null || true)
     _csrf_cand="${_csrf_cand%%$'\n'*}"
     case "${_csrf_cand}" in ''|*[!0-9]*) _csrf_cand=0 ;; esac
     if [ "${_csrf_cand}" -eq 0 ]; then
         _csrf_ran=0
         _csrf_removed=""
-        _skip 48 "csrf-cochange" na "the diff against '${BASE_REF}' touches NO lib/Controller/*.php, so there was no controller for a #[NoCSRFRequired] to be dropped FROM — NOT ONE controller line was read by this run. A removal is a property of a change set, and this change set contains no candidate for one. This is NOT a clean bill of health for the app's CSRF posture; it runs on the next change that touches a controller."
+        _skip 48 "csrf-cochange" na "the diff against '${BASE_REF}' touches NO controller file under lib/, so there was no controller for a #[NoCSRFRequired] to be dropped FROM — NOT ONE controller line was read by this run. A removal is a property of a change set, and this change set contains no candidate for one. This is NOT a clean bill of health for the app's CSRF posture; it runs on the next change that touches a controller."
     elif [ ! -f "${_csrf_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147). Without it the gate
         # sees no removals at all and goes green on every diff.
@@ -8727,7 +8737,7 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
         # than a false pass, but the right image is cheap to name.
         _csrf_mb=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null || true)
         [ -n "${_csrf_mb}" ] || _csrf_mb="${BASE_REF}"
-        _csrf_removed=$(git diff -U0 "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null \
+        _csrf_removed=$(git diff -M -U0 "${BASE_REF}...HEAD" -- "${_csrf_paths[@]}" 2>/dev/null \
             | python3 "${_csrf_helper}" --repo . --base "${_csrf_mb}" 2>"${_csrf_err}")
         _csrf_rc=$?
         if [ "${_csrf_rc}" -ne 0 ]; then
@@ -12932,7 +12942,7 @@ _fnt_rc=$?
 set +e
 
 if [ "${_fnt_rc}" -eq 4 ]; then
-    _skip 111 "flow-node-taxonomy" na "this repo ships no lib/Service/Flow/Nodes/, so it contributes no flow node of its own. A node it contributes from ANOTHER repository is deliberately not this gate's business — 38 of 65 step types on a measured instance are, and firing on them would be unfixable from the PR it fired on. See ${_fnt_log}."
+    _skip 111 "flow-node-taxonomy" na "this repo ships no lib/Service/Flow/Nodes/ (nor lib/<Component>/Service/Flow/Nodes/), so it contributes no flow node of its own. A node it contributes from ANOTHER repository is deliberately not this gate's business — 38 of 65 step types on a measured instance are, and firing on them would be unfixable from the PR it fired on. See ${_fnt_log}."
 elif [ "${_fnt_rc}" -eq 0 ]; then
     _pass 111 "flow-node-taxonomy"
 elif ! _helper_finished "${_fnt_log}" '^checked [0-9]+ flow node'; then

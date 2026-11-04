@@ -216,10 +216,26 @@ def _php_files(root: str):
     return sorted(found)
 
 
+# Directories directly under lib/ that are layers, not components.
+LAYERS = ({p.split('/')[1] for p, _why in FORBIDDEN} | {p.split('/')[1] for p in PERMITTED}
+          | {'AppInfo', 'Db', 'Listener'})
+
+
 def _forbidden_reason(rel: str):
-    """Why this path may not elevate, or None when it may."""
+    """Why this path may not elevate, or None when it may.
+
+    Each prefix applies at lib/ and one component level down, so a controller
+    moved to lib/<Component>/Controller/ is forbidden exactly as one in
+    lib/Controller/ is. A first directory that is itself a layer
+    (lib/Service/Flow/...) is not a component.
+    """
+    candidates = [rel]
+    if rel.startswith('lib/'):
+        parts = rel[len('lib/'):].split('/', 1)
+        if len(parts) == 2 and parts[0] not in LAYERS:
+            candidates.append('lib/' + parts[1])
     for prefix, why in FORBIDDEN:
-        if rel.startswith(prefix):
+        if any(c.startswith(prefix) for c in candidates):
             return why
     return None
 

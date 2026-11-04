@@ -1234,5 +1234,35 @@ class MultiLineAttributeTest(unittest.TestCase):
         ]
         self.assertEqual(csc._docblock_block(lines, 5), [])
 
+
+class ComponentLayoutScope(unittest.TestCase):
+    """A component layout puts the backend layers one level down
+    (lib/Search/Service/); gate 16 judges them as it judges lib/Service/."""
+
+    def test_component_layers_are_in_scope(self):
+        for rel in ("lib/Search/Service/ViewService.php", "lib/Search/Controller/ViewsController.php",
+                    "lib/Search/BackgroundJob/ReindexJob.php", "lib/Search/Listener/IndexListener.php"):
+            self.assertTrue(csc._is_in_gate_scope(rel), rel)
+
+    def test_component_exempt_layers_stay_exempt(self):
+        for rel in ("lib/Search/Db/ViewMapper.php", "lib/Search/Migration/Version1.php", "lib/Db/Thing.php"):
+            self.assertFalse(csc._is_in_gate_scope(rel), rel)
+
+    def test_a_layer_is_not_read_as_a_component(self):
+        self.assertTrue(csc._is_in_gate_scope("lib/Service/Thing/Helper.php"))
+        self.assertFalse(csc._is_in_gate_scope("lib/Search/Model/Thing.php"))
+
+    def test_the_full_report_lists_component_files(self):
+        root = Path(tempfile.mkdtemp(prefix="gate16-comp-"))
+        try:
+            (root / "lib/Search/Service").mkdir(parents=True)
+            (root / "lib/Search/Service/ViewService.php").write_text("<?php\n")
+            (root / "lib/Search/Db").mkdir(parents=True)
+            (root / "lib/Search/Db/ViewMapper.php").write_text("<?php\n")
+            self.assertEqual(csc._iter_in_scope_files(root), ["lib/Search/Service/ViewService.php"])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

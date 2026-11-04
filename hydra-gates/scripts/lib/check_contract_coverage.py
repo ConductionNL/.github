@@ -59,6 +59,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 from source_scope import php_mask  # noqa: E402
+from controller_resolver import route_names_by_file  # noqa: E402
 
 GATE_NUM = 25
 
@@ -168,6 +169,19 @@ def _slug_for_controller(rel_path: str) -> str:
         last = last[:1].lower() + last[1:]
         return f"{ns}\\{last}"
     return short[:1].lower() + short[1:]
+
+
+def _is_controller_path(rel: str, routed: dict | None = None) -> bool:
+    """A controller file: `*Controller.php` in any Controller directory under
+    lib/, or a file the route table resolves to (controller_resolver.py)."""
+    if routed and os.path.normpath(rel) in routed:
+        return True
+    return rel.startswith("lib/") and rel.endswith("Controller.php") and "/Controller/" in "/" + rel
+
+
+def _routed_files(app_dir: Path, routes: dict) -> dict:
+    """{controller file: {route controller name}} for the route table."""
+    return route_names_by_file(str(app_dir), {ref.split("#", 1)[0] for ref in routes})
 
 
 def _entry_span(struct: str, at: int) -> tuple[int, int] | None:
@@ -465,7 +479,7 @@ def _contract_status(lines: list[str], decl_idx: int) -> tuple[str, str | None]:
 
 
 def scan_new_endpoints(
-    app_dir: Path, changed: dict[str, set[int]], routes: dict[str, list[str]]
+    app_dir: Path, changed: dict[str, set[int]], routes: dict[str, list[str]], routed: dict | None = None
 ) -> list[dict]:
     """Return new public endpoints ADDED in the diff that are registered routes.
 
@@ -473,7 +487,7 @@ def scan_new_endpoints(
     """
     out: list[dict] = []
     for rel, added in changed.items():
-        if not rel.startswith("lib/Controller/") or not rel.endswith("Controller.php"):
+        if not _is_controller_path(rel, routed):
             continue
         cfile = app_dir / rel
         if not cfile.is_file():
@@ -482,7 +496,7 @@ def scan_new_endpoints(
             lines = cfile.read_text(encoding="utf-8").splitlines()
         except OSError:
             continue
-        slug = _slug_for_controller(rel)
+        slugs = [_slug_for_controller(rel)] + sorted((routed or {}).get(os.path.normpath(rel), ()))
         for idx, line in enumerate(lines):
             m = _PHP_PUBLIC_METHOD_RE.match(line)
             if not m:
@@ -491,8 +505,8 @@ def scan_new_endpoints(
             if decl_line_no not in added:
                 continue  # method declaration not added in this PR
             method = m.group("name")
-            ref = f"{slug}#{method}"
-            if ref not in routes:
+            ref = next((f"{s}#{method}" for s in slugs if f"{s}#{method}" in routes), None)
+            if ref is None:
                 continue  # not a registered route → not a public endpoint
             if not _method_is_public_endpoint(lines, idx):
                 continue  # admin-only / no public attribute → out of scope
@@ -916,7 +930,7 @@ def _collect(app_dir: Path, base_ref: str) -> list[dict]:
         return []
     routes = parse_route_urls(routes_path)
     changed = changed_lines(base_ref, app_dir)
-    return scan_new_endpoints(app_dir, changed, routes)
+    return scan_new_endpoints(app_dir, changed, routes, _routed_files(app_dir, routes))
 
 
 def _collect_from(app_dir: Path, changed: dict[str, set[int]]) -> list[dict]:
@@ -929,7 +943,8 @@ def _collect_from(app_dir: Path, changed: dict[str, set[int]]) -> list[dict]:
     routes_path = app_dir / "appinfo" / "routes.php"
     if not routes_path.is_file():
         return []
-    return scan_new_endpoints(app_dir, changed, parse_route_urls(routes_path))
+    routes = parse_route_urls(routes_path)
+    return scan_new_endpoints(app_dir, changed, routes, _routed_files(app_dir, routes))
 
 
 def _all_controller_lines(app_dir: Path) -> dict[str, set[int]]:
@@ -941,10 +956,14 @@ def _all_controller_lines(app_dir: Path) -> dict[str, set[int]]:
     introduced it.
     """
     out: dict[str, set[int]] = {}
-    cdir = app_dir / "lib" / "Controller"
-    if not cdir.is_dir():
+    lib = app_dir / "lib"
+    if not lib.is_dir():
         return out
-    for cfile in cdir.rglob("*Controller.php"):
+    routes_path = app_dir / "appinfo" / "routes.php"
+    routed = _routed_files(app_dir, parse_route_urls(routes_path)) if routes_path.is_file() else {}
+    for cfile in lib.rglob("*.php"):
+        if not _is_controller_path(str(cfile.relative_to(app_dir)), routed):
+            continue
         try:
             n = len(cfile.read_text(encoding="utf-8").splitlines())
         except OSError:
@@ -986,9 +1005,11 @@ def run_gate(app_dir: Path) -> int:
         # The scope that matters is CONTROLLER files, not "any file". A diff of
         # a hundred docs commits still opens no controller, and reporting PASS
         # for it claims a wire contract was checked when none was read.
+        routes_path = app_dir / "appinfo" / "routes.php"
+        routed = _routed_files(app_dir, parse_route_urls(routes_path))
         changed = {
             rel: lines for rel, lines in changed.items()
-            if rel.startswith("lib/Controller/") and rel.endswith("Controller.php")
+            if _is_controller_path(rel, routed)
         }
         if not changed:
             print(
@@ -1007,7 +1028,7 @@ def run_gate(app_dir: Path) -> int:
             print(
                 f"[gate-{GATE_NUM}] contract-coverage: NOT APPLICABLE — "
                 f"appinfo/routes.php exists but there is no "
-                f"lib/Controller/*Controller.php for a route to reach."
+                f"controller under lib/ for a route to reach."
             )
             return EXIT_NOT_APPLICABLE
         endpoints = _collect_from(app_dir, all_lines)

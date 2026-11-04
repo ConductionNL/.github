@@ -186,6 +186,20 @@ BACKEND_DIRS = (
 )
 BACKEND_EXEMPT_DIRS = ("lib/Db", "lib/Migration")
 
+
+def _is_backend(rel: str) -> bool:
+    """True for PHP under a backend layer directory, at lib/<Layer>/ or one
+    component down at lib/<Component>/<Layer>/ (a component layout such as
+    lib/Search/Service/). The exempt layers stay exempt at either depth."""
+    candidates = [rel]
+    if rel.startswith("lib/"):
+        parts = rel[len("lib/"):].split("/", 1)
+        if len(parts) == 2 and "lib/" + parts[0] not in BACKEND_DIRS + BACKEND_EXEMPT_DIRS:
+            candidates.append("lib/" + parts[1])
+    if any(c.startswith(BACKEND_EXEMPT_DIRS) for c in candidates):
+        return False
+    return any(c.startswith(BACKEND_DIRS) for c in candidates)
+
 # `public function foo(` / `protected function foo(` — capture visibility+name.
 PHP_METHOD_RE = re.compile(
     r"^\s*(?:final\s+|abstract\s+|static\s+)*"
@@ -1095,7 +1109,7 @@ def _substantively_changed_lines(base_text: str, head_text: str, is_php: bool) -
 def _is_in_gate_scope(rel: str) -> bool:
     """True if this path is one gate-16 would evaluate at all."""
     if rel.endswith(".php"):
-        return rel.startswith(BACKEND_DIRS) and not rel.startswith(BACKEND_EXEMPT_DIRS)
+        return _is_backend(rel)
     return _is_frontend_in_scope(rel)
 
 
@@ -1566,10 +1580,9 @@ def check_frontend_file(rel: str, text: str, added: set[int], findings: list[str
 def _iter_in_scope_files(app_dir: Path) -> list[str]:
     """All in-scope backend + frontend files in the repo (full-repo, no diff)."""
     rels: list[str] = []
-    for d in BACKEND_DIRS:
-        base = app_dir / d
-        if base.is_dir():
-            rels += [str(p.relative_to(app_dir)) for p in base.rglob("*.php")]
+    lib = app_dir / "lib"
+    if lib.is_dir():
+        rels += [rel for rel in (str(p.relative_to(app_dir)) for p in lib.rglob("*.php")) if _is_backend(rel)]
     src = app_dir / "src"
     if src.is_dir():
         for p in src.rglob("*"):
@@ -1596,7 +1609,7 @@ def run_report(app_dir: Path) -> int:
         # → every in-scope method is evaluated; @spec / @spec-exclude still skip.
         all_lines = set(range(1, len(text.splitlines()) + 2))
         if rel.endswith(".php"):
-            if rel.startswith(BACKEND_EXEMPT_DIRS) or not rel.startswith(BACKEND_DIRS):
+            if not _is_backend(rel):
                 continue
             check_php_file(rel, text, all_lines, uncovered)
         elif _is_frontend_in_scope(rel):
@@ -1628,7 +1641,7 @@ def _uncovered_in_text(rel: str, text: str) -> set[str]:
     out: list[str] = []
     all_lines = set(range(1, len(text.splitlines()) + 2))
     if rel.endswith(".php"):
-        if rel.startswith(BACKEND_EXEMPT_DIRS) or not rel.startswith(BACKEND_DIRS):
+        if not _is_backend(rel):
             return set()
         check_php_file(rel, text, all_lines, out)
     elif _is_frontend_in_scope(rel):
@@ -1684,9 +1697,7 @@ def run_gate(app_dir: Path) -> int:
             continue
 
         if rel.endswith(".php"):
-            if rel.startswith(BACKEND_EXEMPT_DIRS):
-                continue
-            if not rel.startswith(BACKEND_DIRS):
+            if not _is_backend(rel):
                 continue
             check_php_file(rel, text, added, findings)
         elif _is_frontend_in_scope(rel):

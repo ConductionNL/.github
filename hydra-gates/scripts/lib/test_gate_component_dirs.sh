@@ -345,6 +345,100 @@ for _variant in with-alias without-alias; do
     fi
 done
 
+# ---------------------------------------------------------------------------
+# 5. Gate 30: a monitoring route served by a controller under lib/Search/.
+#    With no lib/Controller/ at all, the gate used to report NOT APPLICABLE.
+# ---------------------------------------------------------------------------
+E="${_WORK}/monitoring"
+_app "${E}"
+_put "${E}" appinfo/routes.php "<?php
+return ['routes' => [
+    ['name' => 'probe#index', 'url' => '/api/probe', 'verb' => 'GET'],
+]];
+"
+_put "${E}" appinfo/class-aliases.json '{"aliases": {"OCA\\CompFx\\Controller\\ProbeController": "OCA\\CompFx\\Search\\Controller\\ProbeController"}}
+'
+_put "${E}" lib/Search/Controller/ProbeController.php '<?php
+namespace OCA\CompFx\Search\Controller;
+
+use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\JSONResponse;
+
+class ProbeController extends Controller
+{
+    /**
+     * Liveness for the uptime monitor.
+     *
+     * @NoAdminRequired
+     *
+     * @return JSONResponse
+     */
+    public function index(): JSONResponse
+    {
+        return new JSONResponse(["ok" => true]);
+    }
+}
+'
+_git "${E}" add -A && _git "${E}" commit -q -m base
+if _run "${E}"; then
+    _expect_gate 30 FAIL "gate 30: a monitoring route on a controller under lib/Search/ without #[PublicPage] fails"
+    _expect_log public-monitoring "lib/Search/Controller/ProbeController.php" "gate 30 names the moved controller"
+fi
+
+# ---------------------------------------------------------------------------
+# 6. Gate 48: #[NoCSRFRequired] dropped from a controller under lib/Search/
+#    is a removal; the same controller only MOVED there is not.
+# ---------------------------------------------------------------------------
+_csrf_ctrl() { # <namespace> <attribute line or empty>
+    cat <<PHP
+<?php
+namespace $1;
+
+use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\JSONResponse;
+
+class ThingController extends Controller
+{
+    #[NoAdminRequired]
+$2
+    public function show(string \$id): JSONResponse
+    {
+        return new JSONResponse(['id' => \$id]);
+    }
+}
+PHP
+}
+for _variant in dropped moved; do
+    F="${_WORK}/csrf-${_variant}"
+    _app "${F}"
+    _put "${F}" appinfo/routes.php "$(_routes 0)"
+    if [ "${_variant}" = "dropped" ]; then
+        _put "${F}" appinfo/class-aliases.json "$(_aliases)"
+        _put "${F}" lib/Search/Controller/ThingController.php "$(_csrf_ctrl 'OCA\CompFx\Search\Controller' '    #[NoCSRFRequired]')"
+    else
+        _put "${F}" lib/Controller/ThingController.php "$(_csrf_ctrl 'OCA\CompFx\Controller' '    #[NoCSRFRequired]')"
+    fi
+    _git "${F}" add -A && _git "${F}" commit -q -m base
+    _git "${F}" branch -M base
+    _git "${F}" checkout -q -b change
+    if [ "${_variant}" = "dropped" ]; then
+        _put "${F}" lib/Search/Controller/ThingController.php "$(_csrf_ctrl 'OCA\CompFx\Search\Controller' '')"
+    else
+        mkdir -p "${F}/lib/Search/Controller"
+        _git "${F}" mv lib/Controller/ThingController.php lib/Search/Controller/ThingController.php
+        sed -i 's/^namespace OCA\\CompFx\\Controller;/namespace OCA\\CompFx\\Search\\Controller;/' "${F}/lib/Search/Controller/ThingController.php"
+        _put "${F}" appinfo/class-aliases.json "$(_aliases)"
+    fi
+    _git "${F}" add -A && _git "${F}" commit -q -m change
+    if _run "${F}" --scope-to-diff --base base; then
+        if [ "${_variant}" = "dropped" ]; then
+            _expect_gate 48 FAIL "gate 48: #[NoCSRFRequired] dropped under lib/Search/Controller is a removal"
+        else
+            _expect_gate 48 PASS "gate 48: moving a controller with #[NoCSRFRequired] intact is not a removal"
+        fi
+    fi
+done
+
 echo
 echo "test_gate_component_dirs.sh: ${_pass_n} passed, ${_fail_n} failed"
 [ "${_fail_n}" -eq 0 ]

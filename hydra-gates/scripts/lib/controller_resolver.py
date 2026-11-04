@@ -143,6 +143,36 @@ class Resolver:
         return None
 
 
+def app_namespace(root):
+    """`OCA\\<App>` from lib/AppInfo/Application.php, else appinfo/info.xml, else ''."""
+    try:
+        with open(os.path.join(root, "lib", "AppInfo", "Application.php"), encoding="utf-8", errors="replace") as fh:
+            m = re.search(r"^\s*namespace\s+(OCA\\[A-Za-z0-9_]+)", fh.read(), re.M)
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
+    try:
+        with open(os.path.join(root, "appinfo", "info.xml"), encoding="utf-8", errors="replace") as fh:
+            m = re.search(r"<namespace>\s*([A-Za-z0-9_]+)\s*</namespace>", fh.read())
+        if m:
+            return "OCA\\" + m.group(1)
+    except OSError:
+        pass
+    return ""
+
+
+def route_names_by_file(root, names):
+    """{file: {route controller name, ...}} for the names that resolve."""
+    resolver = Resolver(root, app_namespace(root))
+    out = {}
+    for name in set(names):
+        path = resolver.resolve(name)
+        if path:
+            out.setdefault(os.path.normpath(path), set()).add(name)
+    return out
+
+
 def main(argv):
     if len(argv) != 3:
         print(__doc__, file=sys.stderr)
