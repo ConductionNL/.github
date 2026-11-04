@@ -30,6 +30,9 @@ permissions:
 jobs:
   deploy:
     uses: ./.github/workflows/documentation.yml
+    secrets:
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
     with:
       cname: docs.conduction.nl
       source-folder: website
