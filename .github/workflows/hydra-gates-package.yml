@@ -53,23 +53,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  invariants:
-    name: "Package invariants"
+  # The helper suites run on SHARDS legs, balanced by measured run time
+  # (hydra-gates/tests/helper-suite-timings.tsv). Run one after another they
+  # took over 30 minutes by 2026-11-03 (141 suites; the slowest three,
+  # test_gate_acceptance_matrix, test_gate_45_to_55_acceptance and
+  # test_gate_crashed_checker_is_not_a_finding, about 10 minutes together),
+  # so this job hit its timeout on every pull request and read CANCELLED.
+  #
+  # `Package invariants` stays the one name the ruleset requires. It is the
+  # aggregate below, and it fails unless every discovered suite has exactly one
+  # PASS (or QUARANTINED) verdict from exactly one shard: a shard that is
+  # cancelled, crashes or loses a suite cannot read as green.
+  invariants-shard:
+    name: "Package invariants (shard ${{ matrix.shard }} of 6)"
     runs-on: ubuntu-latest
-    # Measured 2026-09-03 across five runs of this job: the ones that finished
-    # took 10.0 and 10.4 minutes; three others ran to exactly 15.3 and were
-    # killed. A 15-minute cap on a 10-minute suite with that spread times out
-    # routinely, and GitHub reports a timeout as CANCELLED — which reads as
-    # "superseded by a newer push" rather than "your suite was killed", so the
-    # failures were being dismissed. It was flapping on `main` and on two other
-    # branches, not on any one change.
-    #
-    # 30 leaves real headroom without hiding a suite that has genuinely started
-    # to hang: double the observed worst finish.
+    # Each shard carries about a sixth of the suite (5 to 6 minutes measured).
+    # The cap is the job's old 30, kept per leg, not raised.
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
+
       - name: Run the invariant suite
+        if: matrix.shard == 0
         run: bash hydra-gates/tests/test-hydra-gates-bin.sh
 
       # FIRST, with no node_modules at all — this is the only state in which the
@@ -78,40 +87,58 @@ jobs:
       # once ajv is installed below, `NODE_PATH=/nonexistent` no longer hides it
       # (node still resolves from ./node_modules) and that assertion self-skips.
       - name: "Manifest validator: the no-Ajv degraded contract"
+        if: matrix.shard == 0
         run: bash hydra-gates/scripts/lib/test_check_manifest.sh
 
       # Ajv is what gates 22 and 53 validate manifests WITH. Without it the
       # vendored validator can only run its structural lint, and the suite below
-      # would skip exactly the paths worth testing. It is a devDependency of
-      # every fleet app already; installing it here means CI exercises the same
-      # code path a real `npm ci` repo does.
+      # would skip exactly the paths worth testing.
       - name: Install ajv for the manifest-validation helpers
         run: npm install --no-save --no-audit --no-fund ajv ajv-formats
 
-      # EVERY scripts/lib/test_* suite, discovered rather than listed.
-      #
-      # This step used to name three files by hand. The package ships 19, so 15
-      # of them were executed by nothing at all — they existed, they looked like
-      # coverage, and no job ever ran them. Two were pointing at fixture
-      # directories that had never existed:
-      #
-      #   test_check_manifest.sh          green its whole life (a missing
-      #                                   manifest path makes the validator
-      #                                   print "Tier 0, skipping" and exit 0,
-      #                                   which is what 2 of its 3 assertions
-      #                                   expected) — fixed 2026-08-03
-      #   test_check_manifest_crossref.js red its whole life, unseen, because
-      #                                   nothing ran it — fixed 2026-08-04
-      #
-      # A hand-written list of test names decays exactly like a hand-written
-      # paths filter: adding a file does not add it to the list and the omission
-      # is invisible. The runner discovers instead, so a new scripts/lib/test_*
-      # is enforced the moment it lands, with no workflow edit to forget. Suites
-      # may be quarantined only with a stated reason, and the quarantine cannot
-      # rot — an entry that no longer exists, or that starts passing, fails the
-      # step.
-      - name: All helper suites (discovered, not listed)
+      # EVERY scripts/lib/test_* suite, discovered rather than listed, and
+      # split over the shards by run-helper-suites.sh itself. See the header of
+      # that script for why the list is discovered and how the quarantine
+      # cannot rot.
+      - name: Helper suites on this shard (discovered, not listed)
+        env:
+          HELPER_SHARDS: "6"
+          HELPER_SHARD: ${{ matrix.shard }}
+          HELPER_SUITE_REPORT: ${{ runner.temp }}/helper-suites-shard-${{ matrix.shard }}.tsv
         run: bash hydra-gates/tests/run-helper-suites.sh
+
+      - name: Keep this shard's verdicts for the aggregate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: helper-suites-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/helper-suites-shard-${{ matrix.shard }}.tsv
+          if-no-files-found: error
+          retention-days: 3
+
+  invariants:
+    name: "Package invariants"
+    runs-on: ubuntu-latest
+    needs: [invariants-shard]
+    if: ${{ !cancelled() }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The partition puts every suite on exactly one shard
+        run: python3 hydra-gates/tests/test-partition-helper-suites.py
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: helper-suites-shard-*
+          path: ${{ runner.temp }}/shards
+          merge-multiple: true
+
+      - name: Every discovered suite passed on exactly one shard
+        env:
+          SHARD_RESULT: ${{ needs.invariants-shard.result }}
+          SHARD_DIR: ${{ runner.temp }}/shards
+        run: python3 hydra-gates/tests/check-helper-shard-reports.py hydra-gates/scripts/lib "${SHARD_DIR}" 6 "${SHARD_RESULT}"
 
   install-from-published-location:
     name: "Install from published location (php:8.3-cli)"

@@ -30,6 +30,14 @@
 #   * a quarantined suite that now PASSES            -> hard failure (un-quarantine it)
 # So the list can only shrink, and it tells you why each entry is on it.
 #
+# SHARDS
+# ------
+# HELPER_SHARDS=<n> HELPER_SHARD=<i> runs only the suites partition_helper_suites.py
+# puts on shard i of n (balanced by helper-suite-timings.tsv). Every discovered
+# suite is on exactly one shard, and the quarantine check of an entry runs on
+# the shard that owns it. HELPER_SUITE_REPORT=<file> writes `<verdict>\t<name>`
+# per suite, which the CI aggregate job compares against discovery.
+#
 # Run: bash hydra-gates/tests/run-helper-suites.sh   (exit 0 = all green)
 set -uo pipefail
 
@@ -101,6 +109,25 @@ if [ "${#SUITES[@]}" -eq 0 ]; then
 fi
 
 echo "== discovered ${#SUITES[@]} helper suite(s) under scripts/lib/ =="
+
+SHARDS="${HELPER_SHARDS:-1}"
+SHARD="${HELPER_SHARD:-0}"
+if ! [[ "${SHARDS}" =~ ^[1-9][0-9]*$ && "${SHARD}" =~ ^[0-9]+$ ]] || [ "${SHARD}" -ge "${SHARDS}" ]; then
+	echo "FAIL — HELPER_SHARD=${SHARD} of HELPER_SHARDS=${SHARDS} is not a shard."
+	exit 1
+fi
+if [ "${SHARDS}" -gt 1 ]; then
+	mapfile -t SUITES < <(printf '%s\n' "${SUITES[@]}" \
+		| python3 "${PKG_ROOT}/tests/partition_helper_suites.py" "${PKG_ROOT}/tests/helper-suite-timings.tsv" "${SHARDS}" \
+		| awk -F'\t' -v s="${SHARD}" '$1 == s { print $2 }')
+	if [ "${#SUITES[@]}" -eq 0 ]; then
+		echo "FAIL — shard ${SHARD} of ${SHARDS} was given no suites; the partition is broken."
+		exit 1
+	fi
+	echo "== shard ${SHARD} of ${SHARDS}: ${#SUITES[@]} suite(s) =="
+fi
+REPORT="${HELPER_SUITE_REPORT:-/dev/null}"
+: > "${REPORT}"
 echo
 
 _failed=()
@@ -110,6 +137,7 @@ _skipped=()
 for name in "${SUITES[@]}"; do
 	if reason="$(is_quarantined "${name}")"; then
 		_skipped+=("${name}")
+		printf 'QUARANTINED\t%s\n' "${name}" >> "${REPORT}"
 		echo "QUARANTINED — ${name}"
 		echo "              ${reason}"
 		continue
@@ -120,11 +148,15 @@ for name in "${SUITES[@]}"; do
 		_failed+=("${name}")
 		continue
 	fi
+	_t0=${SECONDS}
 	if ( cd "${PKG_ROOT}" && "${cmd}" "scripts/lib/${name}" ) > "${LOGDIR}/helper_${name}.log" 2>&1; then
-		echo "PASS — ${name}"
+		echo "PASS — ${name} ($((SECONDS - _t0))s)"
+		printf 'PASS\t%s\n' "${name}" >> "${REPORT}"
 		_passed=$((_passed + 1))
 	else
-		echo "FAIL — ${name} (exit $?)"
+		_rc=$?
+		echo "FAIL — ${name} (exit ${_rc}, $((SECONDS - _t0))s)"
+		printf 'FAIL\t%s\n' "${name}" >> "${REPORT}"
 		sed 's/^/      /' "${LOGDIR}/helper_${name}.log" | tail -40
 		_failed+=("${name}")
 	fi
@@ -136,6 +168,15 @@ echo "== quarantine integrity =="
 _rot=0
 for entry in "${QUARANTINE[@]}"; do
 	name="${entry%%|*}"
+	# On a sharded run, the shard that owns the entry checks it. A stale entry
+	# (no such file) is on no shard, so shard 0 reports it.
+	if [ "${SHARDS}" -gt 1 ] && [ -f "${LIB}/${name}" ] \
+		&& ! printf '%s\n' "${SUITES[@]}" | grep -qxF "${name}"; then
+		continue
+	fi
+	if [ "${SHARDS}" -gt 1 ] && [ ! -f "${LIB}/${name}" ] && [ "${SHARD}" -ne 0 ]; then
+		continue
+	fi
 	if [ ! -f "${LIB}/${name}" ]; then
 		echo "FAIL — quarantined suite '${name}' no longer exists. Remove it from QUARANTINE."
 		_rot=$((_rot + 1))
