@@ -60,6 +60,7 @@ from typing import Iterable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 from source_scope import php_mask  # noqa: E402
+from php_attributes import attribute_block_start  # noqa: E402
 
 # Methods on OpenRegister's ObjectService that are pure CRUD pass-throughs.
 # A method body that calls ONE of these and nothing else of substance is
@@ -450,6 +451,10 @@ def _method_docblock(src_lines: list[str], header_line_no: int) -> str:
     i = header_line_no - 2  # 0-based index of the line just above the header
     while i >= 0:
         stripped = src_lines[i].strip()
+        attr = attribute_block_start(src_lines, i)
+        if attr is not None:
+            i = attr - 1
+            continue
         if stripped == "" or stripped.startswith("#["):
             i -= 1
             continue

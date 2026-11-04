@@ -74,6 +74,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 from source_scope import php_mask  # noqa: E402
 from source_scope import mask_html_comments  # noqa: E402
+from php_attributes import attribute_block_start  # noqa: E402
 
 # Foundation repos: the abstractions every leaf app consumes (ADR-022,
 # apps-consume-or-abstractions). A PUBLIC method here is frequently invoked
@@ -378,9 +379,15 @@ def _preceding_docblock_has_exclude(lines: list[str], method_line_idx: int) -> b
     """Look backward from the method declaration for a /** ... */ docblock
     and check it for the exclude annotation. method_line_idx is 0-based."""
     i = method_line_idx - 1
-    # Skip attribute lines (#[...]) directly above the method.
-    while i >= 0 and lines[i].strip().startswith("#["):
-        i -= 1
+    # Skip the attributes (one-line or multi-line) directly above the method.
+    while i >= 0:
+        attr = attribute_block_start(lines, i)
+        if attr is not None:
+            i = attr - 1
+        elif lines[i].strip().startswith("#["):
+            i -= 1
+        else:
+            break
     if i < 0 or "*/" not in lines[i]:
         return False
     # Walk upward collecting the docblock body until the opening /**.

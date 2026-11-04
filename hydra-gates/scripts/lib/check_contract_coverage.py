@@ -59,6 +59,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 from source_scope import php_mask  # noqa: E402
+from php_attributes import attribute_block_start  # noqa: E402
 
 GATE_NUM = 25
 
@@ -363,10 +364,14 @@ def _decl_preamble(lines: list[str], decl_idx: int) -> list[str]:
     while i >= 0:
         raw = lines[i]
         s = raw.strip()
-        # Blank lines, PHP attributes (`#[...]`, incl. the `]` / `)]` tail of a
-        # multi-line one) and `//` notes are all part of the preamble.
-        if s == "" or s.startswith("#[") or s.startswith("]") or s.startswith(")]") \
-                or s.startswith("//"):
+        # Blank lines, PHP attributes (one-line or multi-line, see
+        # php_attributes) and `//` notes are all part of the preamble.
+        attr = attribute_block_start(lines, i)
+        if attr is not None:
+            out.extend(reversed(lines[attr:i + 1]))
+            i = attr - 1
+            continue
+        if s == "" or s.startswith("#[") or s.startswith("//"):
             out.append(raw)
             i -= 1
             continue
@@ -426,8 +431,11 @@ def _docblock_block(lines: list[str], decl_idx: int) -> list[str]:
     i = decl_idx - 1
     while i >= 0:
         stripped = lines[i].strip()
-        if (stripped == "" or stripped.startswith("#[")
-                or stripped.startswith("]") or stripped.startswith("//")):
+        attr = attribute_block_start(lines, i)
+        if attr is not None:
+            i = attr - 1
+            continue
+        if stripped == "" or stripped.startswith("#[") or stripped.startswith("//"):
             i -= 1
             continue
         break

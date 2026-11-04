@@ -88,6 +88,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 from source_scope import php_mask, script_mask  # noqa: E402
+from php_attributes import attribute_block_start  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -254,8 +255,11 @@ def _is_excluded(src: str, line_no: int) -> bool:
     i = line_no - 2                        # line_no is 1-based; start above it
     while i >= 0:
         stripped = lines[i].strip()
-        if (stripped == "" or stripped.startswith("#[")
-                or stripped.startswith("]") or stripped.startswith("//")):
+        attr = attribute_block_start(lines, i)
+        if attr is not None:
+            i = attr - 1
+            continue
+        if stripped == "" or stripped.startswith("#[") or stripped.startswith("//"):
             i -= 1
             continue
         break

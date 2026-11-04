@@ -83,6 +83,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from source_scope import php_mask  # noqa: E402
+from php_attributes import attribute_block_start  # noqa: E402
 
 GATE_NUM = 61
 
@@ -428,8 +429,14 @@ def _method_spans(lines: list[str]) -> list[tuple[str, int, int]]:
 def _docblock_above(lines: list[str], decl_idx: int) -> list[str]:
     """The ``/** ... */`` block directly above ``decl_idx``, or []."""
     i = decl_idx - 1
-    while i >= 0 and (lines[i].strip() == '' or lines[i].strip().startswith('#[')):
-        i -= 1
+    while i >= 0:
+        attr = attribute_block_start(lines, i)
+        if attr is not None:
+            i = attr - 1
+        elif lines[i].strip() == '' or lines[i].strip().startswith('#['):
+            i -= 1
+        else:
+            break
     if i < 0 or not lines[i].strip().endswith('*/'):
         return []
     end = i
