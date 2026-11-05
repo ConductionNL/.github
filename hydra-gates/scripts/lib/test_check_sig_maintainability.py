@@ -539,6 +539,14 @@ class Structure(unittest.TestCase):
             self.assertEqual(deps["lib/Service/A.php"], {"lib/Service/B.php", "lib/Db/Thing.php", "lib/Db/Other.php"})
             self.assertEqual(deps["lib/Db/Other.php"], set())
 
+            repo.write("lib/Db/Mapper.php", "<?php\nnamespace OCA\\Fx\\Db;\nclass Mapper {}\n")
+            repo.write("lib/Db/Mapper/Handler.php", "<?php\nnamespace OCA\\Fx\\Db\\Mapper;\nclass Handler {}\n")
+            repo.write("lib/Db/Mapper/Caller.php", "<?php\nnamespace OCA\\Fx\\Db\\Mapper;\nclass Caller { public function f(\\OCA\\Fx\\Db\\Mapper $m): void {} }\n")
+            sub = ["lib/Db/Mapper.php", "lib/Db/Mapper/Handler.php", "lib/Db/Mapper/Caller.php"]
+            deps = sig.php_dependencies(repo.dir, sub)
+            self.assertEqual(deps["lib/Db/Mapper/Handler.php"], set())
+            self.assertEqual(deps["lib/Db/Mapper/Caller.php"], {"lib/Db/Mapper.php"})
+
             repo.write("src/api/__init__.py", "")
             repo.write("src/api/main.py", "from .routers import documents\nfrom src.api.utils.crypto import encrypt\nimport os\n")
             repo.write("src/api/routers/__init__.py", "")

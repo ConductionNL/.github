@@ -586,7 +586,9 @@ def duplication_profile(app, clones, files_by_lang, limit=DUPLICATION_LIMIT):
 def php_dependencies(app, files):
     """{module: set(modules it depends on)} for PHP files that declare a class
     in a namespace. Dependencies are `use` imports, fully-qualified names, and
-    bare class names resolved in the file's own namespace."""
+    bare class names resolved in the file's own namespace. The namespace
+    declaration itself is not a reference: lib/Db/Mapper/Handler.php in
+    namespace ...\\Db\\Mapper does not depend on lib/Db/Mapper.php."""
     fqcn, ns_of, srcs = {}, {}, {}
     for rel in files:
         src = read_text(os.path.join(app, rel))
@@ -595,7 +597,7 @@ def php_dependencies(app, files):
             continue
         ns = m.group(1).strip()
         ns_of[rel] = ns
-        srcs[rel] = re.sub(r"/\*.*?\*/|//[^\n]*", "", src, flags=re.S)
+        srcs[rel] = re.sub(r"^namespace\s+[^;]+;", "", re.sub(r"/\*.*?\*/|//[^\n]*", "", src, flags=re.S), count=1, flags=re.M)
         fqcn[f"{ns}\\{os.path.basename(rel)[:-4]}"] = rel
     deps = {}
     for rel, body in srcs.items():
