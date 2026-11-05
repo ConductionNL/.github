@@ -4,7 +4,7 @@ sidebar_label: Quality matrix
 description: One matrix per app with our estimate of the SIG stars, our own banded measures and every gate.
 ---
 
-import SigMatrix, {SigBeyond, SigFloors} from '@site/src/components/SigMatrix';
+import SigMatrix, {SigBeyond, SigFloors, SigLevers} from '@site/src/components/SigMatrix';
 import matrix from '@site/src/data/sig-matrix.json';
 
 # Quality matrix
@@ -28,17 +28,20 @@ rise from 1 November.
 
 ## How to read the matrix
 
-Each column is an app. The rows come in four sections.
+Each column is an app. The rows come in five sections.
 
-1. **SIG maintainability.** Every check of gate 122, per language, rated from
+1. **Estimated SIG rating.** Our estimate of the rating Sigrid would give,
+   from 0.5 to 5.5. The overall row is a range. Below it are the five
+   sub-characteristics and the seven properties. All of it is an estimate.
+2. **SIG maintainability.** Every check of gate 122, per language, rated from
    1 to 5 stars.
-2. **SIG's other models.** Open Source Health and Architecture Quality, where
+3. **SIG's other models.** Open Source Health and Architecture Quality, where
    we can measure them. SIG publishes only the 4-star value, so a cell says
    met (4★) or missed (&lt;4).
-3. **Our own measures.** Tests, debt, security, and accessibility and UI. We
+4. **Our own measures.** Tests, debt, security, and accessibility and UI. We
    define these bands ourselves. The table below the matrix gives each band's
    basis.
-4. **Gates per category.** Each row shows the gates that pass out of the gates
+5. **Gates per category.** Each row shows the gates that pass out of the gates
    that apply, and the findings of all of them. Open a row to see its gates.
 
 A cell shows the stars and the measured value. Hover a cell for the details.
@@ -75,6 +78,80 @@ Entanglement is our estimate from the violation degree, because SIG
 normalises it against benchmark figures it does not publish. It is shown, but
 gate 123 does not floor it.
 
+### How we estimate the SIG rating
+
+SIG rates each app from 0.5 to 5.5 stars. Our estimate follows SIG's own
+steps, from the checks up to one number. Where SIG publishes nothing, we
+made a choice. Each choice is listed under assumptions.
+
+1. **Check.** A share of code between two star limits gets a rating between
+   them, on a straight line. A share at the 4-star limit rates 3.5. This is
+   equation 1 of Alves, Correia and Visser (2011). We test it on the paper's
+   own example, which rates 2.68.
+2. **Property.** A property with three checks takes its worst check. Same
+   paper.
+3. **Languages.** Each language gets its own property rating. We weight them
+   by the code each property measures in that language.
+4. **Sub-characteristic.** The plain mean of its properties. Analysability:
+   duplication and unit size. Modifiability: duplication, unit complexity and
+   module coupling. Testability: unit complexity and component independence.
+   Modularity: module coupling, component independence and component
+   entanglement. Reusability: unit size and unit interfacing.
+5. **Overall.** The power mean of the five sub-characteristics. SIG switched
+   to a power mean in 2026 but does not publish the exponent. We show two:
+   p = 1, the plain mean, and p = -1, the harmonic mean. The harmonic mean
+   pulls harder towards the weakest sub-characteristic. The real rating
+   probably sits between them.
+
+Rounding to stars follows SIG: half up, and 5.5 is still 5 stars. A rating
+row is coloured by its stars and shows the value. The overall row is coloured
+by the lower end of its range.
+
+#### Sources
+
+- SIG, [Key changes in the 2026 SIG quality models](https://docs.sigrid-says.com/reference/quality-model-documents/2026-model-changes.html):
+  volume is removed, and the overall rating is now a power mean.
+- SIG/TÜV NORD CERT, [Guidance for Producers v18.1](https://www.softwareimprovementgroup.com/wp-content/uploads/SIG-TUViT-Evaluation-Criteria-Trusted-Product-Maintainability.pdf),
+  31 March 2026: the 4-star limits, per language.
+- SIG/TÜViT, [Evaluation Criteria Trusted Product Maintainability v12.0](http://web.archive.org/web/20220302065632/https://www.softwareimprovementgroup.com/wp-content/uploads/2020-SIG-TUViT-Evaluation-Criteria-Trusted-Product-Maintainability.pdf),
+  2020: which properties feed which sub-characteristic, and the order of the steps.
+- Alves, Correia and Visser, [Benchmark-based aggregation of metrics to ratings](http://web.archive.org/web/2020/http://wiki.di.uminho.pt/twiki/pub/Personal/Tiago/Publications/mensura11-alves.pdf),
+  IWSM/Mensura 2011: the interpolation and the minimum over checks.
+- Baggen, Correia, Schill and Visser, Standardized code quality benchmarking
+  for improving software maintainability, Software Quality Journal 2012: a
+  sub-characteristic is the mean of its properties, and the overall rating
+  the mean of the sub-characteristics.
+- SIG's own example in the 2026 changes page fits this: its overall 3.2 is the
+  mean of the sub-characteristics, not of the properties.
+
+#### Assumptions
+
+- **Exponent.** SIG does not publish it. We show p = 1 and p = -1 as a range.
+- **Weights.** Every property counts equally in its sub-characteristic, and
+  every sub-characteristic in the overall rating. SIG's criteria say a panel
+  of experts sets the weights, and SIG does not publish them. SIG's example
+  fits equal weights.
+- **Mapping in 2026.** The 2020 mapping, minus volume and component balance,
+  which the 2026 model no longer rates. Nothing is added.
+- **Power mean at the last step only.** The sub-characteristics stay a plain
+  mean. SIG's text does not say at which step the power mean applies.
+- **Languages.** Weighted by code. SIG says most results are weighted by code
+  volume, but not how languages combine.
+- **1 star.** Below the 2-star limit the rating falls on a straight line to
+  0.5 when all code is in the band. The paper does not give this end.
+- **Limits other than 4 stars.** Our derived 5, 3 and 2-star limits from the
+  table above.
+- **Independence and entanglement below 4 stars.** SIG rates them below 4
+  stars but publishes only the 4-star limit. For the estimate, each star level
+  doubles the allowed exposure. Independence: at least 97.25, 94.5, 89 and
+  78% hidden code for 5, 4, 3 and 2 stars. Entanglement: at most 0.0375,
+  0.075, 0.15 and 0.30. The check rows keep showing `<4`.
+- **Entanglement value.** We rate the violation degree. SIG combines it with
+  the communication density against benchmark maxima it does not publish.
+- **Missing structure.** Module coupling, independence and entanglement are
+  measured for PHP under `lib/` and for Python only. JavaScript, TypeScript
+  and Vue count for the unit checks and duplication.
+
 ### Floors
 
 A cell with a ring and a lock is floored. Gate 123 holds that check. The app
@@ -83,6 +160,24 @@ Re-recording a floor never lowers it. A floored check that the v18.1 limits
 miss stays in the floor and shows `<4` until development meets it again.
 
 <SigMatrix />
+
+## Levers per app
+
+A lever is one property in one language. For each lever we move the next
+1,000 lines above a bound to low risk, worst band first, and rate the app
+again. The gain is how far the overall rating rises, under both exponents.
+When fewer than 1,000 lines are left, the gain is for the lines that are
+left.
+
+Lines for +0.5 is the fewest lines to fix in that language to raise the
+property by half a star. "Not by vue alone" means fixing every vue line is
+not enough, because the other languages hold the rating down.
+
+A lever is sure when it ranks in the top 3 under both exponents. The panel
+shows the top 5 of each app, ordered by their two ranks together. Start with
+a sure lever.
+
+<SigLevers />
 
 ## What we add beyond SIG
 
@@ -135,7 +230,7 @@ The matrix reads `website/src/data/sig-matrix.json`. One script writes it.
 
 5. Commit the new `sig-matrix.json`.
 
-The generator takes the star bands from gate 122 and the own bands from
+The generator takes the rating estimate and the star bands from gate 122 and the own bands from
 `website/scripts/quality_measures.py`. A change to either shows up in the
 matrix on the next refresh.
 

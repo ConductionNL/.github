@@ -14,6 +14,9 @@ that were measured; the own measures and the floors are read from them.
 (run-hydra-gates.sh --full); without it the gate rows stay empty.
 
 Sections of the matrix, top to bottom:
+  0. Estimated SIG rating: gate 122's rating estimate (rating_estimate()),
+     the overall range, the sub-characteristics and the properties. The
+     levers of each app go to `ratings`, for the levers panel.
   1. SIG maintainability: every gate 122 check, rated 5 to 1 star on the
      STAR_BANDS of check_sig_maintainability.py.
   2. SIG's other models, where we measure them: the published 4-star value,
@@ -117,6 +120,60 @@ def maintainability(reports):
     return groups
 
 
+LEVERS_SHOWN = 5
+
+
+def whole_stars(rating):
+    """SIG's display rule: round half up, but 5.5 is still 5 stars."""
+    return min(5, int(rating + 0.5))
+
+
+def rating_cell(value, detail=""):
+    if value is None:
+        return None
+    return {"stars": whole_stars(value), "text": f"{value:.2f}", "title": detail or f"{value:.2f} on 0.5 to 5.5"}
+
+
+def rating_section(ratings):
+    """Section 0: the estimated overall rating, sub-characteristics and properties."""
+    overall = {}
+    for app, r in ratings.items():
+        rng = r["overall"]["range"]
+        if not rng:
+            continue
+        overall[app] = {"stars": whole_stars(rng[0]), "text": f"{rng[0]:.2f} to {rng[1]:.2f}",
+                        "title": f"estimate: {rng[0]:.2f} (power mean p = -1) to {rng[1]:.2f} (p = 1); "
+                                 f"stars of the lower end"}
+    groups = [{"title": "overall", "rows": [{
+        "id": "rating.overall", "label": "Estimated SIG rating (estimate)",
+        "limits": "range from power mean p = -1 to p = 1, on 0.5 to 5.5; stars of the lower end",
+        "cells": overall}]}]
+    subs = []
+    for sub, members in sig.SUBCHARACTERISTICS.items():
+        cells = {a: c for a, r in ratings.items() for c in [rating_cell(r["subcharacteristics"][sub])] if c}
+        subs.append({"id": f"rating.sub.{sub}", "label": sub,
+                     "limits": "mean of " + ", ".join(m.replace("_", " ") for m in members), "cells": cells})
+    groups.append({"title": "sub-characteristics (estimate)", "rows": subs})
+    props = []
+    for prop in sig.RATED_PROPERTIES:
+        cells = {}
+        for a, r in ratings.items():
+            pr = r["properties"][prop]
+            langs = ", ".join(f"{lg} {x['rating']:.2f}" for lg, x in pr["languages"].items())
+            c = rating_cell(pr["rating"], f"{pr['rating']:.2f}; per language: {langs}" if pr["rating"] is not None else "")
+            if c:
+                cells[a] = c
+        props.append({"id": f"rating.prop.{prop}", "label": prop.replace("_", " "),
+                      "limits": "languages weighted by their code", "cells": cells})
+    groups.append({"title": "properties (estimate)", "rows": props})
+    return {"id": "rating", "title": "Estimated SIG rating", "groups": groups}
+
+
+def lever_panel(ratings):
+    """{app: the top LEVERS_SHOWN levers}, for the levers panel."""
+    return {app: r["levers"][:LEVERS_SHOWN] for app, r in ratings.items()}
+
+
 def fmt(value, unit):
     if value is None:
         return "n/a"
@@ -204,20 +261,24 @@ def build(report_dir, clones, gates_dir, date):
         measures[a] = qm.measure(a, clone, reports[a], gates.get(a))
         others[a] = qm.sig_other(clone, reports[a], measures[a])
         print(f"measured {a}", file=sys.stderr)
+    ratings = {a: sig.rating_estimate(r) for a, r in reports.items()}
     m_groups = maintainability(reports)
     apps = {}
     for a, r in reports.items():
         rated = [c["stars"] for g in m_groups for row in g["rows"] if not row["id"].endswith("entanglement")
                  for c in [row["cells"].get(a)] if c]
         apps[a] = {"head": r["head"], "checks": len(rated), "four": sum(1 for s in rated if s in (4, 5)),
-                   "five": sum(1 for s in rated if s == 5), "gates_measured": a in gates}
+                   "five": sum(1 for s in rated if s == 5), "gates_measured": a in gates,
+                   "rating": ratings[a]["overall"]["range"]}
     beyond = [{"label": label, "why": why, "basis": basis}
               for _mid, (_s, label, _u, _h, _c, basis, why) in qm.BANDS.items()]
     return {
         "measured": date,
         "guidance": sig.GUIDANCE,
         "apps": apps,
+        "levers": lever_panel(ratings),
         "sections": [
+            rating_section(ratings),
             {"id": "maintainability", "title": "SIG maintainability", "groups": m_groups},
             {"id": "sig-other", "title": "SIG's other models", "groups": sig_other(others)},
             {"id": "own", "title": "Our own measures", "groups": own_measures(measures)},

@@ -136,6 +136,7 @@ function Legend() {
       {[5, 4, 3, 2, 1].map((s) => (
         <li key={s}><span className={`${styles.swatch} ${STAR_CLASS[s]}`}>{s}★</span> {starLabel(s)}</li>
       ))}
+      <li><span className={`${styles.swatch} ${styles.s3}`}>3★</span> in the estimated rating rows: a rating from 0.5 to 5.5, rounded to stars, value below</li>
       <li><span className={`${styles.swatch} ${styles.below}`}>&lt;4</span> misses 4 stars where no lower band is published or estimated</li>
       <li><span className={`${styles.swatch} ${styles.s4} ${styles.floored}`}>4★<Lock /></span> floored: gate 123 refuses a change that loses this check</li>
       <li><span className={`${styles.swatch} ${styles.empty}`}>·</span> not measured for this app</li>
@@ -276,6 +277,75 @@ export default function SigMatrix() {
           </tbody>
         </table>
       </Scroller>
+    </div>
+  );
+}
+
+const leverName = (lever) => `${lever.property.replace(/_/g, ' ')} in ${lever.language}`;
+const gain = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(3)}`;
+
+function LeverTable({app}) {
+  const levers = matrix.levers[app] || [];
+  const range = matrix.apps[app].rating;
+  const id = `sig-levers-${app}`;
+  return (
+    <section className={styles.leverCard} aria-labelledby={id}>
+      <h3 id={id} className={styles.leverTitle}>
+        {app}
+        <span className={styles.value}>
+          {range ? `estimated rating ${range[0].toFixed(2)} to ${range[1].toFixed(2)}` : 'no rating estimate'}
+        </span>
+      </h3>
+      {levers.length === 0 ? <p>No lever: no measured code sits above a bound.</p> : (
+        <table className={styles.leverTable}>
+          <thead>
+            <tr>
+              <th scope="col">lever</th>
+              <th scope="col">gain from the next 1,000 lines, p = 1 / p = -1</th>
+              <th scope="col">lines for +0.5</th>
+              <th scope="col">sure</th>
+            </tr>
+          </thead>
+          <tbody>
+            {levers.map((lever) => (
+              <tr key={`${lever.property}-${lever.language}`}>
+                <th scope="row">
+                  {leverName(lever)}
+                  <span className={styles.value}>{lever.fixable_loc.toLocaleString('en')} lines above a bound</span>
+                </th>
+                <td>
+                  {gain(lever.gain_per_kloc.p1)} / {gain(lever.gain_per_kloc['p-1'])}
+                  {lever.fixed_loc < 1000 && (
+                    <span className={styles.value}>only {lever.fixed_loc.toLocaleString('en')} lines left</span>
+                  )}
+                </td>
+                <td>
+                  {lever.loc_for_half_star === null
+                    ? `not by ${lever.language} alone`
+                    : lever.loc_for_half_star.toLocaleString('en')}
+                </td>
+                <td>
+                  {lever.sure
+                    ? <span className={styles.sure}>✓ sure</span>
+                    : <span>no<span className={styles.srOnly}>, not in the top 3 under both exponents</span></span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+export function SigLevers() {
+  const filter = useAppFilter();
+  return (
+    <div className={styles.matrix}>
+      <AppFilter filter={filter} />
+      <div className={styles.levers}>
+        {filter.apps.map((app) => <LeverTable key={app} app={app} />)}
+      </div>
     </div>
   );
 }

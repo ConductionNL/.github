@@ -251,3 +251,49 @@
   outline: 2px solid var(--ifm-color-primary);
   outline-offset: 2px;
 }
+
+.levers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
+  gap: 1rem;
+}
+
+.leverCard {
+  border: 1px solid var(--sig-line);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+
+.leverTitle {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.leverTable {
+  display: table;
+  width: 100%;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.leverTable th,
+.leverTable td {
+  padding: 0.25rem 0.375rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.leverTable tbody th {
+  font-weight: 600;
+}
+
+/* A sure lever carries a mark and a ring in the text colour, so it reads without colour. */
+.sure {
+  display: inline-block;
+  padding: 0 0.375rem;
+  border-radius: 4px;
+  font-weight: 700;
+  background: var(--sig-4-bg);
+  color: var(--sig-4-fg);
+  box-shadow: inset 0 0 0 1px currentColor;
+}

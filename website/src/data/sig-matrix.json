@@ -8,6 +8,10 @@
    "four": 26,
    "five": 20,
    "gates_measured": true,
+   "rating": [
+    2.82,
+    3.05
+   ],
    "floor": {
     "measured_at": "fa904a5336edb7875caae746fe3f33e2936f19f8",
     "profile": "four-star",
@@ -48,6 +52,10 @@
    "four": 27,
    "five": 22,
    "gates_measured": true,
+   "rating": [
+    2.91,
+    3.07
+   ],
    "floor": {
     "measured_at": "4242e8e192f874b7d3bf42142ade288f5b16d571",
     "profile": "four-star",
@@ -85,6 +93,10 @@
    "four": 20,
    "five": 16,
    "gates_measured": true,
+   "rating": [
+    2.34,
+    2.59
+   ],
    "floor": {
     "measured_at": "39ea188e36792d2f9dafb501e4c673c0c124bfe3",
     "profile": "four-star",
@@ -117,6 +129,10 @@
    "four": 40,
    "five": 36,
    "gates_measured": true,
+   "rating": [
+    3.76,
+    3.86
+   ],
    "floor": {
     "measured_at": "aff2d60506416dc8e1fd4fdd9460b6b013de1b22",
     "profile": "four-star",
@@ -170,6 +186,10 @@
    "four": 25,
    "five": 17,
    "gates_measured": true,
+   "rating": [
+    2.36,
+    2.5
+   ],
    "floor": {
     "measured_at": "57a9fd9827bd8c1259f0e0f4f71db7e0d4562ba7",
     "profile": "four-star",
@@ -208,6 +228,10 @@
    "four": 29,
    "five": 26,
    "gates_measured": true,
+   "rating": [
+    2.43,
+    2.71
+   ],
    "floor": {
     "measured_at": "d83ab23ea4d62be49fe44b85ee10e7bf8a45ef65",
     "profile": "four-star",
@@ -250,6 +274,10 @@
    "four": 25,
    "five": 25,
    "gates_measured": true,
+   "rating": [
+    2.99,
+    3.14
+   ],
    "floor": {
     "measured_at": "45eaf576b23a5caea7ce9c5a59feba8b4a58453a",
     "profile": "four-star",
@@ -289,6 +317,10 @@
    "four": 46,
    "five": 42,
    "gates_measured": true,
+   "rating": [
+    2.94,
+    3.12
+   ],
    "floor": {
     "measured_at": "441230acacf9db9134f58ddbe16d99f2a6198ed0",
     "profile": "four-star",
@@ -348,6 +380,10 @@
    "four": 33,
    "five": 29,
    "gates_measured": true,
+   "rating": [
+    3.95,
+    4.08
+   ],
    "floor": {
     "measured_at": "ebf9d6ef989a31f93f3946824db270dfaa36a91d",
     "profile": "four-star",
@@ -390,6 +426,10 @@
    "four": 28,
    "five": 25,
    "gates_measured": true,
+   "rating": [
+    2.67,
+    2.89
+   ],
    "floor": {
     "measured_at": "9080e1fa1847f34da7d39925e3f7422eb8afbd7b",
     "profile": "four-star",
@@ -431,6 +471,10 @@
    "four": 23,
    "five": 18,
    "gates_measured": true,
+   "rating": [
+    2.55,
+    2.75
+   ],
    "floor": {
     "measured_at": "9e7724de3a5c37531d77a91e93291ec3997f9aa6",
     "profile": "four-star",
@@ -466,6 +510,10 @@
    "four": 39,
    "five": 28,
    "gates_measured": true,
+   "rating": [
+    3.99,
+    4.05
+   ],
    "floor": {
     "measured_at": "d34462cb2ff262b487b5b496429c3f8c7c29d883",
     "profile": "four-star",
@@ -513,11 +561,15 @@
    }
   },
   "openregister": {
-   "head": "28cabe734e2cf70e6b31a2bd91dc05bc11915116",
+   "head": "6891dae13f7258c6bcf9ab61318d90686acf798b",
    "checks": 58,
    "four": 49,
    "five": 46,
    "gates_measured": true,
+   "rating": [
+    2.36,
+    2.59
+   ],
    "floor": {
     "measured_at": "eb3a390862dddf4da46f08d2e811541a43247193",
     "profile": "four-star",
@@ -574,6 +626,10 @@
    "four": 21,
    "five": 16,
    "gates_measured": true,
+   "rating": [
+    2.34,
+    2.63
+   ],
    "floor": {
     "measured_at": "35f348596c0367ff57fec4d4db718a1f88efd904",
     "profile": "four-star",
@@ -608,6 +664,10 @@
    "four": 33,
    "five": 26,
    "gates_measured": true,
+   "rating": [
+    3.59,
+    3.77
+   ],
    "floor": {
     "measured_at": "3b8ff73ff13e024b900c24dcdfb9b4b2c8565edc",
     "profile": "four-star",
@@ -653,6 +713,10 @@
    "four": 24,
    "five": 17,
    "gates_measured": true,
+   "rating": [
+    2.45,
+    2.83
+   ],
    "floor": {
     "measured_at": "2dadb96df494bcb386c355bc5eebb10be4ffa983",
     "profile": "four-star",
@@ -690,6 +754,10 @@
    "four": 32,
    "five": 28,
    "gates_measured": true,
+   "rating": [
+    2.16,
+    2.32
+   ],
    "floor": {
     "measured_at": "7a3bf1b6b94534fd339ed77926a8c19c9469890f",
     "profile": "four-star",
@@ -735,6 +803,10 @@
    "four": 24,
    "five": 17,
    "gates_measured": true,
+   "rating": [
+    2.11,
+    2.27
+   ],
    "floor": {
     "measured_at": "dd80cc1c259151f94ad7fcc2abe0b9d617237aff",
     "profile": "four-star",
@@ -765,6 +837,10 @@
    "four": 22,
    "five": 20,
    "gates_measured": true,
+   "rating": [
+    3.4,
+    3.59
+   ],
    "floor": {
     "measured_at": "c27409621334bade24127b7d4656431a0033f48d",
     "profile": "four-star",
@@ -799,6 +875,10 @@
    "four": 41,
    "five": 41,
    "gates_measured": true,
+   "rating": [
+    3.68,
+    3.88
+   ],
    "floor": {
     "measured_at": "8a3e548dcf9aa9989a32334e0bb1976c10658ec7",
     "profile": "four-star",
@@ -848,7 +928,3061 @@
    }
   }
  },
+ "levers": {
+  "buildiq": [
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 3873,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0572,
+     "p-1": 0.1039
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 1823
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 1613,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0672,
+     "p-1": 0.0426
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 3
+    },
+    "sure": true,
+    "loc_for_half_star": 1300
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 1131,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0574,
+     "p-1": 0.0369
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 1131
+   },
+   {
+    "property": "unit_complexity",
+    "language": "javascript",
+    "fixable_loc": 1299,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0282,
+     "p-1": 0.0527
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 2
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "duplication",
+    "language": "vue",
+    "fixable_loc": 3589,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0323,
+     "p-1": 0.0208
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 1664
+   }
+  ],
+  "decidiq": [
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 11274,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0409,
+     "p-1": 0.0638
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 2049
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 2240,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0695,
+     "p-1": 0.0474
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 3
+    },
+    "sure": true,
+    "loc_for_half_star": 1270
+   },
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 2567,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0391,
+     "p-1": 0.0612
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "unit_complexity",
+    "language": "javascript",
+    "fixable_loc": 1426,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0294,
+     "p-1": 0.0464
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 932,
+    "fixed_loc": 932,
+    "gain_per_kloc": {
+     "p1": 0.038,
+     "p-1": 0.0272
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 932
+   }
+  ],
+  "dossiq": [
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 2537,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0256,
+     "p-1": 0.0476
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 49524,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0144,
+     "p-1": 0.0271
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 5800
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 11832,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0124,
+     "p-1": 0.007
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 6
+    },
+    "sure": false,
+    "loc_for_half_star": 3827
+   },
+   {
+    "property": "unit_size",
+    "language": "vue",
+    "fixable_loc": 5172,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0099,
+     "p-1": 0.0083
+    },
+    "rank": {
+     "p1": 6,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "duplication",
+    "language": "vue",
+    "fixable_loc": 3042,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0124,
+     "p-1": 0.007
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 7
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   }
+  ],
+  "filinq": [
+   {
+    "property": "component_independence",
+    "language": "php",
+    "fixable_loc": 3730,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0801,
+     "p-1": 0.0707
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 1033
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 2719,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0635,
+     "p-1": 0.0576
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 1406
+   },
+   {
+    "property": "duplication",
+    "language": "vue",
+    "fixable_loc": 1344,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0589,
+     "p-1": 0.0535
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 3
+    },
+    "sure": true,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 10066,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0529,
+     "p-1": 0.0493
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 1577
+   },
+   {
+    "property": "unit_interfacing",
+    "language": "php",
+    "fixable_loc": 11045,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0202,
+     "p-1": 0.0313
+    },
+    "rank": {
+     "p1": 8,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 2089
+   }
+  ],
+  "hermiq": [
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 1823,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0309,
+     "p-1": 0.05
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 4734,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0719,
+     "p-1": 0.0474
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 3
+    },
+    "sure": true,
+    "loc_for_half_star": 837
+   },
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 17224,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0299,
+     "p-1": 0.0484
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 2379
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 4943,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0295,
+     "p-1": 0.0195
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 2151
+   },
+   {
+    "property": "unit_complexity",
+    "language": "javascript",
+    "fixable_loc": 750,
+    "fixed_loc": 750,
+    "gain_per_kloc": {
+     "p1": 0.0166,
+     "p-1": 0.0272
+    },
+    "rank": {
+     "p1": 6,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   }
+  ],
+  "humaniq": [
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 1618,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.2378,
+     "p-1": 0.1347
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 132
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 2379,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.1303,
+     "p-1": 0.0666
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 609
+   },
+   {
+    "property": "unit_interfacing",
+    "language": "php",
+    "fixable_loc": 9493,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0317,
+     "p-1": 0.0267
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 3
+    },
+    "sure": false,
+    "loc_for_half_star": 1580
+   },
+   {
+    "property": "unit_size",
+    "language": "php",
+    "fixable_loc": 20505,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0325,
+     "p-1": 0.0216
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 2835
+   },
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 14413,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0073,
+     "p-1": 0.0156
+    },
+    "rank": {
+     "p1": 6,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 2291
+   }
+  ],
+  "integriq": [
+   {
+    "property": "component_independence",
+    "language": "php",
+    "fixable_loc": 6703,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0336,
+     "p-1": 0.0296
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 1880
+   },
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 29542,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0238,
+     "p-1": 0.0235
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 3503
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 7832,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0193,
+     "p-1": 0.0177
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 3
+    },
+    "sure": true,
+    "loc_for_half_star": 2705
+   },
+   {
+    "property": "duplication",
+    "language": "vue",
+    "fixable_loc": 2589,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0193,
+     "p-1": 0.0177
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "unit_size",
+    "language": "php",
+    "fixable_loc": 61000,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0091,
+     "p-1": 0.0129
+    },
+    "rank": {
+     "p1": 6,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 8875
+   }
+  ],
+  "keepiq": [
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 3248,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.1242,
+     "p-1": 0.0932
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 134
+   },
+   {
+    "property": "unit_complexity",
+    "language": "typescript",
+    "fixable_loc": 4716,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0325,
+     "p-1": 0.0549
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 2366
+   },
+   {
+    "property": "unit_complexity",
+    "language": "javascript",
+    "fixable_loc": 3991,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0322,
+     "p-1": 0.0545
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 3
+    },
+    "sure": false,
+    "loc_for_half_star": 2862
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 3312,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0347,
+     "p-1": 0.023
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 6
+    },
+    "sure": false,
+    "loc_for_half_star": 1765
+   },
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 9190,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0321,
+     "p-1": 0.0543
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 2277
+   }
+  ],
+  "larpinq": [
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 1019,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.1173,
+     "p-1": 0.1538
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 711
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 192,
+    "fixed_loc": 192,
+    "gain_per_kloc": {
+     "p1": 0.0996,
+     "p-1": 0.0856
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 129
+   },
+   {
+    "property": "unit_size",
+    "language": "php",
+    "fixable_loc": 2634,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0961,
+     "p-1": 0.0718
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 3
+    },
+    "sure": true,
+    "loc_for_half_star": 1063
+   },
+   {
+    "property": "unit_interfacing",
+    "language": "php",
+    "fixable_loc": 867,
+    "fixed_loc": 867,
+    "gain_per_kloc": {
+     "p1": 0.0915,
+     "p-1": 0.0668
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 400
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 166,
+    "fixed_loc": 166,
+    "gain_per_kloc": {
+     "p1": 0.0588,
+     "p-1": 0.0421
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   }
+  ],
+  "launchpad": [
+   {
+    "property": "duplication",
+    "language": "vue",
+    "fixable_loc": 1271,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0804,
+     "p-1": 0.0495
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 3
+    },
+    "sure": true,
+    "loc_for_half_star": 1044
+   },
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 11194,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.053,
+     "p-1": 0.0925
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 1
+    },
+    "sure": false,
+    "loc_for_half_star": 1574
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 2583,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0788,
+     "p-1": 0.0485
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 1045
+   },
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 1671,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0358,
+     "p-1": 0.0635
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 2
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 1921,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0703,
+     "p-1": 0.0414
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 923
+   }
+  ],
+  "learniq": [
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 3466,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.038,
+     "p-1": 0.0677
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 3329
+   },
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 17487,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0338,
+     "p-1": 0.0606
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 2467
+   },
+   {
+    "property": "unit_complexity",
+    "language": "javascript",
+    "fixable_loc": 1508,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0259,
+     "p-1": 0.0467
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 3
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 549,
+    "fixed_loc": 549,
+    "gain_per_kloc": {
+     "p1": 0.0301,
+     "p-1": 0.0178
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 549
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 7068,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0253,
+     "p-1": 0.0178
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 3220
+   }
+  ],
+  "opencatalogi": [
+   {
+    "property": "component_independence",
+    "language": "php",
+    "fixable_loc": 1792,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.1878,
+     "p-1": 0.1893
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 487
+   },
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 5276,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0864,
+     "p-1": 0.0987
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 966
+   },
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 2377,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0694,
+     "p-1": 0.0799
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 3
+    },
+    "sure": false,
+    "loc_for_half_star": 1508
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 1105,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0745,
+     "p-1": 0.0784
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "unit_size",
+    "language": "php",
+    "fixable_loc": 11577,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0433,
+     "p-1": 0.0443
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 2308
+   }
+  ],
+  "openregister": [
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 4915,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0074,
+     "p-1": 0.0132
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 19463,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0084,
+     "p-1": 0.0044
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 13045
+   },
+   {
+    "property": "unit_size",
+    "language": "vue",
+    "fixable_loc": 10930,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0047,
+     "p-1": 0.0044
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 3
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 25426,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0056,
+     "p-1": 0.0035
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 8159
+   },
+   {
+    "property": "unit_complexity",
+    "language": "javascript",
+    "fixable_loc": 584,
+    "fixed_loc": 584,
+    "gain_per_kloc": {
+     "p1": 0.0017,
+     "p-1": 0.0031
+    },
+    "rank": {
+     "p1": 7,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   }
+  ],
+  "pipelinq": [
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 5340,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0645,
+     "p-1": 0.1332
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 1633
+   },
+   {
+    "property": "unit_complexity",
+    "language": "javascript",
+    "fixable_loc": 2161,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0231,
+     "p-1": 0.0501
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 1774,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0503,
+     "p-1": 0.0274
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 3
+    },
+    "sure": true,
+    "loc_for_half_star": 1774
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 9585,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0155,
+     "p-1": 0.0094
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 4555
+   },
+   {
+    "property": "unit_size",
+    "language": "vue",
+    "fixable_loc": 8699,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0146,
+     "p-1": 0.0101
+    },
+    "rank": {
+     "p1": 6,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   }
+  ],
+  "planninq": [
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 934,
+    "fixed_loc": 934,
+    "gain_per_kloc": {
+     "p1": 0.2218,
+     "p-1": 0.2517
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 133
+   },
+   {
+    "property": "duplication",
+    "language": "vue",
+    "fixable_loc": 1051,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.145,
+     "p-1": 0.0927
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 501
+   },
+   {
+    "property": "unit_complexity",
+    "language": "javascript",
+    "fixable_loc": 889,
+    "fixed_loc": 889,
+    "gain_per_kloc": {
+     "p1": 0.0503,
+     "p-1": 0.0578
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 3
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 457,
+    "fixed_loc": 457,
+    "gain_per_kloc": {
+     "p1": 0.0546,
+     "p-1": 0.0361
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "unit_interfacing",
+    "language": "php",
+    "fixable_loc": 1628,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0601,
+     "p-1": 0.0351
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 6
+    },
+    "sure": false,
+    "loc_for_half_star": 714
+   }
+  ],
+  "portaliq": [
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 2294,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0931,
+     "p-1": 0.2094
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 388
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 3726,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0666,
+     "p-1": 0.0399
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 1002
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 3333,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0487,
+     "p-1": 0.0243
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 3
+    },
+    "sure": true,
+    "loc_for_half_star": 1985
+   },
+   {
+    "property": "duplication",
+    "language": "vue",
+    "fixable_loc": 3751,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0269,
+     "p-1": 0.0136
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 2232
+   },
+   {
+    "property": "unit_interfacing",
+    "language": "javascript",
+    "fixable_loc": 2931,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0199,
+     "p-1": 0.0125
+    },
+    "rank": {
+     "p1": 6,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   }
+  ],
+  "shillinq": [
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 1457,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0854,
+     "p-1": 0.0467
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 781
+   },
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 2827,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0224,
+     "p-1": 0.0362
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "unit_size",
+    "language": "vue",
+    "fixable_loc": 5477,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0127,
+     "p-1": 0.0118
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 3
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "duplication",
+    "language": "vue",
+    "fixable_loc": 2860,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0153,
+     "p-1": 0.0104
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "unit_complexity",
+    "language": "javascript",
+    "fixable_loc": 740,
+    "fixed_loc": 740,
+    "gain_per_kloc": {
+     "p1": 0.0064,
+     "p-1": 0.0105
+    },
+    "rank": {
+     "p1": 7,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   }
+  ],
+  "stackiq": [
+   {
+    "property": "unit_complexity",
+    "language": "vue",
+    "fixable_loc": 1563,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0314,
+     "p-1": 0.051
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 4315,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.047,
+     "p-1": 0.0478
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 1141
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 3923,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0311,
+     "p-1": 0.0251
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 1862
+   },
+   {
+    "property": "unit_complexity",
+    "language": "javascript",
+    "fixable_loc": 1072,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0281,
+     "p-1": 0.0458
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 3
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   },
+   {
+    "property": "duplication",
+    "language": "vue",
+    "fixable_loc": 4019,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0278,
+     "p-1": 0.0224
+    },
+    "rank": {
+     "p1": 6,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 2432
+   }
+  ],
+  "thematiq": [
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 4026,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.1357,
+     "p-1": 0.1714
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 509
+   },
+   {
+    "property": "unit_interfacing",
+    "language": "php",
+    "fixable_loc": 4297,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.1137,
+     "p-1": 0.1144
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 617
+   },
+   {
+    "property": "unit_size",
+    "language": "php",
+    "fixable_loc": 8340,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0739,
+     "p-1": 0.0607
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 3
+    },
+    "sure": false,
+    "loc_for_half_star": 1978
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 452,
+    "fixed_loc": 452,
+    "gain_per_kloc": {
+     "p1": 0.0831,
+     "p-1": 0.0451
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 452
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 1539,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0735,
+     "p-1": 0.0593
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 908
+   }
+  ],
+  "versioniq": [
+   {
+    "property": "unit_complexity",
+    "language": "php",
+    "fixable_loc": 1899,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.1919,
+     "p-1": 0.2678
+    },
+    "rank": {
+     "p1": 1,
+     "p-1": 1
+    },
+    "sure": true,
+    "loc_for_half_star": 299
+   },
+   {
+    "property": "unit_interfacing",
+    "language": "php",
+    "fixable_loc": 1512,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.1669,
+     "p-1": 0.1215
+    },
+    "rank": {
+     "p1": 2,
+     "p-1": 2
+    },
+    "sure": true,
+    "loc_for_half_star": 164
+   },
+   {
+    "property": "module_coupling",
+    "language": "php",
+    "fixable_loc": 281,
+    "fixed_loc": 281,
+    "gain_per_kloc": {
+     "p1": 0.0479,
+     "p-1": 0.0396
+    },
+    "rank": {
+     "p1": 5,
+     "p-1": 4
+    },
+    "sure": false,
+    "loc_for_half_star": 281
+   },
+   {
+    "property": "unit_size",
+    "language": "php",
+    "fixable_loc": 3155,
+    "fixed_loc": 1000,
+    "gain_per_kloc": {
+     "p1": 0.0492,
+     "p-1": 0.0352
+    },
+    "rank": {
+     "p1": 4,
+     "p-1": 5
+    },
+    "sure": false,
+    "loc_for_half_star": 2031
+   },
+   {
+    "property": "duplication",
+    "language": "php",
+    "fixable_loc": 203,
+    "fixed_loc": 203,
+    "gain_per_kloc": {
+     "p1": 0.0553,
+     "p-1": 0.0337
+    },
+    "rank": {
+     "p1": 3,
+     "p-1": 7
+    },
+    "sure": false,
+    "loc_for_half_star": null
+   }
+  ]
+ },
  "sections": [
+  {
+   "id": "rating",
+   "title": "Estimated SIG rating",
+   "groups": [
+    {
+     "title": "overall",
+     "rows": [
+      {
+       "id": "rating.overall",
+       "label": "Estimated SIG rating (estimate)",
+       "limits": "range from power mean p = -1 to p = 1, on 0.5 to 5.5; stars of the lower end",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "2.82 to 3.05",
+         "title": "estimate: 2.82 (power mean p = -1) to 3.05 (p = 1); stars of the lower end"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "2.91 to 3.07",
+         "title": "estimate: 2.91 (power mean p = -1) to 3.07 (p = 1); stars of the lower end"
+        },
+        "dossiq": {
+         "stars": 2,
+         "text": "2.34 to 2.59",
+         "title": "estimate: 2.34 (power mean p = -1) to 2.59 (p = 1); stars of the lower end"
+        },
+        "filinq": {
+         "stars": 4,
+         "text": "3.76 to 3.86",
+         "title": "estimate: 3.76 (power mean p = -1) to 3.86 (p = 1); stars of the lower end"
+        },
+        "hermiq": {
+         "stars": 2,
+         "text": "2.36 to 2.50",
+         "title": "estimate: 2.36 (power mean p = -1) to 2.50 (p = 1); stars of the lower end"
+        },
+        "humaniq": {
+         "stars": 2,
+         "text": "2.43 to 2.71",
+         "title": "estimate: 2.43 (power mean p = -1) to 2.71 (p = 1); stars of the lower end"
+        },
+        "integriq": {
+         "stars": 3,
+         "text": "2.99 to 3.14",
+         "title": "estimate: 2.99 (power mean p = -1) to 3.14 (p = 1); stars of the lower end"
+        },
+        "keepiq": {
+         "stars": 3,
+         "text": "2.94 to 3.12",
+         "title": "estimate: 2.94 (power mean p = -1) to 3.12 (p = 1); stars of the lower end"
+        },
+        "larpinq": {
+         "stars": 4,
+         "text": "3.95 to 4.08",
+         "title": "estimate: 3.95 (power mean p = -1) to 4.08 (p = 1); stars of the lower end"
+        },
+        "launchpad": {
+         "stars": 3,
+         "text": "2.67 to 2.89",
+         "title": "estimate: 2.67 (power mean p = -1) to 2.89 (p = 1); stars of the lower end"
+        },
+        "learniq": {
+         "stars": 3,
+         "text": "2.55 to 2.75",
+         "title": "estimate: 2.55 (power mean p = -1) to 2.75 (p = 1); stars of the lower end"
+        },
+        "opencatalogi": {
+         "stars": 4,
+         "text": "3.99 to 4.05",
+         "title": "estimate: 3.99 (power mean p = -1) to 4.05 (p = 1); stars of the lower end"
+        },
+        "openregister": {
+         "stars": 2,
+         "text": "2.36 to 2.59",
+         "title": "estimate: 2.36 (power mean p = -1) to 2.59 (p = 1); stars of the lower end"
+        },
+        "pipelinq": {
+         "stars": 2,
+         "text": "2.34 to 2.63",
+         "title": "estimate: 2.34 (power mean p = -1) to 2.63 (p = 1); stars of the lower end"
+        },
+        "planninq": {
+         "stars": 4,
+         "text": "3.59 to 3.77",
+         "title": "estimate: 3.59 (power mean p = -1) to 3.77 (p = 1); stars of the lower end"
+        },
+        "portaliq": {
+         "stars": 2,
+         "text": "2.45 to 2.83",
+         "title": "estimate: 2.45 (power mean p = -1) to 2.83 (p = 1); stars of the lower end"
+        },
+        "shillinq": {
+         "stars": 2,
+         "text": "2.16 to 2.32",
+         "title": "estimate: 2.16 (power mean p = -1) to 2.32 (p = 1); stars of the lower end"
+        },
+        "stackiq": {
+         "stars": 2,
+         "text": "2.11 to 2.27",
+         "title": "estimate: 2.11 (power mean p = -1) to 2.27 (p = 1); stars of the lower end"
+        },
+        "thematiq": {
+         "stars": 3,
+         "text": "3.40 to 3.59",
+         "title": "estimate: 3.40 (power mean p = -1) to 3.59 (p = 1); stars of the lower end"
+        },
+        "versioniq": {
+         "stars": 4,
+         "text": "3.68 to 3.88",
+         "title": "estimate: 3.68 (power mean p = -1) to 3.88 (p = 1); stars of the lower end"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "title": "sub-characteristics (estimate)",
+     "rows": [
+      {
+       "id": "rating.sub.analysability",
+       "label": "analysability",
+       "limits": "mean of duplication, unit size",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "3.39",
+         "title": "3.39 on 0.5 to 5.5"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "3.30",
+         "title": "3.30 on 0.5 to 5.5"
+        },
+        "dossiq": {
+         "stars": 3,
+         "text": "2.97",
+         "title": "2.97 on 0.5 to 5.5"
+        },
+        "filinq": {
+         "stars": 4,
+         "text": "3.65",
+         "title": "3.65 on 0.5 to 5.5"
+        },
+        "hermiq": {
+         "stars": 3,
+         "text": "2.80",
+         "title": "2.80 on 0.5 to 5.5"
+        },
+        "humaniq": {
+         "stars": 4,
+         "text": "3.54",
+         "title": "3.54 on 0.5 to 5.5"
+        },
+        "integriq": {
+         "stars": 3,
+         "text": "2.90",
+         "title": "2.90 on 0.5 to 5.5"
+        },
+        "keepiq": {
+         "stars": 4,
+         "text": "3.69",
+         "title": "3.69 on 0.5 to 5.5"
+        },
+        "larpinq": {
+         "stars": 5,
+         "text": "4.55",
+         "title": "4.55 on 0.5 to 5.5"
+        },
+        "launchpad": {
+         "stars": 3,
+         "text": "3.23",
+         "title": "3.23 on 0.5 to 5.5"
+        },
+        "learniq": {
+         "stars": 3,
+         "text": "2.84",
+         "title": "2.84 on 0.5 to 5.5"
+        },
+        "opencatalogi": {
+         "stars": 4,
+         "text": "3.65",
+         "title": "3.65 on 0.5 to 5.5"
+        },
+        "openregister": {
+         "stars": 3,
+         "text": "2.83",
+         "title": "2.83 on 0.5 to 5.5"
+        },
+        "pipelinq": {
+         "stars": 3,
+         "text": "2.90",
+         "title": "2.90 on 0.5 to 5.5"
+        },
+        "planninq": {
+         "stars": 4,
+         "text": "4.44",
+         "title": "4.44 on 0.5 to 5.5"
+        },
+        "portaliq": {
+         "stars": 4,
+         "text": "3.61",
+         "title": "3.61 on 0.5 to 5.5"
+        },
+        "shillinq": {
+         "stars": 2,
+         "text": "2.43",
+         "title": "2.43 on 0.5 to 5.5"
+        },
+        "stackiq": {
+         "stars": 3,
+         "text": "2.50",
+         "title": "2.50 on 0.5 to 5.5"
+        },
+        "thematiq": {
+         "stars": 5,
+         "text": "4.58",
+         "title": "4.58 on 0.5 to 5.5"
+        },
+        "versioniq": {
+         "stars": 5,
+         "text": "4.73",
+         "title": "4.73 on 0.5 to 5.5"
+        }
+       }
+      },
+      {
+       "id": "rating.sub.modifiability",
+       "label": "modifiability",
+       "limits": "mean of duplication, unit complexity, module coupling",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "3.62",
+         "title": "3.62 on 0.5 to 5.5"
+        },
+        "decidiq": {
+         "stars": 4,
+         "text": "3.75",
+         "title": "3.75 on 0.5 to 5.5"
+        },
+        "dossiq": {
+         "stars": 3,
+         "text": "3.33",
+         "title": "3.33 on 0.5 to 5.5"
+        },
+        "filinq": {
+         "stars": 4,
+         "text": "4.39",
+         "title": "4.39 on 0.5 to 5.5"
+        },
+        "hermiq": {
+         "stars": 3,
+         "text": "3.00",
+         "title": "3.00 on 0.5 to 5.5"
+        },
+        "humaniq": {
+         "stars": 3,
+         "text": "2.98",
+         "title": "2.98 on 0.5 to 5.5"
+        },
+        "integriq": {
+         "stars": 4,
+         "text": "3.50",
+         "title": "3.50 on 0.5 to 5.5"
+        },
+        "keepiq": {
+         "stars": 3,
+         "text": "3.44",
+         "title": "3.44 on 0.5 to 5.5"
+        },
+        "larpinq": {
+         "stars": 5,
+         "text": "4.73",
+         "title": "4.73 on 0.5 to 5.5"
+        },
+        "launchpad": {
+         "stars": 4,
+         "text": "3.52",
+         "title": "3.52 on 0.5 to 5.5"
+        },
+        "learniq": {
+         "stars": 3,
+         "text": "3.36",
+         "title": "3.36 on 0.5 to 5.5"
+        },
+        "opencatalogi": {
+         "stars": 4,
+         "text": "4.15",
+         "title": "4.15 on 0.5 to 5.5"
+        },
+        "openregister": {
+         "stars": 3,
+         "text": "3.22",
+         "title": "3.22 on 0.5 to 5.5"
+        },
+        "pipelinq": {
+         "stars": 3,
+         "text": "3.17",
+         "title": "3.17 on 0.5 to 5.5"
+        },
+        "planninq": {
+         "stars": 4,
+         "text": "4.25",
+         "title": "4.25 on 0.5 to 5.5"
+        },
+        "portaliq": {
+         "stars": 3,
+         "text": "3.19",
+         "title": "3.19 on 0.5 to 5.5"
+        },
+        "shillinq": {
+         "stars": 3,
+         "text": "2.99",
+         "title": "2.99 on 0.5 to 5.5"
+        },
+        "stackiq": {
+         "stars": 2,
+         "text": "2.13",
+         "title": "2.13 on 0.5 to 5.5"
+        },
+        "thematiq": {
+         "stars": 4,
+         "text": "4.47",
+         "title": "4.47 on 0.5 to 5.5"
+        },
+        "versioniq": {
+         "stars": 5,
+         "text": "4.57",
+         "title": "4.57 on 0.5 to 5.5"
+        }
+       }
+      },
+      {
+       "id": "rating.sub.testability",
+       "label": "testability",
+       "limits": "mean of unit complexity, component independence",
+       "cells": {
+        "buildiq": {
+         "stars": 2,
+         "text": "1.69",
+         "title": "1.69 on 0.5 to 5.5"
+        },
+        "decidiq": {
+         "stars": 2,
+         "text": "1.92",
+         "title": "1.92 on 0.5 to 5.5"
+        },
+        "dossiq": {
+         "stars": 1,
+         "text": "1.39",
+         "title": "1.39 on 0.5 to 5.5"
+        },
+        "filinq": {
+         "stars": 4,
+         "text": "3.59",
+         "title": "3.59 on 0.5 to 5.5"
+        },
+        "hermiq": {
+         "stars": 2,
+         "text": "1.53",
+         "title": "1.53 on 0.5 to 5.5"
+        },
+        "humaniq": {
+         "stars": 1,
+         "text": "1.37",
+         "title": "1.37 on 0.5 to 5.5"
+        },
+        "integriq": {
+         "stars": 3,
+         "text": "2.75",
+         "title": "2.75 on 0.5 to 5.5"
+        },
+        "keepiq": {
+         "stars": 2,
+         "text": "1.90",
+         "title": "1.90 on 0.5 to 5.5"
+        },
+        "larpinq": {
+         "stars": 3,
+         "text": "2.90",
+         "title": "2.90 on 0.5 to 5.5"
+        },
+        "launchpad": {
+         "stars": 2,
+         "text": "1.63",
+         "title": "1.63 on 0.5 to 5.5"
+        },
+        "learniq": {
+         "stars": 2,
+         "text": "1.55",
+         "title": "1.55 on 0.5 to 5.5"
+        },
+        "opencatalogi": {
+         "stars": 3,
+         "text": "3.42",
+         "title": "3.42 on 0.5 to 5.5"
+        },
+        "openregister": {
+         "stars": 1,
+         "text": "1.46",
+         "title": "1.46 on 0.5 to 5.5"
+        },
+        "pipelinq": {
+         "stars": 1,
+         "text": "1.28",
+         "title": "1.28 on 0.5 to 5.5"
+        },
+        "planninq": {
+         "stars": 3,
+         "text": "2.94",
+         "title": "2.94 on 0.5 to 5.5"
+        },
+        "portaliq": {
+         "stars": 1,
+         "text": "1.26",
+         "title": "1.26 on 0.5 to 5.5"
+        },
+        "shillinq": {
+         "stars": 1,
+         "text": "1.39",
+         "title": "1.39 on 0.5 to 5.5"
+        },
+        "stackiq": {
+         "stars": 1,
+         "text": "1.44",
+         "title": "1.44 on 0.5 to 5.5"
+        },
+        "thematiq": {
+         "stars": 2,
+         "text": "2.46",
+         "title": "2.46 on 0.5 to 5.5"
+        },
+        "versioniq": {
+         "stars": 2,
+         "text": "2.49",
+         "title": "2.49 on 0.5 to 5.5"
+        }
+       }
+      },
+      {
+       "id": "rating.sub.modularity",
+       "label": "modularity",
+       "limits": "mean of module coupling, component independence, component entanglement",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "3.33",
+         "title": "3.33 on 0.5 to 5.5"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "3.15",
+         "title": "3.15 on 0.5 to 5.5"
+        },
+        "dossiq": {
+         "stars": 3,
+         "text": "2.98",
+         "title": "2.98 on 0.5 to 5.5"
+        },
+        "filinq": {
+         "stars": 5,
+         "text": "4.72",
+         "title": "4.72 on 0.5 to 5.5"
+        },
+        "hermiq": {
+         "stars": 3,
+         "text": "2.71",
+         "title": "2.71 on 0.5 to 5.5"
+        },
+        "humaniq": {
+         "stars": 3,
+         "text": "3.08",
+         "title": "3.08 on 0.5 to 5.5"
+        },
+        "integriq": {
+         "stars": 4,
+         "text": "4.32",
+         "title": "4.32 on 0.5 to 5.5"
+        },
+        "keepiq": {
+         "stars": 3,
+         "text": "3.17",
+         "title": "3.17 on 0.5 to 5.5"
+        },
+        "larpinq": {
+         "stars": 4,
+         "text": "3.79",
+         "title": "3.79 on 0.5 to 5.5"
+        },
+        "launchpad": {
+         "stars": 3,
+         "text": "3.34",
+         "title": "3.34 on 0.5 to 5.5"
+        },
+        "learniq": {
+         "stars": 3,
+         "text": "3.21",
+         "title": "3.21 on 0.5 to 5.5"
+        },
+        "opencatalogi": {
+         "stars": 5,
+         "text": "4.76",
+         "title": "4.76 on 0.5 to 5.5"
+        },
+        "openregister": {
+         "stars": 3,
+         "text": "3.27",
+         "title": "3.27 on 0.5 to 5.5"
+        },
+        "pipelinq": {
+         "stars": 3,
+         "text": "3.09",
+         "title": "3.09 on 0.5 to 5.5"
+        },
+        "planninq": {
+         "stars": 3,
+         "text": "2.67",
+         "title": "2.67 on 0.5 to 5.5"
+        },
+        "portaliq": {
+         "stars": 3,
+         "text": "3.03",
+         "title": "3.03 on 0.5 to 5.5"
+        },
+        "shillinq": {
+         "stars": 3,
+         "text": "2.73",
+         "title": "2.73 on 0.5 to 5.5"
+        },
+        "stackiq": {
+         "stars": 2,
+         "text": "2.00",
+         "title": "2.00 on 0.5 to 5.5"
+        },
+        "thematiq": {
+         "stars": 3,
+         "text": "3.25",
+         "title": "3.25 on 0.5 to 5.5"
+        },
+        "versioniq": {
+         "stars": 4,
+         "text": "3.61",
+         "title": "3.61 on 0.5 to 5.5"
+        }
+       }
+      },
+      {
+       "id": "rating.sub.reusability",
+       "label": "reusability",
+       "limits": "mean of unit size, unit interfacing",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "3.22",
+         "title": "3.22 on 0.5 to 5.5"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "3.22",
+         "title": "3.22 on 0.5 to 5.5"
+        },
+        "dossiq": {
+         "stars": 2,
+         "text": "2.28",
+         "title": "2.28 on 0.5 to 5.5"
+        },
+        "filinq": {
+         "stars": 3,
+         "text": "2.98",
+         "title": "2.98 on 0.5 to 5.5"
+        },
+        "hermiq": {
+         "stars": 2,
+         "text": "2.46",
+         "title": "2.46 on 0.5 to 5.5"
+        },
+        "humaniq": {
+         "stars": 3,
+         "text": "2.58",
+         "title": "2.58 on 0.5 to 5.5"
+        },
+        "integriq": {
+         "stars": 2,
+         "text": "2.24",
+         "title": "2.24 on 0.5 to 5.5"
+        },
+        "keepiq": {
+         "stars": 3,
+         "text": "3.39",
+         "title": "3.39 on 0.5 to 5.5"
+        },
+        "larpinq": {
+         "stars": 4,
+         "text": "4.44",
+         "title": "4.44 on 0.5 to 5.5"
+        },
+        "launchpad": {
+         "stars": 3,
+         "text": "2.74",
+         "title": "2.74 on 0.5 to 5.5"
+        },
+        "learniq": {
+         "stars": 3,
+         "text": "2.81",
+         "title": "2.81 on 0.5 to 5.5"
+        },
+        "opencatalogi": {
+         "stars": 4,
+         "text": "4.25",
+         "title": "4.25 on 0.5 to 5.5"
+        },
+        "openregister": {
+         "stars": 2,
+         "text": "2.17",
+         "title": "2.17 on 0.5 to 5.5"
+        },
+        "pipelinq": {
+         "stars": 3,
+         "text": "2.70",
+         "title": "2.70 on 0.5 to 5.5"
+        },
+        "planninq": {
+         "stars": 5,
+         "text": "4.57",
+         "title": "4.57 on 0.5 to 5.5"
+        },
+        "portaliq": {
+         "stars": 3,
+         "text": "3.05",
+         "title": "3.05 on 0.5 to 5.5"
+        },
+        "shillinq": {
+         "stars": 2,
+         "text": "2.08",
+         "title": "2.08 on 0.5 to 5.5"
+        },
+        "stackiq": {
+         "stars": 3,
+         "text": "3.29",
+         "title": "3.29 on 0.5 to 5.5"
+        },
+        "thematiq": {
+         "stars": 3,
+         "text": "3.17",
+         "title": "3.17 on 0.5 to 5.5"
+        },
+        "versioniq": {
+         "stars": 4,
+         "text": "3.98",
+         "title": "3.98 on 0.5 to 5.5"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "title": "properties (estimate)",
+     "rows": [
+      {
+       "id": "rating.prop.duplication",
+       "label": "duplication",
+       "limits": "languages weighted by their code",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "3.56",
+         "title": "3.56; per language: javascript 4.86, php 3.84, vue 3.11"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "3.26",
+         "title": "3.26; per language: javascript 5.04, php 3.86, vue 2.03"
+        },
+        "dossiq": {
+         "stars": 3,
+         "text": "3.33",
+         "title": "3.33; per language: javascript 4.69, php 3.31, vue 2.90"
+        },
+        "filinq": {
+         "stars": 4,
+         "text": "4.07",
+         "title": "4.07; per language: javascript 4.81, php 4.08, typescript 5.50, vue 3.83"
+        },
+        "hermiq": {
+         "stars": 3,
+         "text": "2.95",
+         "title": "2.95; per language: javascript 4.79, php 3.00, vue 2.41"
+        },
+        "humaniq": {
+         "stars": 4,
+         "text": "3.82",
+         "title": "3.82; per language: javascript 5.01, php 3.71, vue 4.44"
+        },
+        "integriq": {
+         "stars": 3,
+         "text": "3.23",
+         "title": "3.23; per language: javascript 5.50, php 3.24, vue 2.91"
+        },
+        "keepiq": {
+         "stars": 4,
+         "text": "3.75",
+         "title": "3.75; per language: javascript 4.92, php 3.23, python 5.50, typescript 5.40, vue 2.86"
+        },
+        "larpinq": {
+         "stars": 5,
+         "text": "4.78",
+         "title": "4.78; per language: javascript 5.13, php 4.90, vue 4.35"
+        },
+        "launchpad": {
+         "stars": 4,
+         "text": "3.65",
+         "title": "3.65; per language: javascript 5.23, php 3.34, vue 3.85"
+        },
+        "learniq": {
+         "stars": 3,
+         "text": "2.78",
+         "title": "2.78; per language: javascript 5.22, php 2.67, vue 2.68"
+        },
+        "opencatalogi": {
+         "stars": 4,
+         "text": "3.56",
+         "title": "3.56; per language: javascript 5.00, php 4.42, typescript 4.56, vue 2.33"
+        },
+        "openregister": {
+         "stars": 3,
+         "text": "3.16",
+         "title": "3.16; per language: javascript 4.98, php 3.33, python 5.50, typescript 5.33, vue 2.20"
+        },
+        "pipelinq": {
+         "stars": 3,
+         "text": "2.98",
+         "title": "2.98; per language: javascript 4.81, php 2.82, vue 2.95"
+        },
+        "planninq": {
+         "stars": 4,
+         "text": "4.18",
+         "title": "4.18; per language: javascript 5.06, php 4.52, vue 3.71"
+        },
+        "portaliq": {
+         "stars": 4,
+         "text": "3.75",
+         "title": "3.75; per language: javascript 4.75, php 3.72, vue 3.27"
+        },
+        "shillinq": {
+         "stars": 3,
+         "text": "2.65",
+         "title": "2.65; per language: javascript 5.22, php 2.45, typescript 5.50, vue 2.93"
+        },
+        "stackiq": {
+         "stars": 3,
+         "text": "2.91",
+         "title": "2.91; per language: javascript 4.55, php 3.01, vue 2.45"
+        },
+        "thematiq": {
+         "stars": 5,
+         "text": "5.00",
+         "title": "5.00; per language: javascript 5.50, php 5.00"
+        },
+        "versioniq": {
+         "stars": 5,
+         "text": "4.91",
+         "title": "4.91; per language: javascript 4.77, php 4.95, typescript 5.50, vue 4.77"
+        }
+       }
+      },
+      {
+       "id": "rating.prop.unit_size",
+       "label": "unit size",
+       "limits": "languages weighted by their code",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "3.23",
+         "title": "3.23; per language: javascript 4.58, php 2.12, vue 4.55"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "3.33",
+         "title": "3.33; per language: javascript 4.69, php 2.96, vue 3.70"
+        },
+        "dossiq": {
+         "stars": 3,
+         "text": "2.60",
+         "title": "2.60; per language: javascript 3.42, php 2.45, vue 3.78"
+        },
+        "filinq": {
+         "stars": 3,
+         "text": "3.22",
+         "title": "3.22; per language: javascript 4.53, php 2.85, typescript 5.50, vue 4.57"
+        },
+        "hermiq": {
+         "stars": 3,
+         "text": "2.64",
+         "title": "2.64; per language: javascript 4.55, php 2.19, vue 4.18"
+        },
+        "humaniq": {
+         "stars": 3,
+         "text": "3.27",
+         "title": "3.27; per language: javascript 5.00, php 3.18, vue 4.80"
+        },
+        "integriq": {
+         "stars": 3,
+         "text": "2.57",
+         "title": "2.57; per language: javascript 5.06, php 2.29, vue 4.78"
+        },
+        "keepiq": {
+         "stars": 4,
+         "text": "3.62",
+         "title": "3.62; per language: javascript 3.40, php 3.05, python 5.34, typescript 4.71, vue 4.50"
+        },
+        "larpinq": {
+         "stars": 4,
+         "text": "4.32",
+         "title": "4.32; per language: javascript 4.90, php 4.15, vue 4.66"
+        },
+        "launchpad": {
+         "stars": 3,
+         "text": "2.80",
+         "title": "2.80; per language: javascript 4.61, php 2.12, vue 4.52"
+        },
+        "learniq": {
+         "stars": 3,
+         "text": "2.90",
+         "title": "2.90; per language: javascript 4.15, php 2.82, vue 2.89"
+        },
+        "opencatalogi": {
+         "stars": 4,
+         "text": "3.75",
+         "title": "3.75; per language: javascript 4.40, php 3.66, typescript 3.73, vue 3.80"
+        },
+        "openregister": {
+         "stars": 3,
+         "text": "2.50",
+         "title": "2.50; per language: javascript 4.89, php 2.29, python 5.50, typescript 4.98, vue 4.10"
+        },
+        "pipelinq": {
+         "stars": 3,
+         "text": "2.82",
+         "title": "2.82; per language: javascript 4.08, php 2.41, vue 4.10"
+        },
+        "planninq": {
+         "stars": 5,
+         "text": "4.71",
+         "title": "4.71; per language: javascript 4.91, php 4.51, vue 4.90"
+        },
+        "portaliq": {
+         "stars": 3,
+         "text": "3.47",
+         "title": "3.47; per language: javascript 3.97, php 2.94, vue 4.72"
+        },
+        "shillinq": {
+         "stars": 2,
+         "text": "2.20",
+         "title": "2.20; per language: javascript 4.76, php 1.96, vue 3.58"
+        },
+        "stackiq": {
+         "stars": 2,
+         "text": "2.08",
+         "title": "2.08; per language: javascript 4.33, php 1.37, vue 3.88"
+        },
+        "thematiq": {
+         "stars": 4,
+         "text": "4.15",
+         "title": "4.15; per language: javascript 5.50, php 4.15"
+        },
+        "versioniq": {
+         "stars": 5,
+         "text": "4.54",
+         "title": "4.54; per language: javascript 4.99, php 4.51, typescript 5.15, vue 4.54"
+        }
+       }
+      },
+      {
+       "id": "rating.prop.unit_complexity",
+       "label": "unit complexity",
+       "limits": "languages weighted by their code",
+       "cells": {
+        "buildiq": {
+         "stars": 2,
+         "text": "2.28",
+         "title": "2.28; per language: javascript 3.97, php 1.35, vue 3.17"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "2.76",
+         "title": "2.76; per language: javascript 3.69, php 2.29, vue 3.66"
+        },
+        "dossiq": {
+         "stars": 2,
+         "text": "1.63",
+         "title": "1.63; per language: javascript 1.42, php 1.58, vue 2.43"
+        },
+        "filinq": {
+         "stars": 4,
+         "text": "3.79",
+         "title": "3.79; per language: javascript 3.78, php 3.63, typescript 5.50, vue 4.88"
+        },
+        "hermiq": {
+         "stars": 2,
+         "text": "1.98",
+         "title": "1.98; per language: javascript 3.98, php 1.49, vue 3.67"
+        },
+        "humaniq": {
+         "stars": 2,
+         "text": "1.65",
+         "title": "1.65; per language: javascript 5.08, php 1.46, vue 4.81"
+        },
+        "integriq": {
+         "stars": 2,
+         "text": "2.14",
+         "title": "2.14; per language: javascript 5.38, php 1.78, vue 4.99"
+        },
+        "keepiq": {
+         "stars": 3,
+         "text": "2.67",
+         "title": "2.67; per language: javascript 2.20, php 2.91, python 5.50, typescript 1.56, vue 3.91"
+        },
+        "larpinq": {
+         "stars": 5,
+         "text": "4.67",
+         "title": "4.67; per language: javascript 5.12, php 4.51, vue 5.02"
+        },
+        "launchpad": {
+         "stars": 2,
+         "text": "2.25",
+         "title": "2.25; per language: javascript 4.18, php 1.56, vue 3.94"
+        },
+        "learniq": {
+         "stars": 2,
+         "text": "2.02",
+         "title": "2.02; per language: javascript 1.36, php 1.87, vue 2.79"
+        },
+        "opencatalogi": {
+         "stars": 3,
+         "text": "3.44",
+         "title": "3.44; per language: javascript 4.86, php 3.46, typescript 4.00, vue 2.93"
+        },
+        "openregister": {
+         "stars": 2,
+         "text": "1.73",
+         "title": "1.73; per language: javascript 5.07, php 1.45, python 5.50, typescript 5.50, vue 3.98"
+        },
+        "pipelinq": {
+         "stars": 2,
+         "text": "1.50",
+         "title": "1.50; per language: javascript 1.91, php 1.47, vue 1.49"
+        },
+        "planninq": {
+         "stars": 5,
+         "text": "4.72",
+         "title": "4.72; per language: javascript 4.15, php 4.84, vue 4.98"
+        },
+        "portaliq": {
+         "stars": 1,
+         "text": "1.43",
+         "title": "1.43; per language: javascript 1.42, php 1.41, vue 1.50"
+        },
+        "shillinq": {
+         "stars": 2,
+         "text": "1.61",
+         "title": "1.61; per language: javascript 4.40, php 1.35, vue 2.99"
+        },
+        "stackiq": {
+         "stars": 2,
+         "text": "2.01",
+         "title": "2.01; per language: javascript 3.86, php 1.33, vue 3.88"
+        },
+        "thematiq": {
+         "stars": 4,
+         "text": "3.76",
+         "title": "3.76; per language: javascript 5.50, php 3.76"
+        },
+        "versioniq": {
+         "stars": 4,
+         "text": "3.66",
+         "title": "3.66; per language: javascript 5.50, php 3.38, typescript 4.97, vue 4.55"
+        }
+       }
+      },
+      {
+       "id": "rating.prop.unit_interfacing",
+       "label": "unit interfacing",
+       "limits": "languages weighted by their code",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "3.21",
+         "title": "3.21; per language: javascript 5.10, php 1.50, vue 5.33"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "3.11",
+         "title": "3.11; per language: javascript 4.82, php 2.00, vue 5.46"
+        },
+        "dossiq": {
+         "stars": 2,
+         "text": "1.95",
+         "title": "1.95; per language: javascript 4.73, php 1.46, vue 5.46"
+        },
+        "filinq": {
+         "stars": 3,
+         "text": "2.74",
+         "title": "2.74; per language: javascript 5.14, php 2.02, typescript 5.50, vue 5.48"
+        },
+        "hermiq": {
+         "stars": 2,
+         "text": "2.27",
+         "title": "2.27; per language: javascript 4.95, php 1.45, vue 5.47"
+        },
+        "humaniq": {
+         "stars": 2,
+         "text": "1.89",
+         "title": "1.89; per language: javascript 4.99, php 1.70, vue 5.50"
+        },
+        "integriq": {
+         "stars": 2,
+         "text": "1.90",
+         "title": "1.90; per language: javascript 5.24, php 1.47, vue 5.46"
+        },
+        "keepiq": {
+         "stars": 3,
+         "text": "3.16",
+         "title": "3.16; per language: javascript 4.63, php 1.38, python 5.26, typescript 4.83, vue 5.50"
+        },
+        "larpinq": {
+         "stars": 5,
+         "text": "4.56",
+         "title": "4.56; per language: javascript 5.33, php 4.24, vue 5.50"
+        },
+        "launchpad": {
+         "stars": 3,
+         "text": "2.68",
+         "title": "2.68; per language: javascript 5.23, php 1.62, vue 5.43"
+        },
+        "learniq": {
+         "stars": 3,
+         "text": "2.73",
+         "title": "2.73; per language: javascript 4.69, php 1.95, vue 5.39"
+        },
+        "opencatalogi": {
+         "stars": 5,
+         "text": "4.75",
+         "title": "4.75; per language: javascript 5.11, php 4.43, typescript 5.17, vue 5.46"
+        },
+        "openregister": {
+         "stars": 2,
+         "text": "1.84",
+         "title": "1.84; per language: javascript 5.11, php 1.44, python 5.50, typescript 5.50, vue 5.46"
+        },
+        "pipelinq": {
+         "stars": 3,
+         "text": "2.57",
+         "title": "2.57; per language: javascript 4.81, php 1.68, vue 5.44"
+        },
+        "planninq": {
+         "stars": 4,
+         "text": "4.42",
+         "title": "4.42; per language: javascript 4.44, php 3.85, vue 5.44"
+        },
+        "portaliq": {
+         "stars": 3,
+         "text": "2.62",
+         "title": "2.62; per language: javascript 3.89, php 1.38, vue 5.45"
+        },
+        "shillinq": {
+         "stars": 2,
+         "text": "1.96",
+         "title": "1.96; per language: javascript 4.94, php 1.49, vue 5.40"
+        },
+        "stackiq": {
+         "stars": 5,
+         "text": "4.51",
+         "title": "4.51; per language: javascript 5.02, php 4.22, vue 5.47"
+        },
+        "thematiq": {
+         "stars": 2,
+         "text": "2.19",
+         "title": "2.19; per language: javascript 5.50, php 2.18"
+        },
+        "versioniq": {
+         "stars": 3,
+         "text": "3.42",
+         "title": "3.42; per language: javascript 5.50, php 2.90, typescript 5.07, vue 5.33"
+        }
+       }
+      },
+      {
+       "id": "rating.prop.module_coupling",
+       "label": "module coupling",
+       "limits": "languages weighted by their code",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "5.01",
+         "title": "5.01; per language: php 5.01"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "5.21",
+         "title": "5.21; per language: php 5.21"
+        },
+        "dossiq": {
+         "stars": 5,
+         "text": "5.04",
+         "title": "5.04; per language: php 5.04"
+        },
+        "filinq": {
+         "stars": 5,
+         "text": "5.31",
+         "title": "5.31; per language: php 5.31"
+        },
+        "hermiq": {
+         "stars": 4,
+         "text": "4.07",
+         "title": "4.07; per language: php 4.07"
+        },
+        "humaniq": {
+         "stars": 3,
+         "text": "3.48",
+         "title": "3.48; per language: php 3.48"
+        },
+        "integriq": {
+         "stars": 5,
+         "text": "5.12",
+         "title": "5.12; per language: php 5.12"
+        },
+        "keepiq": {
+         "stars": 4,
+         "text": "3.89",
+         "title": "3.89; per language: php 3.87, python 5.50"
+        },
+        "larpinq": {
+         "stars": 5,
+         "text": "4.75",
+         "title": "4.75; per language: php 4.75"
+        },
+        "launchpad": {
+         "stars": 5,
+         "text": "4.65",
+         "title": "4.65; per language: php 4.65"
+        },
+        "learniq": {
+         "stars": 5,
+         "text": "5.27",
+         "title": "5.27; per language: php 5.27"
+        },
+        "opencatalogi": {
+         "stars": 5,
+         "text": "5.45",
+         "title": "5.45; per language: php 5.45"
+        },
+        "openregister": {
+         "stars": 5,
+         "text": "4.77",
+         "title": "4.77; per language: php 4.77, python 5.50"
+        },
+        "pipelinq": {
+         "stars": 5,
+         "text": "5.02",
+         "title": "5.02; per language: php 5.02"
+        },
+        "planninq": {
+         "stars": 4,
+         "text": "3.84",
+         "title": "3.84; per language: php 3.84"
+        },
+        "portaliq": {
+         "stars": 4,
+         "text": "4.41",
+         "title": "4.41; per language: php 4.41"
+        },
+        "shillinq": {
+         "stars": 5,
+         "text": "4.72",
+         "title": "4.72; per language: php 4.72"
+        },
+        "stackiq": {
+         "stars": 1,
+         "text": "1.48",
+         "title": "1.48; per language: php 1.48"
+        },
+        "thematiq": {
+         "stars": 5,
+         "text": "4.65",
+         "title": "4.65; per language: php 4.65"
+        },
+        "versioniq": {
+         "stars": 5,
+         "text": "5.14",
+         "title": "5.14; per language: php 5.14"
+        }
+       }
+      },
+      {
+       "id": "rating.prop.component_independence",
+       "label": "component independence",
+       "limits": "languages weighted by their code",
+       "cells": {
+        "buildiq": {
+         "stars": 1,
+         "text": "1.09",
+         "title": "1.09; per language: php 1.09"
+        },
+        "decidiq": {
+         "stars": 1,
+         "text": "1.08",
+         "title": "1.08; per language: php 1.08"
+        },
+        "dossiq": {
+         "stars": 1,
+         "text": "1.14",
+         "title": "1.14; per language: php 1.14"
+        },
+        "filinq": {
+         "stars": 3,
+         "text": "3.38",
+         "title": "3.38; per language: php 3.38"
+        },
+        "hermiq": {
+         "stars": 1,
+         "text": "1.09",
+         "title": "1.09; per language: php 1.09"
+        },
+        "humaniq": {
+         "stars": 1,
+         "text": "1.09",
+         "title": "1.09; per language: php 1.09"
+        },
+        "integriq": {
+         "stars": 3,
+         "text": "3.36",
+         "title": "3.36; per language: php 3.36"
+        },
+        "keepiq": {
+         "stars": 1,
+         "text": "1.13",
+         "title": "1.13; per language: php 1.08, python 5.50"
+        },
+        "larpinq": {
+         "stars": 1,
+         "text": "1.12",
+         "title": "1.12; per language: php 1.12"
+        },
+        "launchpad": {
+         "stars": 1,
+         "text": "1.02",
+         "title": "1.02; per language: php 1.02"
+        },
+        "learniq": {
+         "stars": 1,
+         "text": "1.08",
+         "title": "1.08; per language: php 1.08"
+        },
+        "opencatalogi": {
+         "stars": 3,
+         "text": "3.41",
+         "title": "3.41; per language: php 3.41"
+        },
+        "openregister": {
+         "stars": 1,
+         "text": "1.18",
+         "title": "1.18; per language: php 1.18, python 5.50"
+        },
+        "pipelinq": {
+         "stars": 1,
+         "text": "1.05",
+         "title": "1.05; per language: php 1.05"
+        },
+        "planninq": {
+         "stars": 1,
+         "text": "1.15",
+         "title": "1.15; per language: php 1.15"
+        },
+        "portaliq": {
+         "stars": 1,
+         "text": "1.10",
+         "title": "1.10; per language: php 1.10"
+        },
+        "shillinq": {
+         "stars": 1,
+         "text": "1.18",
+         "title": "1.18; per language: php 1.18"
+        },
+        "stackiq": {
+         "stars": 1,
+         "text": "0.88",
+         "title": "0.88; per language: php 0.88"
+        },
+        "thematiq": {
+         "stars": 1,
+         "text": "1.15",
+         "title": "1.15; per language: php 1.15"
+        },
+        "versioniq": {
+         "stars": 1,
+         "text": "1.32",
+         "title": "1.32; per language: php 1.32"
+        }
+       }
+      },
+      {
+       "id": "rating.prop.component_entanglement",
+       "label": "component entanglement",
+       "limits": "languages weighted by their code",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "3.89",
+         "title": "3.89; per language: php 3.89"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "3.15",
+         "title": "3.15; per language: php 3.15"
+        },
+        "dossiq": {
+         "stars": 3,
+         "text": "2.77",
+         "title": "2.77; per language: php 2.77"
+        },
+        "filinq": {
+         "stars": 5,
+         "text": "5.46",
+         "title": "5.46; per language: php 5.46"
+        },
+        "hermiq": {
+         "stars": 3,
+         "text": "2.99",
+         "title": "2.99; per language: php 2.99"
+        },
+        "humaniq": {
+         "stars": 5,
+         "text": "4.67",
+         "title": "4.67; per language: php 4.67"
+        },
+        "integriq": {
+         "stars": 4,
+         "text": "4.47",
+         "title": "4.47; per language: php 4.47"
+        },
+        "keepiq": {
+         "stars": 5,
+         "text": "4.51",
+         "title": "4.51; per language: php 4.50, python 5.50"
+        },
+        "larpinq": {
+         "stars": 5,
+         "text": "5.50",
+         "title": "5.50; per language: php 5.50"
+        },
+        "launchpad": {
+         "stars": 4,
+         "text": "4.35",
+         "title": "4.35; per language: php 4.35"
+        },
+        "learniq": {
+         "stars": 3,
+         "text": "3.29",
+         "title": "3.29; per language: php 3.29"
+        },
+        "opencatalogi": {
+         "stars": 5,
+         "text": "5.42",
+         "title": "5.42; per language: php 5.42"
+        },
+        "openregister": {
+         "stars": 4,
+         "text": "3.87",
+         "title": "3.87; per language: php 3.87, python 5.50"
+        },
+        "pipelinq": {
+         "stars": 3,
+         "text": "3.19",
+         "title": "3.19; per language: php 3.19"
+        },
+        "planninq": {
+         "stars": 3,
+         "text": "3.04",
+         "title": "3.04; per language: php 3.04"
+        },
+        "portaliq": {
+         "stars": 4,
+         "text": "3.59",
+         "title": "3.59; per language: php 3.59"
+        },
+        "shillinq": {
+         "stars": 2,
+         "text": "2.29",
+         "title": "2.29; per language: php 2.29"
+        },
+        "stackiq": {
+         "stars": 4,
+         "text": "3.63",
+         "title": "3.63; per language: php 3.63"
+        },
+        "thematiq": {
+         "stars": 4,
+         "text": "3.96",
+         "title": "3.96; per language: php 3.96"
+        },
+        "versioniq": {
+         "stars": 4,
+         "text": "4.37",
+         "title": "4.37; per language: php 4.37"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
   {
    "id": "maintainability",
    "title": "SIG maintainability",
@@ -911,7 +4045,7 @@
         },
         "openregister": {
          "stars": 2,
-         "text": "68.4%"
+         "text": "67.5%"
         },
         "pipelinq": {
          "stars": 2,
@@ -998,7 +4132,7 @@
         },
         "openregister": {
          "stars": 3,
-         "text": "33.4%"
+         "text": "32.3%"
         },
         "pipelinq": {
          "stars": 3,
@@ -1085,7 +4219,7 @@
         },
         "openregister": {
          "stars": 5,
-         "text": "5.5%"
+         "text": "4.9%"
         },
         "pipelinq": {
          "stars": 5,
@@ -1172,7 +4306,7 @@
         },
         "openregister": {
          "stars": 1,
-         "text": "38.7%"
+         "text": "37.9%"
         },
         "pipelinq": {
          "stars": 1,
@@ -1259,7 +4393,7 @@
         },
         "openregister": {
          "stars": 4,
-         "text": "5.8%"
+         "text": "5.4%"
         },
         "pipelinq": {
          "stars": 5,
@@ -1433,7 +4567,7 @@
         },
         "openregister": {
          "stars": 1,
-         "text": "30.8%"
+         "text": "30.1%"
         },
         "pipelinq": {
          "stars": 2,
@@ -1520,7 +4654,7 @@
         },
         "openregister": {
          "stars": 1,
-         "text": "9.0%"
+         "text": "8.5%"
         },
         "pipelinq": {
          "stars": 2,
@@ -1607,7 +4741,7 @@
         },
         "openregister": {
          "stars": 1,
-         "text": "2.8%"
+         "text": "2.7%"
         },
         "pipelinq": {
          "stars": 4,
@@ -1694,7 +4828,7 @@
         },
         "openregister": {
          "stars": 3,
-         "text": "7.0%"
+         "text": "6.8%"
         },
         "pipelinq": {
          "stars": 3,
@@ -1781,7 +4915,7 @@
         },
         "openregister": {
          "stars": 5,
-         "text": "5.3%"
+         "text": "5.2%"
         },
         "pipelinq": {
          "stars": 5,
@@ -2042,7 +5176,7 @@
         },
         "openregister": {
          "stars": "<4",
-         "text": "51.2%"
+         "text": "53.0%"
         },
         "pipelinq": {
          "stars": "<4",
@@ -2129,7 +5263,7 @@
         },
         "openregister": {
          "stars": 4,
-         "text": "0.056"
+         "text": "0.061"
         },
         "pipelinq": {
          "stars": "<4",
@@ -4158,7 +7292,7 @@
         },
         "openregister": {
          "stars": 2,
-         "text": "16.5%"
+         "text": "15.0%"
         },
         "pipelinq": {
          "stars": 3,
@@ -4820,8 +7954,8 @@
         },
         "openregister": {
          "stars": "<4",
-         "text": "8.1",
-         "title": "149 dependency lines between 37 components (estimate)"
+         "text": "8.6",
+         "title": "164 dependency lines between 38 components (estimate)"
         },
         "pipelinq": {
          "stars": 4,
@@ -5041,7 +8175,7 @@
         "openregister": {
          "stars": 5,
          "text": "96.6%",
-         "title": "7136 of 7389 in-scope methods tagged"
+         "title": "7222 of 7476 in-scope methods tagged"
         },
         "pipelinq": {
          "stars": 4,
@@ -5254,8 +8388,8 @@
         },
         "openregister": {
          "stars": 5,
-         "text": "127.2%",
-         "title": "605337 test LOC / 475887 production LOC"
+         "text": "128.8%",
+         "title": "609723 test LOC / 473537 production LOC"
         },
         "pipelinq": {
          "stars": 3,
@@ -5367,7 +8501,7 @@
         "openregister": {
          "stars": 3,
          "text": "5.2",
-         "title": "1938 baseline entries over 373803 PHP LOC"
+         "title": "1938 baseline entries over 373556 PHP LOC"
         },
         "pipelinq": {
          "stars": 4,
@@ -5474,7 +8608,7 @@
         "openregister": {
          "stars": 2,
          "text": "7.7",
-         "title": "3682 suppressions over 475887 LOC"
+         "title": "3652 suppressions over 473537 LOC"
         },
         "pipelinq": {
          "stars": 3,
@@ -16454,7 +19588,7 @@
    "launchpad": "5e2596991fcfd328e7ed02af577baf21139abaaf",
    "learniq": "6644a5ef6b3e4abb2be52c6419fb74ced9bd9aa1",
    "opencatalogi": "0f33d553cb1eef6596dbcc891fc7c3be2bbd675d",
-   "openregister": "28cabe734e2cf70e6b31a2bd91dc05bc11915116",
+   "openregister": "6891dae13f7258c6bcf9ab61318d90686acf798b",
    "pipelinq": "daab052aa4fab36cbc811625ceba56b9718077d0",
    "planninq": "0504f4cf502fe0ba83137c267362374a70e924d4",
    "portaliq": "e68fc05cbdb1edfba03f646eb8d9cbea5adac5d5",
