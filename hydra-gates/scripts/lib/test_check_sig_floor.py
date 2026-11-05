@@ -133,6 +133,26 @@ class Write(FloorCase):
         self.assertEqual(self.repo.floor_file()["checks"], met)
         self.assertIn("php unit_size >60", met)
         self.assertEqual(self.repo.floor_file()["profile"], "four-star")
+        self.assertIn("v18.1", self.repo.floor_file()["limits"])
+
+    def test_re_recording_never_lowers_the_floor_and_names_the_missed_check(self):
+        # A check floored under older limits that the current limits miss stays.
+        wide = [m.replace("(int $p0)", "(int $p0, int $q, int $r)") for m in SMALL[:3]]
+        self.repo.write("lib/Service/Small.php", php_class("Small", wide + SMALL[3:]))
+        self.repo.commit("three wide units")
+        before = self.repo.floor_file()["checks"]
+        self.assertIn("php unit_interfacing >2", before)
+        rc, out = run("write", self.repo.dir)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.repo.floor_file()["checks"], before)
+        self.assertIn("floored but missed at the current limits, kept in the floor: php unit_interfacing >2", out)
+        self.assertIn("(1 floored but missed)", out)
+
+    def test_re_recording_drops_a_check_that_left_the_measured_scope(self):
+        self.repo.set_floor(self.repo.floor_file()["checks"] + ["python duplication"])
+        rc, out = run("write", self.repo.dir)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("python duplication", self.repo.floor_file()["checks"])
 
     def test_check_rows_agree_with_gate_122_checks(self):
         self.repo.write("lib/Service/Big.php", php_class("Big", [php_method("huge", lines=70, tag="h")]))
@@ -241,10 +261,10 @@ class Check(FloorCase):
 
 class FiveStar(FloorCase):
     def test_a_five_star_miss_is_reported_and_never_blocks(self):
-        # One of twelve equal units takes three parameters: 8.3% of the code,
-        # above the 5-star 7.5% and below the 4-star 15%.
+        # One of seven equal units takes three parameters: 14.3% of the code,
+        # above the 5-star 12.5% and below the 4-star 15.4%.
         wide = [SMALL[0].replace("(int $p0)", "(int $p0, int $q, int $r)")]
-        self.repo.write("lib/Service/Small.php", php_class("Small", wide + SMALL[1:]))
+        self.repo.write("lib/Service/Small.php", php_class("Small", wide + SMALL[1:7]))
         md = os.path.join(self.repo.dir, "..", os.path.basename(self.repo.dir) + ".md")
         rc, out = self.check("--md", md)
         try:
@@ -346,7 +366,7 @@ class Boundaries(unittest.TestCase):
                                       "component_independence": {"hidden_share": hidden}}}}
 
     def test_a_share_equal_to_the_limit_meets_it(self):
-        rows = floor.check_rows(self.report(.471, .056, .100, .937), "four-star")
+        rows = floor.check_rows(self.report(.480, .058, .097, .945), "four-star")
         for label in ("php unit_size >15", "php duplication", "php module_coupling >10",
                       "php component_independence"):
             self.assertTrue(rows[label]["ok"], label)
@@ -358,7 +378,7 @@ class Boundaries(unittest.TestCase):
             self.assertTrue(floor.worse(row, dict(row, share=.6 if better_high else .4)))
 
     def test_just_past_the_limit_misses_it(self):
-        rows = floor.check_rows(self.report(.4711, .0561, .1001, .9369), "four-star")
+        rows = floor.check_rows(self.report(.4801, .0581, .0971, .9449), "four-star")
         for label in ("php unit_size >15", "php duplication", "php module_coupling >10",
                       "php component_independence"):
             self.assertFalse(rows[label]["ok"], label)

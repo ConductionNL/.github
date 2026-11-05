@@ -143,3 +143,4 @@ test_php_template_scope.py	0
 test_shipped_contracts_documented.py	0
 test_source_scope.py	0
 test_vendored_schema_freshness.js	1
+test_write_gates_json.py	25
