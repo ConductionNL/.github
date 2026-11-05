@@ -47,7 +47,7 @@
    "checks": 34,
    "four": 27,
    "five": 22,
-   "gates_measured": false,
+   "gates_measured": true,
    "floor": {
     "measured_at": "4242e8e192f874b7d3bf42142ade288f5b16d571",
     "profile": "four-star",
@@ -84,7 +84,7 @@
    "checks": 34,
    "four": 20,
    "five": 16,
-   "gates_measured": false,
+   "gates_measured": true,
    "floor": {
     "measured_at": "39ea188e36792d2f9dafb501e4c673c0c124bfe3",
     "profile": "four-star",
@@ -169,7 +169,7 @@
    "checks": 34,
    "four": 25,
    "five": 17,
-   "gates_measured": false,
+   "gates_measured": true,
    "floor": {
     "measured_at": "57a9fd9827bd8c1259f0e0f4f71db7e0d4562ba7",
     "profile": "four-star",
@@ -389,7 +389,7 @@
    "checks": 34,
    "four": 28,
    "five": 25,
-   "gates_measured": false,
+   "gates_measured": true,
    "floor": {
     "measured_at": "9080e1fa1847f34da7d39925e3f7422eb8afbd7b",
     "profile": "four-star",
@@ -517,7 +517,7 @@
    "checks": 58,
    "four": 49,
    "five": 46,
-   "gates_measured": false,
+   "gates_measured": true,
    "floor": {
     "measured_at": "eb3a390862dddf4da46f08d2e811541a43247193",
     "profile": "four-star",
@@ -573,7 +573,7 @@
    "checks": 34,
    "four": 21,
    "five": 16,
-   "gates_measured": false,
+   "gates_measured": true,
    "floor": {
     "measured_at": "35f348596c0367ff57fec4d4db718a1f88efd904",
     "profile": "four-star",
@@ -689,7 +689,7 @@
    "checks": 44,
    "four": 32,
    "five": 28,
-   "gates_measured": false,
+   "gates_measured": true,
    "floor": {
     "measured_at": "7a3bf1b6b94534fd339ed77926a8c19c9469890f",
     "profile": "four-star",
@@ -764,7 +764,7 @@
    "checks": 24,
    "four": 22,
    "five": 20,
-   "gates_measured": false,
+   "gates_measured": true,
    "floor": {
     "measured_at": "c27409621334bade24127b7d4656431a0033f48d",
     "profile": "four-star",
@@ -798,7 +798,7 @@
    "checks": 44,
    "four": 41,
    "five": 41,
-   "gates_measured": false,
+   "gates_measured": true,
    "floor": {
     "measured_at": "8a3e548dcf9aa9989a32334e0bb1976c10658ec7",
     "profile": "four-star",
@@ -5528,7 +5528,22 @@
          "text": "0",
          "title": "10 security gates judged"
         },
+        "decidiq": {
+         "stars": 5,
+         "text": "0",
+         "title": "11 security gates judged"
+        },
+        "dossiq": {
+         "stars": 5,
+         "text": "0",
+         "title": "11 security gates judged"
+        },
         "filinq": {
+         "stars": 5,
+         "text": "0",
+         "title": "11 security gates judged"
+        },
+        "hermiq": {
          "stars": 5,
          "text": "0",
          "title": "11 security gates judged"
@@ -5553,6 +5568,11 @@
          "text": "0",
          "title": "9 security gates judged"
         },
+        "launchpad": {
+         "stars": 4,
+         "text": "1",
+         "title": "11 security gates judged"
+        },
         "learniq": {
          "stars": 5,
          "text": "0",
@@ -5561,6 +5581,16 @@
         "opencatalogi": {
          "stars": 4,
          "text": "1",
+         "title": "11 security gates judged"
+        },
+        "openregister": {
+         "stars": 1,
+         "text": "46",
+         "title": "11 security gates judged"
+        },
+        "pipelinq": {
+         "stars": 2,
+         "text": "8",
          "title": "11 security gates judged"
         },
         "planninq": {
@@ -5573,10 +5603,25 @@
          "text": "0",
          "title": "11 security gates judged"
         },
+        "shillinq": {
+         "stars": 4,
+         "text": "2",
+         "title": "10 security gates judged"
+        },
         "stackiq": {
          "stars": 5,
          "text": "0",
          "title": "10 security gates judged"
+        },
+        "thematiq": {
+         "stars": 5,
+         "text": "0",
+         "title": "9 security gates judged"
+        },
+        "versioniq": {
+         "stars": 5,
+         "text": "0",
+         "title": "6 security gates judged"
         }
        }
       },
@@ -5809,10 +5854,25 @@
          "text": "0.0",
          "title": "0 findings over 165 .vue files"
         },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0",
+         "title": "0 findings over 169 .vue files"
+        },
+        "dossiq": {
+         "stars": 5,
+         "text": "0.0",
+         "title": "0 findings over 133 .vue files"
+        },
         "filinq": {
          "stars": 5,
          "text": "0.0",
          "title": "0 findings over 120 .vue files"
+        },
+        "hermiq": {
+         "stars": 5,
+         "text": "0.0",
+         "title": "0 findings over 98 .vue files"
         },
         "humaniq": {
          "stars": 5,
@@ -5834,6 +5894,11 @@
          "text": "0.0",
          "title": "0 findings over 21 .vue files"
         },
+        "launchpad": {
+         "stars": 5,
+         "text": "0.0",
+         "title": "0 findings over 108 .vue files"
+        },
         "learniq": {
          "stars": 5,
          "text": "0.0",
@@ -5843,6 +5908,16 @@
          "stars": 5,
          "text": "0.0",
          "title": "0 findings over 87 .vue files"
+        },
+        "openregister": {
+         "stars": 5,
+         "text": "0.0",
+         "title": "0 findings over 228 .vue files"
+        },
+        "pipelinq": {
+         "stars": 5,
+         "text": "0.0",
+         "title": "0 findings over 244 .vue files"
         },
         "planninq": {
          "stars": 5,
@@ -5854,10 +5929,20 @@
          "text": "0.0",
          "title": "0 findings over 259 .vue files"
         },
+        "shillinq": {
+         "stars": 5,
+         "text": "0.0",
+         "title": "0 findings over 127 .vue files"
+        },
         "stackiq": {
          "stars": 5,
          "text": "0.0",
          "title": "0 findings over 89 .vue files"
+        },
+        "versioniq": {
+         "stars": 5,
+         "text": "0.0",
+         "title": "0 findings over 25 .vue files"
         }
        }
       },
@@ -5871,7 +5956,22 @@
          "text": "0",
          "title": "19 UI gates judged"
         },
+        "decidiq": {
+         "stars": 5,
+         "text": "0",
+         "title": "19 UI gates judged"
+        },
+        "dossiq": {
+         "stars": 1,
+         "text": "80",
+         "title": "20 UI gates judged"
+        },
         "filinq": {
+         "stars": 5,
+         "text": "0",
+         "title": "19 UI gates judged"
+        },
+        "hermiq": {
          "stars": 5,
          "text": "0",
          "title": "19 UI gates judged"
@@ -5896,6 +5996,11 @@
          "text": "1",
          "title": "20 UI gates judged"
         },
+        "launchpad": {
+         "stars": 5,
+         "text": "0",
+         "title": "19 UI gates judged"
+        },
         "learniq": {
          "stars": 4,
          "text": "5",
@@ -5905,6 +6010,16 @@
          "stars": 5,
          "text": "0",
          "title": "19 UI gates judged"
+        },
+        "openregister": {
+         "stars": 5,
+         "text": "0",
+         "title": "19 UI gates judged"
+        },
+        "pipelinq": {
+         "stars": 4,
+         "text": "1",
+         "title": "20 UI gates judged"
         },
         "planninq": {
          "stars": 5,
@@ -5916,10 +6031,25 @@
          "text": "4",
          "title": "19 UI gates judged"
         },
+        "shillinq": {
+         "stars": 5,
+         "text": "0",
+         "title": "19 UI gates judged"
+        },
         "stackiq": {
          "stars": 4,
          "text": "2",
          "title": "19 UI gates judged"
+        },
+        "thematiq": {
+         "stars": 5,
+         "text": "0",
+         "title": "13 UI gates judged"
+        },
+        "versioniq": {
+         "stars": 5,
+         "text": "0",
+         "title": "2 UI gates judged"
         }
        }
       }
@@ -5939,7 +6069,25 @@
      "sub": "0 findings",
      "title": "10 of 10 applicable gates pass, 0 findings"
     },
+    "decidiq": {
+     "state": "pass",
+     "text": "11/11",
+     "sub": "0 findings",
+     "title": "11 of 11 applicable gates pass, 0 findings"
+    },
+    "dossiq": {
+     "state": "pass",
+     "text": "11/11",
+     "sub": "0 findings",
+     "title": "11 of 11 applicable gates pass, 0 findings"
+    },
     "filinq": {
+     "state": "pass",
+     "text": "11/11",
+     "sub": "0 findings",
+     "title": "11 of 11 applicable gates pass, 0 findings"
+    },
+    "hermiq": {
      "state": "pass",
      "text": "11/11",
      "sub": "0 findings",
@@ -5969,6 +6117,12 @@
      "sub": "0 findings",
      "title": "9 of 9 applicable gates pass, 0 findings"
     },
+    "launchpad": {
+     "state": "fail",
+     "text": "10/11",
+     "sub": "1 findings",
+     "title": "10 of 11 applicable gates pass, 1 findings"
+    },
     "learniq": {
      "state": "pass",
      "text": "10/10",
@@ -5980,6 +6134,18 @@
      "text": "10/11",
      "sub": "1 findings",
      "title": "10 of 11 applicable gates pass, 1 findings"
+    },
+    "openregister": {
+     "state": "fail",
+     "text": "10/11",
+     "sub": "46 findings",
+     "title": "10 of 11 applicable gates pass, 46 findings"
+    },
+    "pipelinq": {
+     "state": "fail",
+     "text": "9/11",
+     "sub": "8 findings",
+     "title": "9 of 11 applicable gates pass, 8 findings"
     },
     "planninq": {
      "state": "pass",
@@ -5993,11 +6159,29 @@
      "sub": "0 findings",
      "title": "11 of 11 applicable gates pass, 0 findings"
     },
+    "shillinq": {
+     "state": "fail",
+     "text": "8/10",
+     "sub": "2 findings",
+     "title": "8 of 10 applicable gates pass, 2 findings"
+    },
     "stackiq": {
      "state": "pass",
      "text": "10/10",
      "sub": "0 findings",
      "title": "10 of 10 applicable gates pass, 0 findings"
+    },
+    "thematiq": {
+     "state": "pass",
+     "text": "9/9",
+     "sub": "0 findings",
+     "title": "9 of 9 applicable gates pass, 0 findings"
+    },
+    "versioniq": {
+     "state": "pass",
+     "text": "6/6",
+     "sub": "0 findings",
+     "title": "6 of 6 applicable gates pass, 0 findings"
     }
    },
    "gates": [
@@ -6010,7 +6194,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6035,12 +6234,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6055,7 +6269,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6071,7 +6295,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6096,12 +6335,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6116,7 +6370,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6132,7 +6401,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6157,6 +6441,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "warn",
+       "text": "1",
+       "title": "1 method(s) whose per-object guard compares the caller against a value the CALLER SUPPLIED, and which therefore cannot refuse (advisory, non-blocking \u2014 dossiq#799) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/launchpad/hydra-gate-no-admin-idor-request-sourced.log. The fix is to derive the comparison "
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -6166,6 +6455,16 @@
        "state": "fail",
        "text": "1",
        "title": "1 method(s) with NoAdminRequired + no guard \u2014 see /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-no-admin-idor.log. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the gu"
+      },
+      "openregister": {
+       "state": "fail",
+       "text": "46",
+       "title": "46 method(s) with NoAdminRequired + no guard \u2014 see /home/rubenlinde/sig-lanes/matrix/out/openregister/hydra-gate-no-admin-idor.log. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the g"
+      },
+      "pipelinq": {
+       "state": "fail",
+       "text": "2",
+       "title": "2 method(s) with NoAdminRequired + no guard \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-no-admin-idor.log. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the guard "
       },
       "planninq": {
        "state": "pass",
@@ -6177,7 +6476,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6193,7 +6507,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6218,12 +6547,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6238,7 +6582,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6254,7 +6613,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6279,12 +6653,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6299,7 +6688,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6315,7 +6719,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6340,6 +6759,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -6350,12 +6774,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6371,7 +6810,22 @@
      "id": "gate.30",
      "label": "30 public-monitoring",
      "cells": {
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6386,12 +6840,32 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "opencatalogi": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6412,7 +6886,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6437,6 +6926,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -6446,6 +6940,16 @@
        "state": "pass",
        "text": "pass",
        "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "fail",
+       "text": "6",
+       "title": "6 unsafe security-config read(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-security-config-fail-mode.log"
       },
       "planninq": {
        "state": "pass",
@@ -6457,7 +6961,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6473,7 +6992,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6488,6 +7022,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -6498,12 +7037,32 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "portaliq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6519,7 +7078,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6544,12 +7118,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6564,7 +7153,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "fail",
+       "text": "1",
+       "title": "1 elevation(s) reachable from a flow node, agent tool or endpoint \u2014 see /home/rubenlinde/sig-lanes/matrix/out/shillinq/hydra-gate-system-elevation.log"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6580,7 +7184,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6600,12 +7219,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6619,6 +7253,11 @@
        "state": "pass",
        "text": "pass",
        "title": "pass"
+      },
+      "shillinq": {
+       "state": "fail",
+       "text": "1",
+       "title": "1 schema annotation(s) OpenRegister never reads (x-openregister-rbac, x-rbac-role, or the singular x-openregister-validation), so the schemas they sit on are not protected by them. Move the rules to `authorization` and `x-openregister-validations`. See /home/rubenlinde/sig-lanes/matrix/out/shillinq/"
       },
       "stackiq": {
        "state": "pass",
@@ -6639,7 +7278,25 @@
      "sub": "0 findings",
      "title": "15 of 15 applicable gates pass, 0 findings"
     },
+    "decidiq": {
+     "state": "pass",
+     "text": "15/15",
+     "sub": "0 findings",
+     "title": "15 of 15 applicable gates pass, 0 findings"
+    },
+    "dossiq": {
+     "state": "pass",
+     "text": "15/15",
+     "sub": "0 findings",
+     "title": "15 of 15 applicable gates pass, 0 findings"
+    },
     "filinq": {
+     "state": "pass",
+     "text": "15/15",
+     "sub": "0 findings",
+     "title": "15 of 15 applicable gates pass, 0 findings"
+    },
+    "hermiq": {
      "state": "pass",
      "text": "15/15",
      "sub": "0 findings",
@@ -6669,6 +7326,12 @@
      "sub": "0 findings",
      "title": "15 of 15 applicable gates pass, 0 findings"
     },
+    "launchpad": {
+     "state": "pass",
+     "text": "15/15",
+     "sub": "0 findings",
+     "title": "15 of 15 applicable gates pass, 0 findings"
+    },
     "learniq": {
      "state": "pass",
      "text": "15/15",
@@ -6676,6 +7339,18 @@
      "title": "15 of 15 applicable gates pass, 0 findings"
     },
     "opencatalogi": {
+     "state": "pass",
+     "text": "15/15",
+     "sub": "0 findings",
+     "title": "15 of 15 applicable gates pass, 0 findings"
+    },
+    "openregister": {
+     "state": "pass",
+     "text": "15/15",
+     "sub": "0 findings",
+     "title": "15 of 15 applicable gates pass, 0 findings"
+    },
+    "pipelinq": {
      "state": "pass",
      "text": "15/15",
      "sub": "0 findings",
@@ -6693,7 +7368,25 @@
      "sub": "0 findings",
      "title": "15 of 15 applicable gates pass, 0 findings"
     },
+    "shillinq": {
+     "state": "pass",
+     "text": "15/15",
+     "sub": "0 findings",
+     "title": "15 of 15 applicable gates pass, 0 findings"
+    },
     "stackiq": {
+     "state": "pass",
+     "text": "15/15",
+     "sub": "0 findings",
+     "title": "15 of 15 applicable gates pass, 0 findings"
+    },
+    "thematiq": {
+     "state": "pass",
+     "text": "14/14",
+     "sub": "0 findings",
+     "title": "14 of 14 applicable gates pass, 0 findings"
+    },
+    "versioniq": {
      "state": "pass",
      "text": "15/15",
      "sub": "0 findings",
@@ -6710,7 +7403,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6735,12 +7443,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6755,7 +7478,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6771,7 +7504,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6796,12 +7544,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6816,7 +7579,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6832,7 +7610,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6857,12 +7650,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6877,7 +7685,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6898,7 +7721,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6923,12 +7761,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6943,7 +7796,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6959,7 +7827,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -6984,12 +7867,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7004,7 +7902,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7020,7 +7933,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7045,12 +7973,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7065,7 +8008,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7081,7 +8039,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7106,12 +8079,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7126,7 +8114,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7142,7 +8145,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7167,12 +8185,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7187,7 +8220,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7203,7 +8251,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7228,12 +8291,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7248,7 +8326,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7264,7 +8357,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7289,12 +8397,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7309,7 +8432,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7325,7 +8463,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7350,12 +8503,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7370,7 +8538,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7386,7 +8569,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7411,12 +8609,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7431,7 +8644,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7447,7 +8675,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7472,12 +8715,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7492,7 +8750,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7508,7 +8781,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7533,12 +8821,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7553,7 +8856,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7569,7 +8887,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7594,12 +8927,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7614,7 +8962,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7633,7 +8996,25 @@
      "sub": "5 findings",
      "title": "16 of 17 applicable gates pass, 5 findings"
     },
+    "decidiq": {
+     "state": "pass",
+     "text": "17/17",
+     "sub": "0 findings",
+     "title": "17 of 17 applicable gates pass, 0 findings"
+    },
+    "dossiq": {
+     "state": "fail",
+     "text": "16/17",
+     "sub": "1 findings",
+     "title": "16 of 17 applicable gates pass, 1 findings"
+    },
     "filinq": {
+     "state": "pass",
+     "text": "17/17",
+     "sub": "0 findings",
+     "title": "17 of 17 applicable gates pass, 0 findings"
+    },
+    "hermiq": {
      "state": "pass",
      "text": "17/17",
      "sub": "0 findings",
@@ -7663,6 +9044,12 @@
      "sub": "0 findings",
      "title": "16 of 16 applicable gates pass, 0 findings"
     },
+    "launchpad": {
+     "state": "pass",
+     "text": "16/16",
+     "sub": "0 findings",
+     "title": "16 of 16 applicable gates pass, 0 findings"
+    },
     "learniq": {
      "state": "fail",
      "text": "15/16",
@@ -7674,6 +9061,18 @@
      "text": "17/17",
      "sub": "0 findings",
      "title": "17 of 17 applicable gates pass, 0 findings"
+    },
+    "openregister": {
+     "state": "fail",
+     "text": "15/16",
+     "sub": "12 findings",
+     "title": "15 of 16 applicable gates pass, 12 findings"
+    },
+    "pipelinq": {
+     "state": "fail",
+     "text": "15/16",
+     "sub": "2 findings",
+     "title": "15 of 16 applicable gates pass, 2 findings"
     },
     "planninq": {
      "state": "pass",
@@ -7687,11 +9086,29 @@
      "sub": "1 findings",
      "title": "16 of 17 applicable gates pass, 1 findings"
     },
+    "shillinq": {
+     "state": "pass",
+     "text": "17/17",
+     "sub": "0 findings",
+     "title": "17 of 17 applicable gates pass, 0 findings"
+    },
     "stackiq": {
      "state": "pass",
      "text": "16/16",
      "sub": "0 findings",
      "title": "16 of 16 applicable gates pass, 0 findings"
+    },
+    "thematiq": {
+     "state": "pass",
+     "text": "12/12",
+     "sub": "0 findings",
+     "title": "12 of 12 applicable gates pass, 0 findings"
+    },
+    "versioniq": {
+     "state": "pass",
+     "text": "10/10",
+     "sub": "0 findings",
+     "title": "10 of 10 applicable gates pass, 0 findings"
     }
    },
    "gates": [
@@ -7704,7 +9121,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7729,12 +9161,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7749,7 +9196,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7765,7 +9227,22 @@
        "text": "5",
        "title": "5 unrouted method(s) or wrong-target route(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/buildiq/hydra-gate-route-reachability.log"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7790,12 +9267,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "fail",
+       "text": "12",
+       "title": "12 unrouted method(s) or wrong-target route(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/openregister/hydra-gate-route-reachability.log"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7810,7 +9302,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7826,7 +9328,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7851,12 +9368,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7871,7 +9403,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7887,7 +9434,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7907,6 +9469,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -7917,12 +9484,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7943,7 +9525,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7968,12 +9565,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -7988,7 +9600,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8004,7 +9631,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8029,6 +9671,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "fail",
        "text": "1",
@@ -8038,6 +9685,16 @@
        "state": "pass",
        "text": "pass",
        "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "fail",
+       "text": "2",
+       "title": "2 OR-abstraction match(es) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-or-abstraction-anti-patterns.log"
       },
       "planninq": {
        "state": "pass",
@@ -8049,7 +9706,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8065,7 +9737,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8091,6 +9778,11 @@
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8106,7 +9798,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8131,12 +9838,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8151,7 +9873,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8167,7 +9904,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8192,12 +9944,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8212,7 +9979,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8228,7 +10010,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8248,6 +10045,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -8258,12 +10060,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8284,7 +10101,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8304,6 +10136,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -8314,12 +10151,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8340,7 +10192,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8365,12 +10232,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8385,7 +10267,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8406,7 +10303,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8431,12 +10343,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8451,7 +10378,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8467,7 +10409,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8492,12 +10449,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8512,7 +10479,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8538,7 +10515,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8558,6 +10550,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -8568,12 +10565,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8598,7 +10610,13 @@
     {
      "id": "gate.111",
      "label": "111 flow-node-taxonomy",
-     "cells": {}
+     "cells": {
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      }
+     }
     },
     {
      "id": "gate.115",
@@ -8609,7 +10627,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8634,12 +10667,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8654,7 +10702,22 @@
        "text": "1",
        "title": "1 finding(s): 0 cross-app lookup(s) naming a retired app id or namespace, 1 register slug(s) the owning app has migrated away from. Each answers false, 404s, or reads zero rows rather than erroring, so the integration is inert and nothing reports it. Report-only: set HYDRA_GATE_STALE_FLEET_APP_ID_BL"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8675,7 +10738,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "fail",
+       "text": "1",
+       "title": "1 finding(s): the count of procedure-named files no longer matches .procedure-code-baseline.json (decision 182: procedures are configuration, code is generic). See /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-procedure-code.log"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8700,12 +10778,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8720,7 +10813,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8744,11 +10852,29 @@
      "sub": "0 findings",
      "title": "3 of 3 applicable gates pass, 0 findings"
     },
+    "decidiq": {
+     "state": "fail",
+     "text": "2/3",
+     "sub": "2 findings",
+     "title": "2 of 3 applicable gates pass, 2 findings"
+    },
+    "dossiq": {
+     "state": "fail",
+     "text": "1/3",
+     "sub": "49 findings",
+     "title": "1 of 3 applicable gates pass, 49 findings"
+    },
     "filinq": {
      "state": "fail",
      "text": "2/3",
      "sub": "31 findings",
      "title": "2 of 3 applicable gates pass, 31 findings"
+    },
+    "hermiq": {
+     "state": "fail",
+     "text": "1/3",
+     "sub": "10 findings",
+     "title": "1 of 3 applicable gates pass, 10 findings"
     },
     "humaniq": {
      "state": "pass",
@@ -8774,6 +10900,12 @@
      "sub": "0 findings",
      "title": "3 of 3 applicable gates pass, 0 findings"
     },
+    "launchpad": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
     "learniq": {
      "state": "fail",
      "text": "1/3",
@@ -8785,6 +10917,18 @@
      "text": "2/3",
      "sub": "1 findings",
      "title": "2 of 3 applicable gates pass, 1 findings"
+    },
+    "openregister": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
+    "pipelinq": {
+     "state": "fail",
+     "text": "1/3",
+     "sub": "29 findings",
+     "title": "1 of 3 applicable gates pass, 29 findings"
     },
     "planninq": {
      "state": "pass",
@@ -8798,11 +10942,29 @@
      "sub": "11 findings",
      "title": "1 of 3 applicable gates pass, 11 findings"
     },
+    "shillinq": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
     "stackiq": {
      "state": "pass",
      "text": "3/3",
      "sub": "0 findings",
      "title": "3 of 3 applicable gates pass, 0 findings"
+    },
+    "thematiq": {
+     "state": "pass",
+     "text": "2/2",
+     "sub": "0 findings",
+     "title": "2 of 2 applicable gates pass, 0 findings"
+    },
+    "versioniq": {
+     "state": "pass",
+     "text": "2/2",
+     "sub": "0 findings",
+     "title": "2 of 2 applicable gates pass, 0 findings"
     }
    },
    "gates": [
@@ -8820,10 +10982,25 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "fail",
+       "text": "11",
+       "title": "11 unresolved finding(s) (10 @spec, 1 @e2e) from 6 distinct target(s) \u2014 fix the TARGET, not each tag; see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-spec-anchor-existence.log"
+      },
       "filinq": {
        "state": "warn",
        "text": "31",
        "title": "31 unresolved @e2e finding(s) from 19 distinct target(s) \u2014 fix the TARGET, not each tag. Report-only: set HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/filinq/hydra-gate-spec-anchor-existence.log"
+      },
+      "hermiq": {
+       "state": "warn",
+       "text": "6",
+       "title": "6 unresolved @e2e finding(s) from 6 distinct target(s) \u2014 fix the TARGET, not each tag. Report-only: set HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/hermiq/hydra-gate-spec-anchor-existence.log"
       },
       "humaniq": {
        "state": "pass",
@@ -8845,6 +11022,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "fail",
        "text": "4",
@@ -8854,6 +11036,16 @@
        "state": "pass",
        "text": "pass",
        "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "fail",
+       "text": "20",
+       "title": "20 unresolved finding(s) (13 @spec, 7 @e2e) from 10 distinct target(s) \u2014 fix the TARGET, not each tag; see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-spec-anchor-existence.log"
       },
       "planninq": {
        "state": "pass",
@@ -8865,7 +11057,22 @@
        "text": "9",
        "title": "9 unresolved finding(s) (9 @spec, 0 @e2e) from 1 distinct target(s) \u2014 fix the TARGET, not each tag; see /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-spec-anchor-existence.log"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8881,7 +11088,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8906,6 +11128,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -8916,12 +11143,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -8942,10 +11184,25 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "warn",
+       "text": "2",
+       "title": "2 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/decidiq/hydra-gate-exclusion-evidence.log"
+      },
+      "dossiq": {
+       "state": "warn",
+       "text": "38",
+       "title": "38 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-exclusion-evidence.log"
+      },
       "filinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
+      },
+      "hermiq": {
+       "state": "warn",
+       "text": "4",
+       "title": "4 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/hermiq/hydra-gate-exclusion-evidence.log"
       },
       "humaniq": {
        "state": "pass",
@@ -8967,6 +11224,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "warn",
        "text": "3",
@@ -8976,6 +11238,16 @@
        "state": "warn",
        "text": "1",
        "title": "1 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-exclusion-evidence.log"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "warn",
+       "text": "9",
+       "title": "9 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-exclusion-evidence.log"
       },
       "planninq": {
        "state": "pass",
@@ -8987,7 +11259,22 @@
        "text": "2",
        "title": "2 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-exclusion-evidence.log"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9006,7 +11293,25 @@
      "sub": "0 findings",
      "title": "3 of 3 applicable gates pass, 0 findings"
     },
+    "decidiq": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
+    "dossiq": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
     "filinq": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
+    "hermiq": {
      "state": "pass",
      "text": "3/3",
      "sub": "0 findings",
@@ -9036,6 +11341,12 @@
      "sub": "0 findings",
      "title": "3 of 3 applicable gates pass, 0 findings"
     },
+    "launchpad": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
     "learniq": {
      "state": "pass",
      "text": "3/3",
@@ -9043,6 +11354,18 @@
      "title": "3 of 3 applicable gates pass, 0 findings"
     },
     "opencatalogi": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
+    "openregister": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
+    "pipelinq": {
      "state": "pass",
      "text": "3/3",
      "sub": "0 findings",
@@ -9060,7 +11383,25 @@
      "sub": "0 findings",
      "title": "3 of 3 applicable gates pass, 0 findings"
     },
+    "shillinq": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
     "stackiq": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
+    "thematiq": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
+    },
+    "versioniq": {
      "state": "pass",
      "text": "3/3",
      "sub": "0 findings",
@@ -9077,7 +11418,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9102,12 +11458,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9122,7 +11493,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9138,7 +11524,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9163,12 +11564,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9183,7 +11599,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9199,7 +11630,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9224,12 +11670,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9244,7 +11705,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9263,11 +11739,29 @@
      "sub": "55 findings",
      "title": "2 of 3 applicable gates pass, 55 findings"
     },
+    "decidiq": {
+     "state": "fail",
+     "text": "2/3",
+     "sub": "28 findings",
+     "title": "2 of 3 applicable gates pass, 28 findings"
+    },
+    "dossiq": {
+     "state": "fail",
+     "text": "2/3",
+     "sub": "55 findings",
+     "title": "2 of 3 applicable gates pass, 55 findings"
+    },
     "filinq": {
      "state": "fail",
      "text": "2/3",
      "sub": "28 findings",
      "title": "2 of 3 applicable gates pass, 28 findings"
+    },
+    "hermiq": {
+     "state": "fail",
+     "text": "2/3",
+     "sub": "55 findings",
+     "title": "2 of 3 applicable gates pass, 55 findings"
     },
     "humaniq": {
      "state": "fail",
@@ -9293,6 +11787,12 @@
      "sub": "28 findings",
      "title": "2 of 3 applicable gates pass, 28 findings"
     },
+    "launchpad": {
+     "state": "fail",
+     "text": "2/3",
+     "sub": "28 findings",
+     "title": "2 of 3 applicable gates pass, 28 findings"
+    },
     "learniq": {
      "state": "fail",
      "text": "2/3",
@@ -9300,6 +11800,18 @@
      "title": "2 of 3 applicable gates pass, 28 findings"
     },
     "opencatalogi": {
+     "state": "fail",
+     "text": "2/3",
+     "sub": "73 findings",
+     "title": "2 of 3 applicable gates pass, 73 findings"
+    },
+    "openregister": {
+     "state": "fail",
+     "text": "2/3",
+     "sub": "64 findings",
+     "title": "2 of 3 applicable gates pass, 64 findings"
+    },
+    "pipelinq": {
      "state": "fail",
      "text": "2/3",
      "sub": "73 findings",
@@ -9317,11 +11829,29 @@
      "sub": "28 findings",
      "title": "2 of 3 applicable gates pass, 28 findings"
     },
+    "shillinq": {
+     "state": "fail",
+     "text": "2/3",
+     "sub": "55 findings",
+     "title": "2 of 3 applicable gates pass, 55 findings"
+    },
     "stackiq": {
      "state": "fail",
      "text": "2/3",
      "sub": "46 findings",
      "title": "2 of 3 applicable gates pass, 46 findings"
+    },
+    "thematiq": {
+     "state": "fail",
+     "text": "2/3",
+     "sub": "55 findings",
+     "title": "2 of 3 applicable gates pass, 55 findings"
+    },
+    "versioniq": {
+     "state": "pass",
+     "text": "3/3",
+     "sub": "0 findings",
+     "title": "3 of 3 applicable gates pass, 0 findings"
     }
    },
    "gates": [
@@ -9334,10 +11864,25 @@
        "text": "55",
        "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/buildiq/hydra-gate-composer-audit.log"
       },
+      "decidiq": {
+       "state": "fail",
+       "text": "28",
+       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/decidiq/hydra-gate-composer-audit.log"
+      },
+      "dossiq": {
+       "state": "fail",
+       "text": "55",
+       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-composer-audit.log"
+      },
       "filinq": {
        "state": "fail",
        "text": "28",
        "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/filinq/hydra-gate-composer-audit.log"
+      },
+      "hermiq": {
+       "state": "fail",
+       "text": "55",
+       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/hermiq/hydra-gate-composer-audit.log"
       },
       "humaniq": {
        "state": "fail",
@@ -9359,6 +11904,11 @@
        "text": "28",
        "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/larpinq/hydra-gate-composer-audit.log"
       },
+      "launchpad": {
+       "state": "fail",
+       "text": "28",
+       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/launchpad/hydra-gate-composer-audit.log"
+      },
       "learniq": {
        "state": "fail",
        "text": "28",
@@ -9368,6 +11918,16 @@
        "state": "fail",
        "text": "73",
        "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-composer-audit.log"
+      },
+      "openregister": {
+       "state": "fail",
+       "text": "64",
+       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/openregister/hydra-gate-composer-audit.log"
+      },
+      "pipelinq": {
+       "state": "fail",
+       "text": "73",
+       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-composer-audit.log"
       },
       "planninq": {
        "state": "fail",
@@ -9379,10 +11939,25 @@
        "text": "28",
        "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-composer-audit.log"
       },
+      "shillinq": {
+       "state": "fail",
+       "text": "55",
+       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/shillinq/hydra-gate-composer-audit.log"
+      },
       "stackiq": {
        "state": "fail",
        "text": "46",
        "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/stackiq/hydra-gate-composer-audit.log"
+      },
+      "thematiq": {
+       "state": "fail",
+       "text": "55",
+       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/thematiq/hydra-gate-composer-audit.log"
+      },
+      "versioniq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
       }
      }
     },
@@ -9395,7 +11970,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9420,12 +12010,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9440,7 +12045,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9456,7 +12076,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9481,12 +12116,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9501,7 +12151,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9520,7 +12185,25 @@
      "sub": "0 findings",
      "title": "19 of 19 applicable gates pass, 0 findings, 1 did not run"
     },
+    "decidiq": {
+     "state": "pass",
+     "text": "19/19",
+     "sub": "0 findings",
+     "title": "19 of 19 applicable gates pass, 0 findings, 1 did not run"
+    },
+    "dossiq": {
+     "state": "fail",
+     "text": "15/20",
+     "sub": "80 findings",
+     "title": "15 of 20 applicable gates pass, 80 findings"
+    },
     "filinq": {
+     "state": "pass",
+     "text": "19/19",
+     "sub": "0 findings",
+     "title": "19 of 19 applicable gates pass, 0 findings, 1 did not run"
+    },
+    "hermiq": {
      "state": "pass",
      "text": "19/19",
      "sub": "0 findings",
@@ -9550,6 +12233,12 @@
      "sub": "1 findings",
      "title": "19 of 20 applicable gates pass, 1 findings"
     },
+    "launchpad": {
+     "state": "pass",
+     "text": "19/19",
+     "sub": "0 findings",
+     "title": "19 of 19 applicable gates pass, 0 findings, 1 did not run"
+    },
     "learniq": {
      "state": "fail",
      "text": "16/20",
@@ -9561,6 +12250,18 @@
      "text": "19/19",
      "sub": "0 findings",
      "title": "19 of 19 applicable gates pass, 0 findings, 1 did not run"
+    },
+    "openregister": {
+     "state": "pass",
+     "text": "19/19",
+     "sub": "0 findings",
+     "title": "19 of 19 applicable gates pass, 0 findings, 1 did not run"
+    },
+    "pipelinq": {
+     "state": "fail",
+     "text": "19/20",
+     "sub": "1 findings",
+     "title": "19 of 20 applicable gates pass, 1 findings"
     },
     "planninq": {
      "state": "pass",
@@ -9574,11 +12275,29 @@
      "sub": "4 findings",
      "title": "18 of 19 applicable gates pass, 4 findings, 1 did not run"
     },
+    "shillinq": {
+     "state": "pass",
+     "text": "19/19",
+     "sub": "0 findings",
+     "title": "19 of 19 applicable gates pass, 0 findings, 1 did not run"
+    },
     "stackiq": {
      "state": "fail",
      "text": "17/19",
      "sub": "2 findings",
      "title": "17 of 19 applicable gates pass, 2 findings, 1 did not run"
+    },
+    "thematiq": {
+     "state": "pass",
+     "text": "13/13",
+     "sub": "0 findings",
+     "title": "13 of 13 applicable gates pass, 0 findings"
+    },
+    "versioniq": {
+     "state": "pass",
+     "text": "2/2",
+     "sub": "0 findings",
+     "title": "2 of 2 applicable gates pass, 0 findings"
     }
    },
    "gates": [
@@ -9591,7 +12310,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9616,12 +12350,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9636,7 +12385,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9652,7 +12411,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9677,12 +12451,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9697,7 +12486,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9713,7 +12512,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "fail",
+       "text": "37",
+       "title": "37 schema violation(s) in src/manifest.json \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-manifest-validation.log"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9738,12 +12552,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9758,7 +12587,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9774,7 +12613,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "fail",
+       "text": "4",
+       "title": "4 schema property(ies) missing a human-friendly title/description \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-schema-property-titles.log"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9794,12 +12648,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9813,6 +12682,11 @@
        "state": "fail",
        "text": "4",
        "title": "4 schema property(ies) missing a human-friendly title/description \u2014 see /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-schema-property-titles.log"
+      },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
       },
       "stackiq": {
        "state": "pass",
@@ -9830,7 +12704,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9855,12 +12744,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9875,7 +12779,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9891,7 +12810,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "fail",
+       "text": "37",
+       "title": "37 structural violation(s) in the ASSEMBLED manifest (base+fragments+menu-layout) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-effective-manifest-crossref.log"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9916,12 +12850,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "fail",
        "text": "2",
        "title": "2 cross-reference failure(s) in the effective manifest \u2014 see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-effective-manifest-crossref.log"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9936,7 +12885,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9952,7 +12911,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9977,12 +12951,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "fail",
        "text": "1",
        "title": "1 detail-page discipline finding(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-detail-page-discipline.log"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -9997,7 +12986,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10013,7 +13012,22 @@
        "text": "skipped",
        "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
       },
+      "decidiq": {
+       "state": "skip",
+       "text": "skipped",
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+      },
+      "dossiq": {
+       "state": "fail",
+       "text": "1",
+       "title": "1 icon(s) outside the canonical vocabulary (ADR-077); see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-icon-vocabulary.log"
+      },
       "filinq": {
+       "state": "skip",
+       "text": "skipped",
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+      },
+      "hermiq": {
        "state": "skip",
        "text": "skipped",
        "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
@@ -10038,6 +13052,11 @@
        "text": "1",
        "title": "1 icon(s) outside the canonical vocabulary (ADR-077); see /home/rubenlinde/sig-lanes/matrix/out/larpinq/hydra-gate-icon-vocabulary.log"
       },
+      "launchpad": {
+       "state": "skip",
+       "text": "skipped",
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+      },
       "learniq": {
        "state": "fail",
        "text": "1",
@@ -10047,6 +13066,16 @@
        "state": "skip",
        "text": "skipped",
        "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+      },
+      "openregister": {
+       "state": "skip",
+       "text": "skipped",
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+      },
+      "pipelinq": {
+       "state": "fail",
+       "text": "1",
+       "title": "1 icon(s) outside the canonical vocabulary (ADR-077); see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-icon-vocabulary.log"
       },
       "planninq": {
        "state": "skip",
@@ -10058,10 +13087,20 @@
        "text": "skipped",
        "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
       },
+      "shillinq": {
+       "state": "skip",
+       "text": "skipped",
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+      },
       "stackiq": {
        "state": "skip",
        "text": "skipped",
        "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
       }
      }
     },
@@ -10074,7 +13113,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10099,12 +13153,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10119,7 +13188,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10135,7 +13214,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10160,12 +13254,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10180,7 +13289,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10196,7 +13315,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10221,12 +13355,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10241,7 +13390,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10257,7 +13416,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10282,12 +13456,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10302,7 +13491,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10318,7 +13517,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "fail",
+       "text": "1",
+       "title": "1 walkthrough flows finding(s) across 1 applicable manifest(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-walkthrough-flows-stop.log"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10338,6 +13552,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -10348,7 +13567,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10369,7 +13603,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10394,6 +13643,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -10404,12 +13658,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10435,7 +13704,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10460,6 +13744,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -10470,12 +13759,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10496,7 +13800,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10516,12 +13835,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10536,7 +13870,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10552,7 +13896,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10577,12 +13936,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10597,10 +13971,20 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
        "state": "fail",
        "text": "1",
        "title": "1 finding(s) against ADR-112 (one reports page, its entry in the settings foldout labelled Advanced, no report reachable both as a card and as a menu entry) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/stackiq/hydra-gate-reports-one-page.log"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
       }
      }
     },
@@ -10613,7 +13997,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10638,6 +14037,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -10648,12 +14052,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10674,7 +14093,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10695,6 +14129,11 @@
        "title": "pass"
       },
       "larpinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "launchpad": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10709,6 +14148,16 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
@@ -10719,10 +14168,20 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
        "state": "fail",
        "text": "1",
        "title": "1 blocking finding(s) against ADR-114 (Documentation, Features & roadmap and Flows in every app, in their declared sections, and no hand-rolled Admin settings link) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/stackiq/hydra-gate-app-chrome.log"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
       }
      }
     },
@@ -10735,7 +14194,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10760,6 +14234,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -10770,12 +14249,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10799,11 +14293,29 @@
      "sub": "774 findings",
      "title": "10 of 13 applicable gates pass, 774 findings"
     },
+    "decidiq": {
+     "state": "fail",
+     "text": "11/13",
+     "sub": "1963 findings",
+     "title": "11 of 13 applicable gates pass, 1963 findings"
+    },
+    "dossiq": {
+     "state": "fail",
+     "text": "11/13",
+     "sub": "2946 findings",
+     "title": "11 of 13 applicable gates pass, 2946 findings"
+    },
     "filinq": {
      "state": "fail",
      "text": "10/12",
      "sub": "809 findings",
      "title": "10 of 12 applicable gates pass, 809 findings"
+    },
+    "hermiq": {
+     "state": "fail",
+     "text": "11/12",
+     "sub": "1149 findings",
+     "title": "11 of 12 applicable gates pass, 1149 findings"
     },
     "humaniq": {
      "state": "fail",
@@ -10829,6 +14341,12 @@
      "sub": "187 findings",
      "title": "12 of 13 applicable gates pass, 187 findings"
     },
+    "launchpad": {
+     "state": "fail",
+     "text": "11/12",
+     "sub": "501 findings",
+     "title": "11 of 12 applicable gates pass, 501 findings"
+    },
     "learniq": {
      "state": "fail",
      "text": "11/13",
@@ -10840,6 +14358,18 @@
      "text": "10/13",
      "sub": "871 findings",
      "title": "10 of 13 applicable gates pass, 871 findings"
+    },
+    "openregister": {
+     "state": "fail",
+     "text": "11/13",
+     "sub": "3809 findings",
+     "title": "11 of 13 applicable gates pass, 3809 findings"
+    },
+    "pipelinq": {
+     "state": "fail",
+     "text": "9/12",
+     "sub": "1279 findings",
+     "title": "9 of 12 applicable gates pass, 1279 findings"
     },
     "planninq": {
      "state": "fail",
@@ -10853,11 +14383,29 @@
      "sub": "975 findings",
      "title": "11 of 13 applicable gates pass, 975 findings"
     },
+    "shillinq": {
+     "state": "fail",
+     "text": "11/13",
+     "sub": "786 findings",
+     "title": "11 of 13 applicable gates pass, 786 findings"
+    },
     "stackiq": {
      "state": "fail",
      "text": "11/13",
      "sub": "492 findings",
      "title": "11 of 13 applicable gates pass, 492 findings"
+    },
+    "thematiq": {
+     "state": "fail",
+     "text": "10/11",
+     "sub": "276 findings",
+     "title": "10 of 11 applicable gates pass, 276 findings"
+    },
+    "versioniq": {
+     "state": "fail",
+     "text": "8/9",
+     "sub": "338 findings",
+     "title": "8 of 9 applicable gates pass, 338 findings"
     }
    },
    "gates": [
@@ -10870,7 +14418,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10895,12 +14458,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10915,7 +14493,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10931,7 +14524,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10956,12 +14564,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10976,7 +14599,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -10992,10 +14630,25 @@
        "text": "772",
        "title": "772 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/buildiq/hydra-gate-e2e-coverage.log"
       },
+      "decidiq": {
+       "state": "warn",
+       "text": "1962",
+       "title": "1962 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/decidiq/hydra-gate-e2e-coverage.log"
+      },
+      "dossiq": {
+       "state": "warn",
+       "text": "2945",
+       "title": "2945 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-e2e-coverage.log"
+      },
       "filinq": {
        "state": "warn",
        "text": "808",
        "title": "808 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/filinq/hydra-gate-e2e-coverage.log"
+      },
+      "hermiq": {
+       "state": "warn",
+       "text": "1149",
+       "title": "1149 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/hermiq/hydra-gate-e2e-coverage.log"
       },
       "humaniq": {
        "state": "warn",
@@ -11017,6 +14670,11 @@
        "text": "187",
        "title": "187 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/larpinq/hydra-gate-e2e-coverage.log"
       },
+      "launchpad": {
+       "state": "warn",
+       "text": "501",
+       "title": "501 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/launchpad/hydra-gate-e2e-coverage.log"
+      },
       "learniq": {
        "state": "warn",
        "text": "563",
@@ -11026,6 +14684,16 @@
        "state": "warn",
        "text": "868",
        "title": "868 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-e2e-coverage.log"
+      },
+      "openregister": {
+       "state": "warn",
+       "text": "3808",
+       "title": "3808 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/openregister/hydra-gate-e2e-coverage.log"
+      },
+      "pipelinq": {
+       "state": "warn",
+       "text": "1275",
+       "title": "1275 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-e2e-coverage.log"
       },
       "planninq": {
        "state": "warn",
@@ -11037,10 +14705,25 @@
        "text": "974",
        "title": "974 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-e2e-coverage.log"
       },
+      "shillinq": {
+       "state": "warn",
+       "text": "785",
+       "title": "785 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/shillinq/hydra-gate-e2e-coverage.log"
+      },
       "stackiq": {
        "state": "warn",
        "text": "491",
        "title": "491 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/stackiq/hydra-gate-e2e-coverage.log"
+      },
+      "thematiq": {
+       "state": "warn",
+       "text": "276",
+       "title": "276 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/thematiq/hydra-gate-e2e-coverage.log"
+      },
+      "versioniq": {
+       "state": "warn",
+       "text": "338",
+       "title": "338 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/versioniq/hydra-gate-e2e-coverage.log"
       }
      }
     },
@@ -11053,7 +14736,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11078,12 +14776,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11098,7 +14811,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11114,7 +14842,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11139,12 +14882,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11159,7 +14917,17 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11175,7 +14943,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "fail",
+       "text": "1",
+       "title": "1 new page component(s) missing a visual baseline \u2014 see /home/rubenlinde/sig-lanes/matrix/out/decidiq/hydra-gate-visual-coverage.log"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11200,6 +14983,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "fail",
        "text": "5",
@@ -11210,12 +14998,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "fail",
+       "text": "1",
+       "title": "1 new page component(s) missing a visual baseline \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-visual-coverage.log"
+      },
       "planninq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11246,7 +15049,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11271,12 +15089,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "fail",
+       "text": "1",
+       "title": "1 orphaned write-capability method(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/openregister/hydra-gate-orphaned-write-capability.log"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11291,7 +15124,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11307,7 +15155,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11332,12 +15195,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11352,7 +15230,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11368,7 +15261,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11393,12 +15301,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11413,7 +15336,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11423,7 +15361,13 @@
     {
      "id": "gate.67",
      "label": "67 openregister-contract-parity",
-     "cells": {}
+     "cells": {
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      }
+     }
     },
     {
      "id": "gate.101",
@@ -11438,6 +15382,16 @@
        "state": "fail",
        "text": "1",
        "title": "1 schema slug(s) the e2e seed requires are declared nowhere, or claimed from an owner that does not declare them or cannot be read - the seed would exit before Playwright starts and every spec would report as NOT RUN - see /home/rubenlinde/sig-lanes/matrix/out/buildiq/hydra-gate-seed-required-slugs."
+      },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
       },
       "integriq": {
        "state": "pass",
@@ -11465,6 +15419,11 @@
        "title": "pass"
       },
       "portaliq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "shillinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11485,7 +15444,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "warn",
+       "text": "1",
+       "title": "1 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-newman-reach.log"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11505,6 +15479,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -11514,6 +15493,16 @@
        "state": "warn",
        "text": "2",
        "title": "2 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-newman-reach.log"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "warn",
+       "text": "3",
+       "title": "3 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-newman-reach.log"
       },
       "planninq": {
        "state": "pass",
@@ -11525,10 +15514,20 @@
        "text": "1",
        "title": "1 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-newman-reach.log"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
        "state": "warn",
        "text": "1",
        "title": "1 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/stackiq/hydra-gate-newman-reach.log"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
       }
      }
     },
@@ -11541,7 +15540,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "hermiq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11566,12 +15580,27 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
       },
       "opencatalogi": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11586,7 +15615,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
@@ -11602,10 +15646,25 @@
        "text": "1",
        "title": "1 SIG 4-star check(s) in this app's floor are no longer met, or were removed from .github/sig-floor.json. Each is named above with its share and limit. See /home/rubenlinde/sig-lanes/matrix/out/buildiq/sig-floor.md and /home/rubenlinde/sig-lanes/matrix/out/buildiq/hydra-gate-sig-floor.log"
       },
+      "decidiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "dossiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "filinq": {
        "state": "fail",
        "text": "1",
        "title": "1 SIG 4-star check(s) in this app's floor are no longer met, or were removed from .github/sig-floor.json. Each is named above with its share and limit. See /home/rubenlinde/sig-lanes/matrix/out/filinq/sig-floor.md and /home/rubenlinde/sig-lanes/matrix/out/filinq/hydra-gate-sig-floor.log"
+      },
+      "hermiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
       },
       "humaniq": {
        "state": "fail",
@@ -11627,6 +15686,11 @@
        "text": "pass",
        "title": "pass"
       },
+      "launchpad": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
       "learniq": {
        "state": "pass",
        "text": "pass",
@@ -11636,6 +15700,16 @@
        "state": "fail",
        "text": "1",
        "title": "1 SIG 4-star check(s) in this app's floor are no longer met, or were removed from .github/sig-floor.json. Each is named above with its share and limit. See /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/sig-floor.md and /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-sig-floor.log"
+      },
+      "openregister": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "pipelinq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
       },
       "planninq": {
        "state": "pass",
@@ -11647,7 +15721,22 @@
        "text": "pass",
        "title": "pass"
       },
+      "shillinq": {
+       "state": "fail",
+       "text": "1",
+       "title": "1 SIG 4-star check(s) in this app's floor are no longer met, or were removed from .github/sig-floor.json. Each is named above with its share and limit. See /home/rubenlinde/sig-lanes/matrix/out/shillinq/sig-floor.md and /home/rubenlinde/sig-lanes/matrix/out/shillinq/hydra-gate-sig-floor.log"
+      },
       "stackiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "thematiq": {
+       "state": "pass",
+       "text": "pass",
+       "title": "pass"
+      },
+      "versioniq": {
        "state": "pass",
        "text": "pass",
        "title": "pass"
