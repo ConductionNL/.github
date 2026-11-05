@@ -141,7 +141,7 @@ test_or_abstraction_exceptions.sh	2
 test_or_abstraction_pdok.sh	1
 test_php_template_scope.py	0
 test_shipped_contracts_documented.py	0
-test_sig_file_floor.py	7
+test_sig_file_floor.py	15
 test_source_scope.py	0
 test_vendored_schema_freshness.js	1
 test_write_gates_json.py	25

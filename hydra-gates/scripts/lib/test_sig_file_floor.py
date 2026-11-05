@@ -173,6 +173,37 @@ class CloneLines(FileFloorCase):
         text = "import {\n  a,\n  b,\n} from 'x'\nconst y = 1\n"
         self.assertEqual(files.floor_code_lines(text, "javascript"), {5})
 
+    def test_vue_block_tags_imports_and_the_export_default_shell_are_left_out(self):
+        text = ("<template>\n  <div class=\"x\">\n    <span>{{ a }}</span>\n  </div>\n</template>\n\n"
+                "<script setup>\nimport A from './A.vue'\nimport { b } from 'b'\n</script>\n\n"
+                "<script>\nexport default {\n  components: { A },\n  mounted() {\n    this.load()\n  },\n}\n"
+                "</script>\n\n<style scoped lang=\"scss\">\n.x { color: red; }\n</style>\n")
+        kept = files.floor_code_lines(text, "vue")
+        lines = text.splitlines()
+        self.assertEqual(sorted(lines[n - 1].strip() for n in kept),
+                         sorted(['<div class="x">', "<span>{{ a }}</span>", "</div>", "components: { A },",
+                                 "mounted() {", "this.load()", "},", ".x { color: red; }"]))
+
+    def test_vue_files_sharing_only_their_shell_are_not_a_clone(self):
+        def sfc(name, extra):
+            return ("<template>\n  <div>{{ " + name + " }}</div>\n</template>\n\n<script>\n"
+                    "import { translate as t } from '@nextcloud/l10n'\nimport NcButton from '@nextcloud/vue'\n"
+                    "import CnPage from '@conduction/nextcloud-vue'\n\nexport default {\n"
+                    f"  name: '{name}',\n  data() {{\n    return {{ {extra}: 1 }}\n  }},\n}}\n</script>\n\n"
+                    "<style scoped>\n</style>\n")
+        self.write("src/views/One.vue", sfc("One", "one"))
+        rc, out = self.hold("src/views/Two.vue", sfc("Two", "two"))
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("duplicated block", out)
+
+    def test_a_shared_vue_body_is_still_a_clone(self):
+        body = "".join(f"    this.step{i}()\n" for i in range(6))
+        sfc = "<script>\nexport default {\n  mounted() {\n" + body + "  },\n}\n</script>\n"
+        self.write("src/views/One.vue", sfc)
+        rc, out = self.hold("src/views/Two.vue", sfc.replace("mounted", "created"))
+        self.assertIn("warning: five-star file src/views/Two.vue:", out)
+        self.assertIn("duplicated block of 6+ code lines, same as src/views/One.vue:", out)
+
     def test_a_bare_closing_brace_still_counts(self):
         self.assertIn(2, files.floor_code_lines("<?php\n}\n}//end x()\n", "php"))
         self.assertNotIn(3, files.floor_code_lines("<?php\n}\n}//end x()\n", "php"))

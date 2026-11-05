@@ -16,8 +16,11 @@ the same language and against the file itself). The units are gate 122's
 
 Lines every file shares are left out of the clone windows: `use`,
 `namespace` and import statements (also a multi-line import block), and
-comment-only lines such as the `}//end methodName()` marker. Everything else
-counts, a bare `}` included.
+comment-only lines such as the `}//end methodName()` marker. In Vue, JS and
+TS files also the SFC block tags (`<template>`, `<script setup>`, `</style>`
+and the like) and the `export default {` line with its closing `}`.
+Everything else counts: a bare `}`, component lists, lifecycle bodies and
+template markup included.
 
 Two kinds of unit are exempt from the parameter rule only, detected from the
 source and never listed by hand. Size, complexity and clones still apply.
@@ -361,14 +364,34 @@ JS_IMPORT_LINE = re.compile(r"^(import\b|export\s+(\*|\{[^}]*\}?)\s*(from\b|$))"
 END_MARKER = re.compile(r"^[\s{}()\[\];,]*(//|#(?!\[)).*$")
 
 
+SFC_TAG = re.compile(r"^</?(template|script|style)\b[^>]*>$", re.I)
+EXPORT_DEFAULT = re.compile(r"^export\s+default\s*\{$")
+OBJECT_CLOSE = re.compile(r"^\}\s*;?$")
+
+
+def _export_default_close(lines, start):
+    """Line number of the `}` that closes the `export default {` object opened
+    on line `start` (1-based), or None."""
+    depth = 0
+    for n in range(start, len(lines) + 1):
+        s = lines[n - 1]
+        depth += s.count("{") - s.count("}")
+        if depth == 0:
+            return n if OBJECT_CLOSE.match(s.strip()) else None
+    return None
+
+
 def floor_code_lines(text, lang):
     """gate 122's code lines minus the lines that are the same in every file:
     `use`, `namespace` and import statements (also when they span lines), and
-    a bracket followed only by a comment, such as `}//end methodName()`."""
+    a bracket followed only by a comment, such as `}//end methodName()`. In
+    Vue, JS and TS also the SFC block tags (`<template>`, `<script setup>`,
+    `</style>` ...) and the `export default {` line with its closing `}`."""
     code = sig.code_lines(text, lang)
     lines = text.splitlines()
     pattern = IMPORT_LINE.get(lang, JS_IMPORT_LINE)
-    out, depth = set(), 0
+    js = lang in JS_LANGS
+    out, depth, skip = set(), 0, set()
     for n in sorted(code):
         s = lines[n - 1].strip()
         opens = s.count("(") + s.count("{") + s.count("[") - s.count(")") - s.count("}") - s.count("]")
@@ -378,7 +401,14 @@ def floor_code_lines(text, lang):
         if pattern.match(s):
             depth = max(opens, 0)
             continue
-        if END_MARKER.match(s):
+        if END_MARKER.match(s) or n in skip:
+            continue
+        if js and SFC_TAG.match(s):
+            continue
+        if js and EXPORT_DEFAULT.match(s):
+            close = _export_default_close(lines, n)
+            if close:
+                skip.add(close)
             continue
         out.add(n)
     return out
