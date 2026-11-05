@@ -88,6 +88,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 from source_scope import php_mask, script_mask  # noqa: E402
+from controller_resolver import Resolver, app_namespace  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -465,9 +466,29 @@ def _route_prefix(path: str) -> str | None:
     return cls[:1].lower() + cls[1:]
 
 
-def _is_routed(path: str, method: str, head: str, route_corpus: str) -> bool:
+_ROUTE_PAIR_RE = re.compile(r"['\"]([A-Za-z][A-Za-z0-9_\\]*)\s*#\s*([A-Za-z0-9_]+)['\"]")
+
+
+def _routed_methods_by_file(route_corpus: str) -> dict:
+    """{controller file: {method, ...}} for every `name#method` in the route
+    table, each name resolved to its file by controller_resolver (class
+    aliases and PSR-4), so a controller outside lib/Controller/ is matched."""
+    resolver = Resolver(".", app_namespace("."))
+    cache: dict = {}
+    out: dict = {}
+    for name, method in _ROUTE_PAIR_RE.findall(route_corpus):
+        if name not in cache:
+            cache[name] = resolver.resolve(name)
+        if cache[name]:
+            out.setdefault(os.path.normpath(cache[name]), set()).add(method)
+    return out
+
+
+def _is_routed(path: str, method: str, head: str, route_corpus: str, routed: dict | None = None) -> bool:
     """True when the router — not a `->method(` call — reaches this method."""
     if _ROUTE_ATTR_RE.search(head):
+        return True
+    if routed and method in routed.get(os.path.normpath(os.path.relpath(path)), ()):
         return True
     prefix = _route_prefix(path)
     if not prefix:
@@ -483,6 +504,7 @@ def scan_files(files: list[str]) -> list[str]:
     """Return finding lines for the given candidate files."""
     corpus = _build_caller_corpus()
     route_corpus = _build_route_corpus()
+    routed = _routed_methods_by_file(route_corpus)
     findings: list[str] = []
     for f in files:
         try:
@@ -500,7 +522,7 @@ def scan_files(files: list[str]) -> list[str]:
             if caller_re.search(corpus):
                 continue
             # The router is a caller the `lib/`+`src/` corpus cannot contain.
-            if _is_routed(f, name, head, route_corpus):
+            if _is_routed(f, name, head, route_corpus, routed):
                 continue
             if _is_excluded(src, line_no):
                 continue

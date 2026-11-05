@@ -985,12 +985,21 @@ def cmd_report(args, lizard, jscpd):
 # ratchet
 # --------------------------------------------------------------------------
 
-def added_lines(app, base, rel):
-    rc, out = git(app, "diff", "-U0", "--no-color", base, "HEAD", "--", rel)
+def added_lines(app, base, rel, old=None):
+    """Lines of `rel` the change added. A renamed file is diffed against its old
+    path, so a pure move adds nothing and only the lines edited in it count."""
+    paths = [old, rel] if old and old != rel else [rel]
+    rc, out = git(app, "diff", "-U0", "--no-color", "-M", "--src-prefix=a/", "--dst-prefix=b/",
+                  base, "HEAD", "--", *paths)
     lines = set()
+    current = None
     for line in out.splitlines():
+        if line.startswith("+++ "):
+            current = line[4:]
+            current = current[2:] if current.startswith("b/") else None
+            continue
         m = re.match(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
-        if m:
+        if m and current == rel:
             start, count = int(m.group(1)), int(m.group(2) or 1)
             lines.update(range(start, start + count))
     return lines
@@ -1031,7 +1040,7 @@ def cmd_ratchet(args, lizard, jscpd_exe):
     touched_units = 0
     added = {}
     for rel, (lang, old) in sorted(changed.items()):
-        added[rel] = added_lines(app, mb, rel)
+        added[rel] = added_lines(app, mb, rel, old)
         head_units = reader.units(rel, lang, read_text(os.path.join(app, rel)))
         base_units = {}
         if old:

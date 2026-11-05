@@ -329,6 +329,48 @@ class Ratchet(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         self.assertNotIn("duplicated fragment", out)
 
+    def with_twin_on_base(self):
+        """Base gains lib/Service/Twin.php, a clone of Legacy::copyOne's block."""
+        self.repo.git("checkout", "-q", "base")
+        self.repo.write("lib/Service/Twin.php", php_class("Twin", [
+            php_method("copyTwo", lines=1, tag="y").replace("        return 0;", DUP_BLOCK + "        return 0;")]))
+        self.repo.commit("base with an existing clone")
+        self.repo.git("checkout", "-q", "-B", "change", "base")
+
+    def move(self, old, new, namespace):
+        os.makedirs(os.path.join(self.repo.dir, os.path.dirname(new)), exist_ok=True)
+        self.repo.git("mv", old, new)
+        self.edit("namespace OCA\\Fx\\Service;", f"namespace {namespace};", rel=new)
+
+    def test_a_moved_file_adds_no_findings(self):
+        # openregister#5519: 63 classes moved to lib/Search, and every line of
+        # every moved file counted as added, so existing clones and long units
+        # came back as 71 new findings.
+        self.with_twin_on_base()
+        self.move("lib/Service/Twin.php", "lib/Search/Twin.php", "OCA\\Fx\\Search")
+        self.move("lib/Service/Legacy.php", "lib/Search/Legacy.php", "OCA\\Fx\\Search")
+        rc, out = self.ratchet()
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("duplicated fragment", out)
+        self.assertIn("checked 0 changed unit(s) in 2 file(s), 0 finding(s)", out)
+
+    def test_a_unit_made_worse_in_a_moved_file_is_new(self):
+        self.move("lib/Service/Legacy.php", "lib/Search/Legacy.php", "OCA\\Fx\\Search")
+        self.edit("$a5 = 5 + strlen('abig');", "$a5 = 5 + strlen('abig');\n        $grow = 1;",
+                  rel="lib/Search/Legacy.php")
+        rc, out = self.ratchet()
+        self.assertEqual(rc, 1, out)
+        self.assertIn(f"lib/Search/Legacy.php:6 Legacy::big: NLOC > 60: {nloc(71)} (was {nloc(70)})", out)
+        self.assertIn("FAIL: 1 finding(s)", out)
+
+    def test_a_clone_added_to_a_moved_file_is_new(self):
+        self.move("lib/Service/Legacy.php", "lib/Search/Legacy.php", "OCA\\Fx\\Search")
+        self.edit("class Legacy\n{\n", "class Legacy\n{\n" + php_method("copyThree", lines=1, tag="w").replace(
+            "        return 0;", DUP_BLOCK + "        return 0;"), rel="lib/Search/Legacy.php")
+        rc, out = self.ratchet()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("duplicated fragment of 6+ lines", out)
+
     def test_a_change_with_no_measured_source_is_not_applicable(self):
         self.repo.write("README.md", "changed\n")
         self.repo.write("tests/Unit/FreshTest.php", php_class("FreshTest", [php_method("t", lines=80)]))

@@ -48,6 +48,15 @@ expect clean 0 0 "every node declares its kind and category"
 expect planted 1 1 "the planted node is refused, and the declared node beside it is NOT"
 expect no-nodes 4 0 "a repository with no flow-node directory is NOT APPLICABLE, which is not a pass"
 
+# A component layout puts the nodes at lib/<Component>/Service/Flow/Nodes/.
+# The planted tree is copied there, with no lib/Service/ left behind, so a
+# checker that reads lib/Service/Flow/Nodes/ only reports NOT APPLICABLE.
+COMPONENT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/gate111-component.XXXXXXXX")"
+trap 'rm -rf "${COMPONENT_ROOT}"' EXIT
+mkdir -p "${COMPONENT_ROOT}/component/lib/Workflow/Service/Flow"
+cp -r "${FIXTURES}/planted/lib/Service/Flow/Nodes" "${COMPONENT_ROOT}/component/lib/Workflow/Service/Flow/"
+FIXTURES="${COMPONENT_ROOT}" expect component 1 1 "the planted node under lib/Workflow/Service/Flow/Nodes/ is refused"
+
 if [ "${fails}" -ne 0 ]; then
     echo "gate-111 acceptance: ${fails} case(s) failed"
     exit 1

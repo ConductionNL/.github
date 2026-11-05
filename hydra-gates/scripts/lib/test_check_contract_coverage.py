@@ -657,5 +657,34 @@ return ['routes' => [
         self.assertIn("thing#destroy", out)
 
 
+
+class ContractCoverageComponentLayout(unittest.TestCase):
+    """A controller moved to lib/<Component>/Controller/ keeps its route name
+    through appinfo/class-aliases.json; its endpoints are still judged."""
+
+    def setUp(self) -> None:
+        self.app = _App()
+        self.addCleanup(self.app.destroy)
+        (self.app.root / "lib/Controller/ThingController.php").unlink()
+        self.app.write("composer.json", '{"autoload": {"psr-4": {"OCA\\\\Fx\\\\": "lib/"}}}')
+        self.app.write("lib/AppInfo/Application.php", "<?php\nnamespace OCA\\Fx\\AppInfo;\n\nclass Application {}\n")
+        self.app.write("lib/Search/Controller/ThingController.php",
+                       CONTROLLER.replace("namespace OCA\\Fx\\Controller;", "namespace OCA\\Fx\\Search\\Controller;"))
+        self.app.write("appinfo/class-aliases.json",
+                       '{"aliases": {"OCA\\\\Fx\\\\Controller\\\\ThingController": '
+                       '{"class": "OCA\\\\Fx\\\\Search\\\\Controller\\\\ThingController"}}}')
+        self.app.commit()
+
+    def test_a_moved_untested_public_endpoint_is_still_a_finding(self):
+        rc, out = self.app.verdict()
+        self.assertEqual(rc, ccc.EXIT_FAIL, out)
+        self.assertIn("thing#destroy", out)
+
+    def test_a_controller_directory_anywhere_under_lib_is_a_controller(self):
+        self.assertTrue(ccc._is_controller_path("lib/Search/Controller/ThingController.php"))
+        self.assertFalse(ccc._is_controller_path("lib/Search/Service/ThingService.php"))
+        self.assertTrue(ccc._is_controller_path("lib/Search/Odd.php", {"lib/Search/Odd.php": {"odd"}}))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

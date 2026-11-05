@@ -191,6 +191,7 @@ can typehint it under PHPUnit without the OpenRegister app installed:
 | `ObjectEntityInterface.php` | interface | the object a read returns |
 | `RegisterSlugResolverInterface.php` | interface | finds the slug a register answers to on this instance |
 | `RegisterSlugResolution.php` | **final class** | the value `resolve()` returns |
+| `EmailLinkReaderInterface.php` | interface | reads the Nextcloud Mail messages linked to an object |
 
 Each file is a byte-for-byte copy of the same file in openregister's
 `lib/Contract/`. No namespace rewrite, no header, no index. Gate 67 fails the
@@ -204,7 +205,8 @@ own `vendor/` copy over the one beside the runner. CI never runs `composer
 install` for the gates, so CI goes green as soon as this repo ships the file. A
 local checkout with an older release in `vendor/` keeps reporting it as "NOT
 shipped" until the lock moves. `RegisterSlugResolution` and `RegisterSlugResolverInterface`
-landed in openregister#3571, here in #739, and first shipped in v1.18.0.
+landed in openregister#3571, here in #739, and first shipped in v1.18.0. `EmailLinkReaderInterface`
+first shipped in v1.19.0, so an openregister lock on v1.18.0 still fails gate 67 locally.
 
 They are **not** autoloaded. This package used to declare
 
@@ -224,7 +226,7 @@ A consumer that needs these contracts requires them from its own test
 bootstrap, behind a guard:
 
 ```php
-foreach (['ObjectEntityInterface', 'ObjectServiceInterface', 'RegisterSlugResolution', 'RegisterSlugResolverInterface'] as $contract) {
+foreach (['ObjectEntityInterface', 'ObjectServiceInterface', 'RegisterSlugResolution', 'RegisterSlugResolverInterface', 'EmailLinkReaderInterface'] as $contract) {
 	$fqcn = '\\OCA\\OpenRegister\\Contract\\' . $contract;
 	if (interface_exists($fqcn) === false && class_exists($fqcn) === false) {
 		$shipped = __DIR__ . '/../vendor/conduction/hydra-gates/hydra-gates/contracts/' . $contract . '.php';
@@ -274,6 +276,7 @@ the autoloader is precisely the defect this change removed.
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectEntityInterface.php" />
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/RegisterSlugResolverInterface.php" />
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/RegisterSlugResolution.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/EmailLinkReaderInterface.php" />
 </stubs>
 ```
 

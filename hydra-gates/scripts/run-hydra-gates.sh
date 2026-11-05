@@ -1495,6 +1495,10 @@ _di_binds_fq_controller() {
 # ---------------------------------------------------------------------------
 _ctrl_path_from_name() {
     local _name="$1"
+    if [ -n "${_HYDRA_ROUTED_CTRL[${_name}]:-}" ]; then
+        echo "${_HYDRA_ROUTED_CTRL[${_name}]}"
+        return 0
+    fi
     case "${_name}" in
         "${_HYDRA_APP_NS:-__no_app_ns__}"\\*)
             # PSR-4: `OCA\<App>\` maps to `lib/`. Strip the app prefix, turn
@@ -1765,6 +1769,117 @@ _head_block() {
 # The one regex both route gates read `appinfo/routes.php` through.
 _ROUTE_NAME_RX="'name'\s*=>\s*'[A-Za-z][A-Za-z0-9_\\]*#[a-zA-Z0-9_]+'"
 _ROUTE_PAIR_RX="[A-Za-z][A-Za-z0-9_\\]*#[a-zA-Z0-9_]+"
+
+# ---------------------------------------------------------------------------
+# ROUTED CONTROLLERS, WHEREVER THEY LIVE UNDER lib/
+#
+# A routed controller is the class Nextcloud instantiates for a route name,
+# and that class need not sit in lib/Controller/: a component layout moves it
+# to lib/<Component>/Controller/ and keeps the old name working through a
+# class alias. Measured on openregister#5519: with the Search controllers
+# moved, gate 5 parked 47 routes as "not judged" and still printed PASS, and
+# gates 7 and 14 no longer opened them at all.
+#
+# scripts/lib/controller_resolver.py resolves every route controller name in
+# appinfo/routes.php (plus the AppHost table when the app defers to it) the
+# way Nextcloud does, through appinfo/class-aliases.json and composer.json's
+# PSR-4 map. Run once per run; the answers are read from these tables.
+#
+#   _HYDRA_ROUTED_CTRL[<route controller name>] -> file, empty when unresolved
+#   _HYDRA_ROUTED_CTRL_FILES                    -> the resolved files, one per line
+#   _HYDRA_CTRL_RESOLVER_OK                     -> 1 when the resolver finished
+# ---------------------------------------------------------------------------
+declare -A _HYDRA_ROUTED_CTRL=()
+_HYDRA_ROUTED_CTRL_FILES=""
+_HYDRA_CTRL_RESOLVER_OK=0
+if [ -f appinfo/routes.php ]; then
+    _hcr_out=$({
+        grep -oE "${_ROUTE_NAME_RX}" appinfo/routes.php | grep -oE "${_ROUTE_PAIR_RX}"
+        if [ "${_HYDRA_APPHOST_ROUTE_TABLE}" -eq 1 ]; then
+            printf '%s\n' ${_HYDRA_APPHOST_ROUTE_NAMES}
+        fi
+    } | cut -d'#' -f1 | sort -u \
+        | python3 "${SCRIPT_DIR}/lib/controller_resolver.py" . "${_HYDRA_APP_NS}" 2>/dev/null)
+    if printf '%s\n' "${_hcr_out}" | grep -qE '^# resolved [0-9]+ of [0-9]+$'; then
+        _HYDRA_CTRL_RESOLVER_OK=1
+        while IFS=$'\t' read -r _hcr_name _hcr_path; do
+            case "${_hcr_name}" in ''|'#'*) continue ;; esac
+            _HYDRA_ROUTED_CTRL["${_hcr_name}"]="${_hcr_path}"
+            [ -n "${_hcr_path}" ] && _HYDRA_ROUTED_CTRL_FILES="${_HYDRA_ROUTED_CTRL_FILES}${_hcr_path}${_NL}"
+        done <<< "${_hcr_out}"
+        _HYDRA_ROUTED_CTRL_FILES=$(printf '%s' "${_HYDRA_ROUTED_CTRL_FILES}" | sort -u)
+    else
+        echo "[hydra-gates] WARNING: controller_resolver.py did not finish; routed controllers outside lib/Controller/ are located by name only."
+    fi
+fi
+
+# _routed_names_for <file> — the route controller names that resolve to <file>.
+_routed_names_for() {
+    local _k
+    for _k in "${!_HYDRA_ROUTED_CTRL[@]}"; do
+        [ "${_HYDRA_ROUTED_CTRL[${_k}]}" = "$1" ] && printf '%s\n' "${_k}"
+    done
+}
+
+# _lib_dirs_named <Name>... — lib/<Name> plus every tracked directory under
+# lib/ whose last segment is one of <Name>, e.g. lib/Search/Service for
+# `Service`. Gates that judge a class role by its directory read their files
+# from these, so a component layout (lib/<Component>/<Role>/) is covered.
+_lib_dirs_named() {
+    local _alt _n
+    _alt=$(IFS='|'; printf '%s' "$*")
+    for _n in "$@"; do printf 'lib/%s\n' "${_n}"; done
+    if git -c safe.directory='*' rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git -c safe.directory='*' ls-files -- lib 2>/dev/null \
+            | awk -F/ -v re="^(${_alt})$" '{ p = $1; for (i = 2; i < NF; i++) { p = p "/" $i; if ($i ~ re) print p } }'
+    elif [ -d lib ]; then
+        find lib -type d \( -path '*/vendor' -o -path '*/node_modules' \) -prune -o -type d -print 2>/dev/null \
+            | awk -F/ -v re="^(${_alt})$" '$NF ~ re'
+    fi | sort -u
+}
+
+# _enum_role <tracked|scoped> <basename-regex> <Name>... — `_enum_tracked` or
+# `_enum_scoped` over every directory `_lib_dirs_named <Name>...` lists.
+_enum_role() {
+    local _mode="$1" _re="$2" _dirs
+    shift 2
+    mapfile -t _dirs < <(_lib_dirs_named "$@")
+    if [ "${_mode}" = "scoped" ]; then
+        _enum_scoped "${_re}" "${_dirs[@]}"
+    else
+        _enum_tracked "${_re}" "${_dirs[@]}"
+    fi
+}
+
+# _enum_controllers <tracked|scoped> — every controller file a controller gate
+# judges: PHP under any Controller directory in lib/, plus every routed
+# controller the resolver found elsewhere. `scoped` keeps those in the diff.
+_enum_controllers() {
+    {
+        if [ "$1" = "scoped" ]; then
+            _enum_role scoped '\.php$' Controller
+        else
+            _enum_role tracked '\.php$' Controller
+        fi
+        printf '%s\n' "${_HYDRA_ROUTED_CTRL_FILES}" | while IFS= read -r _f; do
+            [ -n "${_f}" ] && [ -f "${_f}" ] || continue
+            [ "$1" = "scoped" ] && { _in_scope "${_f}" || continue; }
+            printf '%s\n' "${_f}"
+        done
+    } | sort -u
+}
+
+# 1 when the diff deletes or renames a controller file. The route table is the
+# only place its routes are named, so such a change puts every route back in
+# scope for the route gates: a move that leaves a route pointing nowhere is
+# a 500 at request time.
+_HYDRA_CTRL_MOVED=0
+if [ "${HAVE_DELTA_BASE}" = "1" ] && [ -n "${BASE_REF}" ]; then
+    if git -c safe.directory='*' diff --name-status -M --diff-filter=DR "${BASE_REF}...HEAD" -- lib 2>/dev/null \
+        | awk -F'\t' '{print $2}' | grep -qE 'Controller\.php$'; then
+        _HYDRA_CTRL_MOVED=1
+    fi
+fi
 
 _FAILED=0
 _EMITTED_GATES=""
@@ -2311,13 +2426,13 @@ fi
 # over a comment-masked body with matched braces. Delegation passes; padding
 # does not.
 _stub_ran=1
-if [ -d lib/BackgroundJob ]; then
+if [ -n "$(_enum_role tracked '\.php$' BackgroundJob | head -1)" ]; then
     _stub_helper="${SCRIPT_DIR}/lib/check_stub_run_body.py"
     _stub_jobs=()
     while IFS= read -r job; do
         [ -f "${job}" ] || continue
         _stub_jobs+=("${job}")
-    done < <(_enum_scoped '\.php$' lib/BackgroundJob)
+    done < <(_enum_role scoped '\.php$' BackgroundJob)
     if [ "${#_stub_jobs[@]}" -eq 0 ]; then
         : # nothing in scope.
     elif [ ! -f "${_stub_helper}" ]; then
@@ -2497,7 +2612,7 @@ while IFS= read -r f; do
                 fi
             fi
         done
-done < <(_enum_scoped '\.php$' lib/Service lib/Controller)
+done < <(_enum_role scoped '\.php$' Service Controller)
 # AN ARM THAT SILENTLY DID NOT RUN IS NOT A PASS. The caller-identity arm above
 # `continue`s on every file whose comment mask cannot be produced, so without
 # this the gate would print PASS with one of its four arms switched off and no
@@ -2839,6 +2954,15 @@ if [ -f appinfo/routes.php ]; then
     # Touching appinfo/routes.php puts every routed method back in scope.
     _ra_routes_touched=0
     _in_scope "appinfo/routes.php" && _ra_routes_touched=1
+    _in_scope "appinfo/class-aliases.json" && _ra_routes_touched=1
+    _in_scope "composer.json" && _ra_routes_touched=1
+    [ "${_HYDRA_CTRL_MOVED}" -eq 1 ] && _ra_routes_touched=1
+    # A routed controller no file declares is never a pass: its auth posture
+    # cannot be judged and the route answers 500. Counted apart from the
+    # missing-attribute findings, and judged whenever the route table, the
+    # class map or a controller's location changed (or on a full run).
+    _ra_notfound_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-auth-controller-not-found.log
+    : > "${_ra_notfound_log}"
     # WHAT THIS GATE READS UNDER --scope-to-diff (2026-09-12). A routed method
     # is judged when the diff touched the controller that serves it OR
     # appinfo/routes.php itself; routes.php is read in full either way, because
@@ -2871,6 +2995,8 @@ if [ -f appinfo/routes.php ]; then
                 if _apphost_serves "${ctrl}" || _di_binds_controller "${path}" \
                     || _di_binds_fq_controller "${ctrl}"; then
                     echo "${ctrl}#${method} — served by the OpenRegister AppHost generic controller (ADR-040); its auth attribute lives in the openregister package and is NOT visible from this repository" >> "${_ra_unresolved_log}"
+                elif [ "${_ra_routes_touched}" -eq 1 ]; then
+                    echo "${ctrl}#${method} rule=routed-controller-not-found — no file under lib/ declares the class this route instantiates (looked for ${path}, the PSR-4 map and appinfo/class-aliases.json)" >> "${_ra_notfound_log}"
                 else
                     echo "${ctrl}#${method} — ${path} is not present in this repository; controller class UNRESOLVED (see gate-14, which owns route reachability)" >> "${_ra_unresolved_log}"
                 fi
@@ -2938,13 +3064,14 @@ if [ -f appinfo/routes.php ]; then
     done < <(grep -oE "${_ROUTE_NAME_RX}" appinfo/routes.php \
         | grep -oE "${_ROUTE_PAIR_RX}" | sort -u)
     _ra_fail=$(_count '.' "${_ra_log}")
+    _ra_notfound=$(_count '.' "${_ra_notfound_log}")
     _ra_unres=$(_count '.' "${_ra_unresolved_log}")
     # Stated, never folded into the verdict. Does NOT start with `[gate-` so it
     # cannot be mistaken for a verdict line by any `^\[gate-` consumer.
     if [ "${_ra_unres}" -gt 0 ]; then
         echo "[hydra-gates] gate-5 route-auth: ${_ra_unres} routed entr(ies) NOT JUDGED (controller class unresolvable here) — see ${_ra_unresolved_log}. This is not a pass for them; reachability is gate-14's."
     fi
-    if [ "${_ra_ran}" -eq 1 ] && [ "${_ra_judged}" -eq 0 ]; then
+    if [ "${_ra_ran}" -eq 1 ] && [ "${_ra_judged}" -eq 0 ] && [ "${_ra_notfound}" -eq 0 ]; then
         # An empty scope is not a clean tree — see the gate-1 note. Measured on
         # larpingapp: a README-only commit run with --scope-to-diff reported
         # `[gate-5] route-auth: PASS` having judged zero routed methods.
@@ -2952,7 +3079,9 @@ if [ -f appinfo/routes.php ]; then
         _skip 5 "route-auth" na "0 routed method(s) were judged — appinfo/routes.php is not in this diff and no controller serving a route is either, so under ADR-020 no endpoint's auth posture changed in this PR. ${_ra_unres} entr(ies) were additionally unresolvable here."
     fi
     if [ "${_ra_ran}" -eq 1 ]; then
-        if [ "${_ra_fail}" -eq 0 ]; then
+        if [ "${_ra_notfound}" -gt 0 ]; then
+            _fail 5 "route-auth" "${_ra_notfound} routed entr(ies) name a controller no file under lib/ declares, so their auth posture CANNOT be judged and the route fails at request time — see ${_ra_notfound_log}$([ "${_ra_fail}" -gt 0 ] && printf '; also %s routed method(s) missing auth attribute — see %s' "${_ra_fail}" "${_ra_log}")"
+        elif [ "${_ra_fail}" -eq 0 ]; then
             _pass 5 "route-auth"
         else
             _fail 5 "route-auth" "${_ra_fail} routed method(s) missing auth attribute — see ${_ra_log}"
@@ -2995,7 +3124,7 @@ while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
     _oa_files+=("$f")
-done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
+done < <(_enum_role tracked '\.php$' Service Controller)
 _oa_ran=1
 # An EMPTY scope is not a clean tree. With zero files the log stays empty, the
 # count is 0, and the gate used to report PASS having inspected nothing — the
@@ -3114,7 +3243,7 @@ while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
     _idor_files+=("$f")
-done < <(_enum_tracked '\.php$' lib/Controller)
+done < <(_enum_controllers tracked)
 _idor_ran=1
 # See the gate-6 note above: an empty scope inspected nothing, so it cannot be
 # a PASS. SKIPPED keeps it out of _EMITTED_GATES and therefore visible in the
@@ -3273,7 +3402,7 @@ while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
     _uar_files+=("$f")
-done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
+done < <(_enum_role tracked '\.php$' Service Controller)
 _uar_ran=1
 _uar_helper="${SCRIPT_DIR}/lib/check_unsafe_auth_resolver.py"
 if [ "${#_uar_files[@]}" -eq 0 ]; then
@@ -3333,7 +3462,7 @@ while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
     _sem_files+=("$f")
-done < <(_enum_tracked '\.php$' lib/Controller)
+done < <(_enum_controllers tracked)
 _sem_ran=1
 if [ "${#_sem_files[@]}" -eq 0 ]; then
     # An empty scope is not a clean tree — see the gate-1 note.
@@ -3762,7 +3891,7 @@ fi
 # pre-22c5625ef). That requires semantic understanding beyond static
 # analysis; owned by code-review runtime semantics + ADR-005.
 # ---------------------------------------------------------------------------
-if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
+if [ -f appinfo/routes.php ] && [ -n "$(_enum_controllers tracked | head -1)" ]; then
     _rr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-reachability.log
     : > "${_rr_log}"
     # One line per route this gate actually judged — see the note at the loop.
@@ -3773,6 +3902,9 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     # invariant 2 — see the scope note at that loop.
     _rr_routes_touched=0
     _in_scope "appinfo/routes.php" && _rr_routes_touched=1
+    _in_scope "appinfo/class-aliases.json" && _rr_routes_touched=1
+    _in_scope "composer.json" && _rr_routes_touched=1
+    [ "${_HYDRA_CTRL_MOVED}" -eq 1 ] && _rr_routes_touched=1
     # WHAT THIS GATE READS UNDER --scope-to-diff (2026-09-12). This gate
     # genuinely needs more than the changed files: a route for a changed
     # controller method may sit anywhere in appinfo/routes.php, and a changed
@@ -3864,17 +3996,23 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
         # Derive the controller route slug — strip lib/Controller/ prefix +
         # Controller.php suffix, lowercase the first character. Settings/
         # subnamespace becomes `Settings\Foo`.
-        _ctrl_short=$(echo "${_ctrl_path}" | sed -e 's|^lib/Controller/||' -e 's|Controller\.php$||')
+        _ctrl_short=$(echo "${_ctrl_path}" | sed -e 's|^lib/Controller/||' -e 's|^lib/||' -e 's|Controller\.php$||')
         case "${_ctrl_short}" in
             Settings/*) _ctrl_slug="Settings\\$(echo "${_ctrl_short}" | sed 's|^Settings/||')";;
             */*)        _ctrl_slug=$(echo "${_ctrl_short}" | sed 's|/|\\|g'); _ctrl_slug=$(echo "${_ctrl_slug}" | awk -F'\\\\' '{for(i=1;i<NF;i++) printf "%s\\\\", $i; sub(/^./,tolower(substr($NF,1,1)),$NF); print $NF}');;
             *)          _ctrl_slug=$(echo "${_ctrl_short}" | awk '{print tolower(substr($0,1,1)) substr($0,2)}');;
         esac
 
+        # The route names that reach this file through the resolver: a moved
+        # controller keeps its old route name (`widget#index`) via a class
+        # alias, so its file path no longer spells that name.
+        _ctrl_slugs=$( { printf '%s\n' "${_ctrl_slug}"; _routed_names_for "${_ctrl_path}"; } | sort -u)
+
         # Skip resource-routed controllers — their CRUD quintet is auto-generated.
         # Match against both the slug and a snake_case variant of the short name.
         _ctrl_resource=$(echo "${_ctrl_short}" | awk '{name=tolower(substr($0,1,1)) substr($0,2); print name}')
         if echo "${_rr_auto_resources}" | grep -qxF "${_ctrl_resource}"; then continue; fi
+        if [ -n "${_rr_auto_resources}" ] && printf '%s\n' "${_ctrl_slugs}" | grep -qxF -f <(printf '%s\n' "${_rr_auto_resources}"); then continue; fi
 
         # Each public method that returns a Response-shaped type.
         # Strategy: pcregrep-style multiline pull — for every `public function
@@ -3943,12 +4081,19 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
             # those apps this grep was asking the wrong file and answering "no"
             # every time, which is why five apps were told their working
             # `dashboard#page` / `settings#index` endpoints 404.
-            if ! grep -qF "'${_ctrl_slug}#${_m}'" "${_rr_routes_src}" \
-                && ! _apphost_supplies_route "${_ctrl_slug}#${_m}"; then
+            _rr_routed=0
+            while IFS= read -r _s; do
+                [ -n "${_s}" ] || continue
+                if grep -qF "'${_s}#${_m}'" "${_rr_routes_src}" || _apphost_supplies_route "${_s}#${_m}"; then
+                    _rr_routed=1
+                    break
+                fi
+            done <<< "${_ctrl_slugs}"
+            if [ "${_rr_routed}" -eq 0 ]; then
                 echo "${_ctrl_path} method=${_m} expected_route='${_ctrl_slug}#${_m}' rule=missing-route" >> "${_rr_log}"
             fi
         done
-    done < <(_enum_scoped 'Controller\.php$' lib/Controller)
+    done < <(_enum_controllers scoped | grep -E 'Controller\.php$')
 
     # ---- Invariant 2: every routed entry resolves to a method that exists.
     #
@@ -5521,7 +5666,7 @@ if [ -f appinfo/routes.php ]; then
         elif [ "${_cc_fail}" -eq 3 ]; then
             # EMPTY SCOPE — `na`, not structural (#268). See _skip's header.
             _cc_ran=0
-            _skip 25 "contract-coverage" na "the diff against '${BASE_REF}' touched NO lib/Controller file, so no endpoint was inspected. Diff-scoped out under ADR-020, exactly as gates 6/7 are for the same diff — not a gap: this PR exposes no new endpoint whose wire contract could be untested. This gate runs on the next PR that touches a controller. See ${_cc_log}."
+            _skip 25 "contract-coverage" na "the diff against '${BASE_REF}' touched NO controller file under lib/, so no endpoint was inspected. Diff-scoped out under ADR-020, exactly as gates 6/7 are for the same diff — not a gap: this PR exposes no new endpoint whose wire contract could be untested. This gate runs on the next PR that touches a controller. See ${_cc_log}."
         elif [ "${_cc_fail}" -eq 4 ]; then
             _cc_ran=0
             _skip 25 "contract-coverage" na "no appinfo/routes.php — this app exposes no routed endpoint whose wire contract could be tested."
@@ -6087,7 +6232,9 @@ _pm_targets=0
 _pm_scoped=0
 _pm_inspected=0
 _pm_absent=0
-if [ -f appinfo/routes.php ] && [ -d lib/Controller ]; then
+_pm_has_ctrl=0
+[ -n "$(_enum_controllers tracked | head -1)" ] && _pm_has_ctrl=1
+if [ -f appinfo/routes.php ] && [ "${_pm_has_ctrl}" -eq 1 ]; then
     # Pull every route entry as `name<TAB>url<TAB>verb`. A route's url and verb
     # are part of the evidence now (see (c) above), and grepping the name alone
     # cannot see them. Entries are one-per-line in every fleet routes.php, but
@@ -6270,8 +6417,8 @@ elif [ "${_pm_inspected}" -gt 0 ]; then
     # as gate-5's NOT-JUDGED line.
     echo "[hydra-gates] gate-30 public-monitoring: ${_pm_inspected} monitoring endpoint(s) inspected of ${_pm_candidates} name-matched candidate(s)${_pm_targets:+; ${_pm_targets} scrape target(s)}. See ${_pm_notes} for every candidate this run did NOT judge, and why."
     _pass 30 "public-monitoring"
-elif [ ! -f appinfo/routes.php ] || [ ! -d lib/Controller ]; then
-    _skip 30 "public-monitoring" na "no appinfo/routes.php + lib/Controller in this repository — there is no routed monitoring endpoint to judge."
+elif [ ! -f appinfo/routes.php ] || [ "${_pm_has_ctrl}" -eq 0 ]; then
+    _skip 30 "public-monitoring" na "no appinfo/routes.php + a controller under lib/ in this repository — there is no routed monitoring endpoint to judge."
 elif [ "${_pm_candidates}" -eq 0 ]; then
     _skip 30 "public-monitoring" na "appinfo/routes.php declares no route whose name contains metrics/health/liveness/readiness/probe."
 elif [ "${_pm_targets}" -eq 0 ]; then
@@ -8551,13 +8698,21 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
     # The pathspec is the SAME STRING the gate itself uses, on purpose: this
     # guard cannot drift away from the enumerator it defends without the two
     # visibly disagreeing in one file.
-    _csrf_cand=$(git diff --name-only "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null | grep -c . 2>/dev/null || true)
+    # Controllers anywhere under lib/: every Controller directory, plus the
+    # routed controllers the resolver found elsewhere. `-M` makes a moved
+    # controller a rename rather than a deleted file whose every attribute
+    # line reads as removed.
+    _csrf_paths=('lib/Controller/*.php' ':(glob)lib/**/Controller/**/*.php')
+    while IFS= read -r _f; do
+        [ -n "${_f}" ] && _csrf_paths+=("${_f}")
+    done <<< "${_HYDRA_ROUTED_CTRL_FILES}"
+    _csrf_cand=$(git diff -M --name-only "${BASE_REF}...HEAD" -- "${_csrf_paths[@]}" 2>/dev/null | grep -c . 2>/dev/null || true)
     _csrf_cand="${_csrf_cand%%$'\n'*}"
     case "${_csrf_cand}" in ''|*[!0-9]*) _csrf_cand=0 ;; esac
     if [ "${_csrf_cand}" -eq 0 ]; then
         _csrf_ran=0
         _csrf_removed=""
-        _skip 48 "csrf-cochange" na "the diff against '${BASE_REF}' touches NO lib/Controller/*.php, so there was no controller for a #[NoCSRFRequired] to be dropped FROM — NOT ONE controller line was read by this run. A removal is a property of a change set, and this change set contains no candidate for one. This is NOT a clean bill of health for the app's CSRF posture; it runs on the next change that touches a controller."
+        _skip 48 "csrf-cochange" na "the diff against '${BASE_REF}' touches NO controller (NO lib/Controller/*.php, and none elsewhere under lib/), so there was no controller for a #[NoCSRFRequired] to be dropped FROM — NOT ONE controller line was read by this run. A removal is a property of a change set, and this change set contains no candidate for one. This is NOT a clean bill of health for the app's CSRF posture; it runs on the next change that touches a controller."
     elif [ ! -f "${_csrf_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147). Without it the gate
         # sees no removals at all and goes green on every diff.
@@ -8582,7 +8737,7 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
         # than a false pass, but the right image is cheap to name.
         _csrf_mb=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null || true)
         [ -n "${_csrf_mb}" ] || _csrf_mb="${BASE_REF}"
-        _csrf_removed=$(git diff -U0 "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null \
+        _csrf_removed=$(git diff -M -U0 "${BASE_REF}...HEAD" -- "${_csrf_paths[@]}" 2>/dev/null \
             | python3 "${_csrf_helper}" --repo . --base "${_csrf_mb}" 2>"${_csrf_err}")
         _csrf_rc=$?
         if [ "${_csrf_rc}" -ne 0 ]; then
@@ -8826,7 +8981,7 @@ while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
     _cxt_files+=("$f")
-done < <(_enum_tracked '\.php$' lib/Controller)
+done < <(_enum_controllers tracked)
 _cxt_rc=0
 if [ "${#_cxt_files[@]}" -gt 0 ]; then
     # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262). The status
@@ -10312,7 +10467,7 @@ while IFS= read -r f; do
     _owc_present=$((_owc_present + 1))
     _in_scope "$f" || continue
     _owc_files+=("$f")
-done < <(_enum_tracked '\.php$' lib/Service | grep -v '/tests/')
+done < <(_enum_role tracked '\.php$' Service | grep -v '/tests/')
 _owc_ran=1
 # An unopened scope is not a PASS — see gate 56 above (.github#276).
 if [ "${#_owc_files[@]}" -eq 0 ]; then
@@ -12787,7 +12942,7 @@ _fnt_rc=$?
 set +e
 
 if [ "${_fnt_rc}" -eq 4 ]; then
-    _skip 111 "flow-node-taxonomy" na "this repo ships no lib/Service/Flow/Nodes/, so it contributes no flow node of its own. A node it contributes from ANOTHER repository is deliberately not this gate's business — 38 of 65 step types on a measured instance are, and firing on them would be unfixable from the PR it fired on. See ${_fnt_log}."
+    _skip 111 "flow-node-taxonomy" na "this repo ships no lib/Service/Flow/Nodes/ (nor lib/<Component>/Service/Flow/Nodes/), so it contributes no flow node of its own. A node it contributes from ANOTHER repository is deliberately not this gate's business — 38 of 65 step types on a measured instance are, and firing on them would be unfixable from the PR it fired on. See ${_fnt_log}."
 elif [ "${_fnt_rc}" -eq 0 ]; then
     _pass 111 "flow-node-taxonomy"
 elif ! _helper_finished "${_fnt_log}" '^checked [0-9]+ flow node'; then
@@ -13895,8 +14050,8 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
 # `if [ -f appinfo/routes.php ]` — gates 5 25
 [ -f appinfo/routes.php ] || _declare_na "no appinfo/routes.php — this repo registers no HTTP routes, so there is no endpoint for this gate to inspect." \
     5 25
-# `if [ -d lib/Controller ] && [ -f appinfo/routes.php ]` — gate 14
-{ [ -d lib/Controller ] && [ -f appinfo/routes.php ]; } || _declare_na "no lib/Controller/ and appinfo/routes.php pair — there is no controller-to-route mapping for this gate to resolve." \
+# `if [ -f appinfo/routes.php ] && <a controller under lib/>` — gate 14
+{ [ -f appinfo/routes.php ] && [ -n "$(_enum_controllers tracked | head -1)" ]; } || _declare_na "no appinfo/routes.php with a controller under lib/ — there is no controller-to-route mapping for this gate to resolve." \
     14
 # `if [ -f src/manifest.json ]` — gates 15 22 53 68
 [ -f src/manifest.json ] || _declare_na "no src/manifest.json — this repo declares no manifest, so there are no pages, widgets or handler references for this gate to inspect." \
