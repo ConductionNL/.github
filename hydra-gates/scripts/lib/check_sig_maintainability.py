@@ -589,6 +589,20 @@ def worst(units, key, n=8):
     return [f"{u['file']}:{u['start']} {u['name']} ({u[key]})" for u in ranked]
 
 
+def dup_windows(lines, code):
+    """SIG's duplication windows of one file: (index, key, line numbers) for
+    every run of DUP_MIN_LINES consecutive code lines, keyed by the lines
+    without whitespace. `lines` is the file's text split into lines, `code`
+    the line numbers code_lines() returns. Windows made only of brackets are
+    skipped."""
+    seq = [(n, "".join(lines[n - 1].split())) for n in sorted(code)]
+    for i in range(len(seq) - DUP_MIN_LINES + 1):
+        win = seq[i:i + DUP_MIN_LINES]
+        key = tuple(t for _n, t in win)
+        if not all(len(t) <= 2 for t in key):
+            yield i, key, [n for n, _t in win]
+
+
 def duplication_profile(app, clones, files_by_lang, limit=DUPLICATION_LIMIT):
     """Redundant code lines per language, two ways.
 
@@ -609,14 +623,9 @@ def duplication_profile(app, clones, files_by_lang, limit=DUPLICATION_LIMIT):
     redundant = collections.defaultdict(set)
     for rel in sorted(files_by_lang):
         seen = windows[files_by_lang[rel]]
-        seq = [(n, "".join(lines_of[rel][n - 1].split())) for n in sorted(code[rel])]
-        for i in range(len(seq) - DUP_MIN_LINES + 1):
-            win = seq[i:i + DUP_MIN_LINES]
-            key = tuple(t for _n, t in win)
-            if all(len(t) <= 2 for t in key):
-                continue
+        for i, key, nums in dup_windows(lines_of[rel], code[rel]):
             if key in seen and seen[key] != (rel, i):
-                redundant[rel].update(n for n, _t in win)
+                redundant[rel].update(nums)
             else:
                 seen.setdefault(key, (rel, i))
     by_jscpd = collections.defaultdict(set)
