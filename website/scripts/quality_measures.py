@@ -154,7 +154,7 @@ def audits(clone):
         p = subprocess.run(["composer", "audit", "--locked", "--format=json", "--no-interaction"],
                            cwd=clone, capture_output=True, text=True, timeout=600)
         try:
-            adv = json.loads(p.stdout).get("advisories", {})
+            adv = json.loads(p.stdout).get("advisories") or {}
             pk = {k: {(a.get("severity") or "").lower() for a in (v.values() if isinstance(v, dict) else v)}
                   for k, v in adv.items()}
             h = sum(1 for s in pk.values() if "high" in s and "critical" not in s)
