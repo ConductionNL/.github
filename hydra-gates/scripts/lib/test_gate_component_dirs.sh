@@ -34,9 +34,9 @@ _bad() { _fail_n=$((_fail_n + 1)); printf 'FAIL — %s\n' "$1"; }
 _WORK="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-compdirs.XXXXXXXX")"
 trap 'rm -rf "${_WORK}"' EXIT
 
-_put() { # <app> <rel> <content>
+_put() { # <app> <rel> <content>, or - to read the content from stdin
     mkdir -p "$(dirname "$1/$2")"
-    printf '%s' "$3" > "$1/$2"
+    if [ "$3" = - ]; then cat > "$1/$2"; else printf '%s' "$3" > "$1/$2"; fi
 }
 
 _git() { git -C "$1" -c user.email=fixture@example.invalid -c user.name=Fixture "${@:2}" >/dev/null 2>&1; }
@@ -150,7 +150,8 @@ class Application
 {
 }
 '
-    _put "${_a}" lib/Search/Service/PermissionHandler.php '<?php
+    _put "${_a}" lib/Search/Service/PermissionHandler.php - <<'PHP'
+<?php
 namespace OCA\CompFx\Search\Service;
 
 class PermissionHandler
@@ -174,8 +175,9 @@ class PermissionHandler
         return true;
     }
 }
-'
-    _put "${_a}" lib/Search/Service/TransitionGuard.php '<?php
+PHP
+    _put "${_a}" lib/Search/Service/TransitionGuard.php - <<'PHP'
+<?php
 namespace OCA\CompFx\Search\Service;
 
 class TransitionGuard
@@ -185,8 +187,9 @@ class TransitionGuard
         return ($userId !== "" && $state !== "");
     }
 }
-'
-    _put "${_a}" lib/Search/Service/LedgerService.php '<?php
+PHP
+    _put "${_a}" lib/Search/Service/LedgerService.php - <<'PHP'
+<?php
 namespace OCA\CompFx\Search\Service;
 
 class LedgerService
@@ -196,8 +199,9 @@ class LedgerService
         file_put_contents("/tmp/ledger", json_encode($data));
     }
 }
-'
-    _put "${_a}" lib/Search/BackgroundJob/ReindexJob.php '<?php
+PHP
+    _put "${_a}" lib/Search/BackgroundJob/ReindexJob.php - <<'PHP'
+<?php
 namespace OCA\CompFx\Search\BackgroundJob;
 
 use OCP\BackgroundJob\TimedJob;
@@ -209,7 +213,7 @@ class ReindexJob extends TimedJob
         // In a complete implementation this would reindex. Nothing happens here.
     }
 }
-'
+PHP
 }
 
 # _run <app> [runner args...] — the whole run in _OUT, its log dir in _LOGS.
