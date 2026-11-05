@@ -1,12 +1,13 @@
 {
- "measured": "2026-11-04",
- "profile": "half of each 4-star limit of the SIG/TUV NORD CERT Guidance for Producers v17.0 (SIG publishes no 5-star limits)",
+ "measured": "2026-11-05",
+ "guidance": "SIG/TUV NORD CERT Guidance for Producers v18.1",
  "apps": {
   "buildiq": {
-   "head": "6e5bb7eda8b244c5ba850e42c9e2f8a60da650b0",
+   "head": "f11dbbd52d3db72eda818cbf3880c6e94d156317",
    "checks": 34,
    "four": 26,
-   "five": 16,
+   "five": 20,
+   "gates_measured": false,
    "floor": {
     "measured_at": "fa904a5336edb7875caae746fe3f33e2936f19f8",
     "profile": "four-star",
@@ -42,10 +43,11 @@
    }
   },
   "decidiq": {
-   "head": "527cc29d397ea732264d48cac36a7089b94b2b7c",
+   "head": "e38d886b3be6f936c01b48a51e1e2eb7653f015d",
    "checks": 34,
    "four": 27,
-   "five": 19,
+   "five": 22,
+   "gates_measured": false,
    "floor": {
     "measured_at": "4242e8e192f874b7d3bf42142ade288f5b16d571",
     "profile": "four-star",
@@ -76,4337 +78,925 @@
      "vue.unit_size.60"
     ]
    }
-  },
-  "dossiq": {
-   "head": "7b7f39dc4bc0f484066f75847a810396deae718c",
-   "checks": 34,
-   "four": 19,
-   "five": 12,
-   "floor": {
-    "measured_at": "39ea188e36792d2f9dafb501e4c673c0c124bfe3",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_size.60",
-     "vue.unit_complexity.10",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "filinq": {
-   "head": "e4aaaf0d9bbe4b28be5e08cf2102b68fc8301dab",
-   "checks": 44,
-   "four": 40,
-   "five": 32,
-   "floor": {
-    "measured_at": "aff2d60506416dc8e1fd4fdd9460b6b013de1b22",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.component_independence",
-     "php.duplication",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_complexity.5",
-     "php.unit_interfacing.6",
-     "php.unit_size.30",
-     "php.unit_size.60",
-     "typescript.duplication",
-     "typescript.unit_complexity.10",
-     "typescript.unit_complexity.25",
-     "typescript.unit_complexity.5",
-     "typescript.unit_interfacing.2",
-     "typescript.unit_interfacing.4",
-     "typescript.unit_interfacing.6",
-     "typescript.unit_size.15",
-     "typescript.unit_size.30",
-     "typescript.unit_size.60",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "hermiq": {
-   "head": "5441f8bc06b49ffc1f99806a68b2f7986b019067",
-   "checks": 34,
-   "four": 25,
-   "five": 16,
-   "floor": {
-    "measured_at": "57a9fd9827bd8c1259f0e0f4f71db7e0d4562ba7",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_size.60",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "humaniq": {
-   "head": "5a66e36aefab474fc1a3105f52360ff6ae1aab51",
-   "checks": 34,
-   "four": 30,
-   "five": 22,
-   "floor": {
-    "measured_at": "d83ab23ea4d62be49fe44b85ee10e7bf8a45ef65",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_interfacing.4",
-     "php.unit_interfacing.6",
-     "php.unit_size.30",
-     "php.unit_size.60",
-     "vue.duplication",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "integriq": {
-   "head": "4e77e956904255fc301166f9ae4de0b548d2e739",
-   "checks": 34,
-   "four": 26,
-   "five": 24,
-   "floor": {
-    "measured_at": "45eaf576b23a5caea7ce9c5a59feba8b4a58453a",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.component_independence",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_size.60",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "keepiq": {
-   "head": "8288f8b50c1ddefb3a94aa9540e2fd2f324b3654",
-   "checks": 58,
-   "four": 46,
-   "five": 31,
-   "floor": {
-    "measured_at": "441230acacf9db9134f58ddbe16d99f2a6198ed0",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_size.30",
-     "php.unit_size.60",
-     "python.component_independence",
-     "python.duplication",
-     "python.module_coupling.10",
-     "python.module_coupling.20",
-     "python.module_coupling.50",
-     "python.unit_complexity.10",
-     "python.unit_complexity.25",
-     "python.unit_complexity.5",
-     "python.unit_interfacing.2",
-     "python.unit_interfacing.4",
-     "python.unit_interfacing.6",
-     "python.unit_size.15",
-     "python.unit_size.30",
-     "python.unit_size.60",
-     "typescript.duplication",
-     "typescript.unit_complexity.25",
-     "typescript.unit_interfacing.2",
-     "typescript.unit_interfacing.4",
-     "typescript.unit_interfacing.6",
-     "typescript.unit_size.15",
-     "typescript.unit_size.30",
-     "typescript.unit_size.60",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "larpinq": {
-   "head": "4bb8327c0021a41f71c5cc3adada43cac37e7c0e",
-   "checks": 34,
-   "four": 33,
-   "five": 27,
-   "floor": {
-    "measured_at": "ebf9d6ef989a31f93f3946824db270dfaa36a91d",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.duplication",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_interfacing.6",
-     "php.unit_size.30",
-     "php.unit_size.60",
-     "vue.duplication",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "launchpad": {
-   "head": "cb104a991544ad4da2e19c4367c291c4b2cc4821",
-   "checks": 34,
-   "four": 28,
-   "five": 19,
-   "floor": {
-    "measured_at": "9080e1fa1847f34da7d39925e3f7422eb8afbd7b",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_interfacing.4",
-     "php.unit_interfacing.6",
-     "php.unit_size.60",
-     "vue.duplication",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "learniq": {
-   "head": "4cb9cdda07a24445536b4ed60e76ea2567ae0e5a",
-   "checks": 34,
-   "four": 22,
-   "five": 14,
-   "floor": {
-    "measured_at": "200757f8834f18fa88289f092709fcbaa757dd3e",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.25",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_interfacing.6",
-     "php.unit_size.60",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "opencatalogi": {
-   "head": "63c364fca562988cb9cbc51834b64056fc303836",
-   "checks": 44,
-   "four": 40,
-   "five": 20,
-   "floor": {
-    "measured_at": "d34462cb2ff262b487b5b496429c3f8c7c29d883",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.component_independence",
-     "php.duplication",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_interfacing.2",
-     "php.unit_interfacing.4",
-     "php.unit_interfacing.6",
-     "php.unit_size.30",
-     "php.unit_size.60",
-     "typescript.duplication",
-     "typescript.unit_complexity.10",
-     "typescript.unit_complexity.25",
-     "typescript.unit_complexity.5",
-     "typescript.unit_interfacing.2",
-     "typescript.unit_interfacing.4",
-     "typescript.unit_interfacing.6",
-     "typescript.unit_size.15",
-     "typescript.unit_size.30",
-     "typescript.unit_size.60",
-     "vue.unit_complexity.25",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "openregister": {
-   "head": "05806b135b71167c46b5d65350060c7c4c179564",
-   "checks": 58,
-   "four": 43,
-   "five": 37,
-   "floor": {
-    "measured_at": "eb3a390862dddf4da46f08d2e811541a43247193",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.unit_complexity.25",
-     "python.component_independence",
-     "python.duplication",
-     "python.module_coupling.10",
-     "python.module_coupling.20",
-     "python.module_coupling.50",
-     "python.unit_complexity.10",
-     "python.unit_complexity.25",
-     "python.unit_complexity.5",
-     "python.unit_interfacing.2",
-     "python.unit_interfacing.4",
-     "python.unit_interfacing.6",
-     "python.unit_size.15",
-     "python.unit_size.30",
-     "python.unit_size.60",
-     "typescript.duplication",
-     "typescript.unit_complexity.10",
-     "typescript.unit_complexity.25",
-     "typescript.unit_complexity.5",
-     "typescript.unit_interfacing.2",
-     "typescript.unit_interfacing.4",
-     "typescript.unit_interfacing.6",
-     "typescript.unit_size.15",
-     "typescript.unit_size.30",
-     "typescript.unit_size.60",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "pipelinq": {
-   "head": "adf78a643c7a8641b36ee6b1573fe804eddff741",
-   "checks": 34,
-   "four": 21,
-   "five": 13,
-   "floor": {
-    "measured_at": "35f348596c0367ff57fec4d4db718a1f88efd904",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.25",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_interfacing.6",
-     "php.unit_size.60",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "planninq": {
-   "head": "562b61131441600d6362a29c12a7abc46b4e635b",
-   "checks": 34,
-   "four": 33,
-   "five": 22,
-   "floor": {
-    "measured_at": "3b8ff73ff13e024b900c24dcdfb9b4b2c8565edc",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.duplication",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_complexity.5",
-     "php.unit_interfacing.4",
-     "php.unit_interfacing.6",
-     "php.unit_size.15",
-     "php.unit_size.30",
-     "php.unit_size.60",
-     "vue.duplication",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "portaliq": {
-   "head": "a66e0840cfe341a1b8d2f617c98f297f07c3a30f",
-   "checks": 34,
-   "four": 24,
-   "five": 12,
-   "floor": {
-    "measured_at": "debf1d9bac8f85144ed09973036d68b9baf394aa",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.25",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_size.30",
-     "php.unit_size.60",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "shillinq": {
-   "head": "d4b355086dc41afac2e5a3d3215d279f89a89d6c",
-   "checks": 44,
-   "four": 32,
-   "five": 27,
-   "floor": {
-    "measured_at": "7a3bf1b6b94534fd339ed77926a8c19c9469890f",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.25",
-     "typescript.duplication",
-     "typescript.unit_complexity.10",
-     "typescript.unit_complexity.25",
-     "typescript.unit_complexity.5",
-     "typescript.unit_interfacing.2",
-     "typescript.unit_interfacing.4",
-     "typescript.unit_interfacing.6",
-     "typescript.unit_size.15",
-     "typescript.unit_size.30",
-     "typescript.unit_size.60",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "stackiq": {
-   "head": "7f5b34993f74be851543b5cbad089adbe52af66a",
-   "checks": 34,
-   "four": 24,
-   "five": 13,
-   "floor": {
-    "measured_at": "dd80cc1c259151f94ad7fcc2abe0b9d617237aff",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.25",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "php.module_coupling.10",
-     "php.unit_interfacing.4",
-     "php.unit_interfacing.6",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
-  },
-  "thematiq": {
-   "head": "9deef84925df4a789e9cc53994caaacd9472f937",
-   "checks": 24,
-   "four": 21,
-   "five": 18,
-   "floor": {
-    "measured_at": "c27409621334bade24127b7d4656431a0033f48d",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.duplication",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_interfacing.4",
-     "php.unit_interfacing.6",
-     "php.unit_size.15",
-     "php.unit_size.30",
-     "php.unit_size.60"
-    ]
-   }
-  },
-  "versioniq": {
-   "head": "0ee3a27ea11eab2172664d93ef6021d3105af583",
-   "checks": 44,
-   "four": 41,
-   "five": 37,
-   "floor": {
-    "measured_at": "8a3e548dcf9aa9989a32334e0bb1976c10658ec7",
-    "profile": "four-star",
-    "checks": [
-     "javascript.duplication",
-     "javascript.unit_complexity.10",
-     "javascript.unit_complexity.25",
-     "javascript.unit_complexity.5",
-     "javascript.unit_interfacing.2",
-     "javascript.unit_interfacing.4",
-     "javascript.unit_interfacing.6",
-     "javascript.unit_size.15",
-     "javascript.unit_size.30",
-     "javascript.unit_size.60",
-     "php.duplication",
-     "php.module_coupling.10",
-     "php.module_coupling.20",
-     "php.module_coupling.50",
-     "php.unit_complexity.10",
-     "php.unit_complexity.25",
-     "php.unit_interfacing.4",
-     "php.unit_interfacing.6",
-     "php.unit_size.15",
-     "php.unit_size.30",
-     "php.unit_size.60",
-     "typescript.duplication",
-     "typescript.unit_complexity.10",
-     "typescript.unit_complexity.25",
-     "typescript.unit_complexity.5",
-     "typescript.unit_interfacing.2",
-     "typescript.unit_interfacing.4",
-     "typescript.unit_interfacing.6",
-     "typescript.unit_size.15",
-     "typescript.unit_size.30",
-     "typescript.unit_size.60",
-     "vue.duplication",
-     "vue.unit_complexity.10",
-     "vue.unit_complexity.25",
-     "vue.unit_complexity.5",
-     "vue.unit_interfacing.2",
-     "vue.unit_interfacing.4",
-     "vue.unit_interfacing.6",
-     "vue.unit_size.15",
-     "vue.unit_size.30",
-     "vue.unit_size.60"
-    ]
-   }
   }
  },
- "groups": [
+ "sections": [
   {
-   "language": "php",
-   "rows": [
+   "id": "maintainability",
+   "title": "SIG maintainability",
+   "groups": [
     {
-     "id": "php.unit_size.15",
-     "label": "unit size >15",
-     "minimum": false,
-     "four": 0.471,
-     "five": 0.236,
-     "cells": {
-      "buildiq": {
-       "share": 0.7371,
-       "stars": "below"
+     "title": "php",
+     "rows": [
+      {
+       "id": "php.unit_size.15",
+       "label": "unit size >15",
+       "limits": "5\u2605 \u226436.0%, 4\u2605 \u226448.0%, 3\u2605 \u226463.0%, 2\u2605 \u226484.7%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 2,
+         "text": "71.3%"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "56.2%"
+        }
+       }
       },
-      "decidiq": {
-       "share": 0.5726,
-       "stars": "below"
+      {
+       "id": "php.unit_size.30",
+       "label": "unit size >30",
+       "limits": "5\u2605 \u226417.0%, 4\u2605 \u226424.2%, 3\u2605 \u226434.7%, 2\u2605 \u226449.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 2,
+         "text": "35.5%"
+        },
+        "decidiq": {
+         "stars": 4,
+         "text": "22.2%"
+        }
+       }
       },
-      "dossiq": {
-       "share": 0.6523,
-       "stars": "below"
+      {
+       "id": "php.unit_size.60",
+       "label": "unit size >60",
+       "limits": "5\u2605 \u22645.5%, 4\u2605 \u22649.1%, 3\u2605 \u226415.4%, 2\u2605 \u226425.3%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "6.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "3.1%"
+        }
+       }
       },
-      "filinq": {
-       "share": 0.5778,
-       "stars": "below"
+      {
+       "id": "php.unit_complexity.5",
+       "label": "unit complexity >5",
+       "limits": "5\u2605 \u226415.8%, 4\u2605 \u226420.7%, 3\u2605 \u226427.7%, 2\u2605 \u226434.6%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 1,
+         "text": "44.7%"
+        },
+        "decidiq": {
+         "stars": 2,
+         "text": "29.2%"
+        }
+       }
       },
-      "hermiq": {
-       "share": 0.6972,
-       "stars": "below"
+      {
+       "id": "php.unit_complexity.10",
+       "label": "unit complexity >10",
+       "limits": "5\u2605 \u22644.4%, 4\u2605 \u22647.5%, 3\u2605 \u226410.6%, 2\u2605 \u226413.2%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "5.7%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.1%"
+        }
+       }
       },
-      "humaniq": {
-       "share": 0.5378,
-       "stars": "below"
+      {
+       "id": "php.unit_complexity.25",
+       "label": "unit complexity >25",
+       "limits": "5\u2605 \u22640.5%, 4\u2605 \u22641.1%, 3\u2605 \u22641.7%, 2\u2605 \u22642.7%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "0.6%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0%"
+        }
+       }
       },
-      "integriq": {
-       "share": 0.6763,
-       "stars": "below"
+      {
+       "id": "php.unit_interfacing.2",
+       "label": "unit interfacing >=3",
+       "limits": "5\u2605 \u226412.5%, 4\u2605 \u226415.4%, 3\u2605 \u226418.3%, 2\u2605 \u226426.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 1,
+         "text": "26.3%"
+        },
+        "decidiq": {
+         "stars": 2,
+         "text": "22.1%"
+        }
+       }
       },
-      "keepiq": {
-       "share": 0.5582,
-       "stars": "below"
+      {
+       "id": "php.unit_interfacing.4",
+       "label": "unit interfacing >=5",
+       "limits": "5\u2605 \u22642.5%, 4\u2605 \u22643.4%, 3\u2605 \u22644.8%, 2\u2605 \u22647.2%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "4.3%"
+        },
+        "decidiq": {
+         "stars": 2,
+         "text": "4.9%"
+        }
+       }
       },
-      "larpinq": {
-       "share": 0.4025,
-       "stars": 4
+      {
+       "id": "php.unit_interfacing.6",
+       "label": "unit interfacing >=7",
+       "limits": "5\u2605 \u22640.6%, 4\u2605 \u22640.9%, 3\u2605 \u22641.4%, 2\u2605 \u22642.1%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.4%"
+        },
+        "decidiq": {
+         "stars": 3,
+         "text": "1.0%"
+        }
+       }
       },
-      "launchpad": {
-       "share": 0.7159,
-       "stars": "below"
+      {
+       "id": "php.duplication",
+       "label": "duplication",
+       "limits": "5\u2605 \u22643.5%, 4\u2605 \u22645.8%, 3\u2605 \u226411.6%, 2\u2605 \u226423.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "5.0%"
+        },
+        "decidiq": {
+         "stars": 4,
+         "text": "5.0%"
+        }
+       }
       },
-      "learniq": {
-       "share": 0.5904,
-       "stars": "below"
+      {
+       "id": "php.module_coupling.10",
+       "label": "module coupling fan-in >10",
+       "limits": "5\u2605 \u22647.4%, 4\u2605 \u22649.7%, 3\u2605 \u226410.7%, 2\u2605 \u226413.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "3.6%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "2.1%"
+        }
+       }
       },
-      "opencatalogi": {
-       "share": 0.4609,
-       "stars": 4
+      {
+       "id": "php.module_coupling.20",
+       "label": "module coupling fan-in >20",
+       "limits": "5\u2605 \u22643.3%, 4\u2605 \u22645.3%, 3\u2605 \u22645.9%, 2\u2605 \u22648.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "1.5%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.4%"
+        }
+       }
       },
-      "openregister": {
-       "share": 0.7112,
-       "stars": "below"
+      {
+       "id": "php.module_coupling.50",
+       "label": "module coupling fan-in >50",
+       "limits": "5\u2605 \u22641.2%, 4\u2605 \u22641.8%, 3\u2605 \u22642.3%, 2\u2605 \u22643.8%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.1%"
+        }
+       }
       },
-      "pipelinq": {
-       "share": 0.6597,
-       "stars": "below"
+      {
+       "id": "php.component_independence",
+       "label": "component independence",
+       "limits": "5\u2605 \u226597.3%, 4\u2605 \u226594.5%, under that <4",
+       "cells": {
+        "buildiq": {
+         "stars": "<4",
+         "text": "46.2%"
+        },
+        "decidiq": {
+         "stars": "<4",
+         "text": "45.4%"
+        }
+       }
       },
-      "planninq": {
-       "share": 0.3552,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.5835,
-       "stars": "below"
-      },
-      "shillinq": {
-       "share": 0.7125,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.8074,
-       "stars": "below"
-      },
-      "thematiq": {
-       "share": 0.4568,
-       "stars": 4
-      },
-      "versioniq": {
-       "share": 0.358,
-       "stars": 4
+      {
+       "id": "php.component_entanglement",
+       "label": "component entanglement (estimate, not floored)",
+       "limits": "5\u2605 \u22640.0375, 4\u2605 \u22640.075, under that <4",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "0.060"
+        },
+        "decidiq": {
+         "stars": "<4",
+         "text": "0.102"
+        }
+       }
       }
-     }
+     ]
     },
     {
-     "id": "php.unit_size.30",
-     "label": "unit size >30",
-     "minimum": false,
-     "four": 0.231,
-     "five": 0.116,
-     "cells": {
-      "buildiq": {
-       "share": 0.3777,
-       "stars": "below"
+     "title": "javascript",
+     "rows": [
+      {
+       "id": "javascript.unit_size.15",
+       "label": "unit size >15",
+       "limits": "5\u2605 \u226436.0%, 4\u2605 \u226448.0%, 3\u2605 \u226463.0%, 2\u2605 \u226484.7%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "33.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "29.2%"
+        }
+       }
       },
-      "decidiq": {
-       "share": 0.2282,
-       "stars": 4
+      {
+       "id": "javascript.unit_size.30",
+       "label": "unit size >30",
+       "limits": "5\u2605 \u226417.0%, 4\u2605 \u226424.2%, 3\u2605 \u226434.7%, 2\u2605 \u226449.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "4.8%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "2.7%"
+        }
+       }
       },
-      "dossiq": {
-       "share": 0.2526,
-       "stars": "below"
+      {
+       "id": "javascript.unit_size.60",
+       "label": "unit size >60",
+       "limits": "5\u2605 \u22645.5%, 4\u2605 \u22649.1%, 3\u2605 \u226415.4%, 2\u2605 \u226425.3%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0%"
+        }
+       }
       },
-      "filinq": {
-       "share": 0.1491,
-       "stars": 4
+      {
+       "id": "javascript.unit_complexity.5",
+       "label": "unit complexity >5",
+       "limits": "5\u2605 \u226415.8%, 4\u2605 \u226420.7%, 3\u2605 \u226427.7%, 2\u2605 \u226434.6%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "18.4%"
+        },
+        "decidiq": {
+         "stars": 4,
+         "text": "19.8%"
+        }
+       }
       },
-      "hermiq": {
-       "share": 0.332,
-       "stars": "below"
+      {
+       "id": "javascript.unit_complexity.10",
+       "label": "unit complexity >10",
+       "limits": "5\u2605 \u22644.4%, 4\u2605 \u22647.5%, 3\u2605 \u226410.6%, 2\u2605 \u226413.2%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "1.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "1.8%"
+        }
+       }
       },
-      "humaniq": {
-       "share": 0.1479,
-       "stars": 4
+      {
+       "id": "javascript.unit_complexity.25",
+       "label": "unit complexity >25",
+       "limits": "5\u2605 \u22640.5%, 4\u2605 \u22641.1%, 3\u2605 \u22641.7%, 2\u2605 \u22642.7%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0%"
+        }
+       }
       },
-      "integriq": {
-       "share": 0.3148,
-       "stars": "below"
+      {
+       "id": "javascript.unit_interfacing.2",
+       "label": "unit interfacing >=3",
+       "limits": "5\u2605 \u226412.5%, 4\u2605 \u226415.4%, 3\u2605 \u226418.3%, 2\u2605 \u226426.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "5.1%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "8.5%"
+        }
+       }
       },
-      "keepiq": {
-       "share": 0.2309,
-       "stars": 4
+      {
+       "id": "javascript.unit_interfacing.4",
+       "label": "unit interfacing >=5",
+       "limits": "5\u2605 \u22642.5%, 4\u2605 \u22643.4%, 3\u2605 \u22644.8%, 2\u2605 \u22647.2%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "1.0%"
+        }
+       }
       },
-      "larpinq": {
-       "share": 0.0483,
-       "stars": 5
+      {
+       "id": "javascript.unit_interfacing.6",
+       "label": "unit interfacing >=7",
+       "limits": "5\u2605 \u22640.6%, 4\u2605 \u22640.9%, 3\u2605 \u22641.4%, 2\u2605 \u22642.1%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0%"
+        }
+       }
       },
-      "launchpad": {
-       "share": 0.3602,
-       "stars": "below"
-      },
-      "learniq": {
-       "share": 0.1951,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.1226,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.3877,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.2833,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.0428,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.1732,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.4235,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.5644,
-       "stars": "below"
-      },
-      "thematiq": {
-       "share": 0.0997,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0702,
-       "stars": 5
+      {
+       "id": "javascript.duplication",
+       "label": "duplication",
+       "limits": "5\u2605 \u22643.5%, 4\u2605 \u22645.8%, 3\u2605 \u226411.6%, 2\u2605 \u226423.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "2.2%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "1.6%"
+        }
+       }
       }
-     }
+     ]
     },
     {
-     "id": "php.unit_size.60",
-     "label": "unit size >60",
-     "minimum": false,
-     "four": 0.083,
-     "five": 0.042,
-     "cells": {
-      "buildiq": {
-       "share": 0.0688,
-       "stars": 4
+     "title": "vue",
+     "rows": [
+      {
+       "id": "vue.unit_size.15",
+       "label": "unit size >15",
+       "limits": "5\u2605 \u226436.0%, 4\u2605 \u226448.0%, 3\u2605 \u226463.0%, 2\u2605 \u226484.7%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "34.2%"
+        },
+        "decidiq": {
+         "stars": 4,
+         "text": "45.6%"
+        }
+       }
       },
-      "decidiq": {
-       "share": 0.0329,
-       "stars": 5
+      {
+       "id": "vue.unit_size.30",
+       "label": "unit size >30",
+       "limits": "5\u2605 \u226417.0%, 4\u2605 \u226424.2%, 3\u2605 \u226434.7%, 2\u2605 \u226449.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "12.4%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "12.7%"
+        }
+       }
       },
-      "dossiq": {
-       "share": 0.022,
-       "stars": 5
+      {
+       "id": "vue.unit_size.60",
+       "label": "unit size >60",
+       "limits": "5\u2605 \u22645.5%, 4\u2605 \u22649.1%, 3\u2605 \u226415.4%, 2\u2605 \u226425.3%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.9%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0%"
+        }
+       }
       },
-      "filinq": {
-       "share": 0.0015,
-       "stars": 5
+      {
+       "id": "vue.unit_complexity.5",
+       "label": "unit complexity >5",
+       "limits": "5\u2605 \u226415.8%, 4\u2605 \u226420.7%, 3\u2605 \u226427.7%, 2\u2605 \u226434.6%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "23.0%"
+        },
+        "decidiq": {
+         "stars": 4,
+         "text": "19.9%"
+        }
+       }
       },
-      "hermiq": {
-       "share": 0.0627,
-       "stars": 4
+      {
+       "id": "vue.unit_complexity.10",
+       "label": "unit complexity >10",
+       "limits": "5\u2605 \u22644.4%, 4\u2605 \u22647.5%, 3\u2605 \u226410.6%, 2\u2605 \u226413.2%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "5.5%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "1.8%"
+        }
+       }
       },
-      "humaniq": {
-       "share": 0.0265,
-       "stars": 5
+      {
+       "id": "vue.unit_complexity.25",
+       "label": "unit complexity >25",
+       "limits": "5\u2605 \u22640.5%, 4\u2605 \u22641.1%, 3\u2605 \u22641.7%, 2\u2605 \u22642.7%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0%"
+        }
+       }
       },
-      "integriq": {
-       "share": 0.0393,
-       "stars": 5
+      {
+       "id": "vue.unit_interfacing.2",
+       "label": "unit interfacing >=3",
+       "limits": "5\u2605 \u226412.5%, 4\u2605 \u226415.4%, 3\u2605 \u226418.3%, 2\u2605 \u226426.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "2.2%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.5%"
+        }
+       }
       },
-      "keepiq": {
-       "share": 0.0211,
-       "stars": 5
+      {
+       "id": "vue.unit_interfacing.4",
+       "label": "unit interfacing >=5",
+       "limits": "5\u2605 \u22642.5%, 4\u2605 \u22643.4%, 3\u2605 \u22644.8%, 2\u2605 \u22647.2%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0%"
+        }
+       }
       },
-      "larpinq": {
-       "share": 0.011,
-       "stars": 5
+      {
+       "id": "vue.unit_interfacing.6",
+       "label": "unit interfacing >=7",
+       "limits": "5\u2605 \u22640.6%, 4\u2605 \u22640.9%, 3\u2605 \u22641.4%, 2\u2605 \u22642.1%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.0%"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0%"
+        }
+       }
       },
-      "launchpad": {
-       "share": 0.0268,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0134,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0075,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.1057,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.0362,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0143,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.1363,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.2816,
-       "stars": "below"
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
+      {
+       "id": "vue.duplication",
+       "label": "duplication",
+       "limits": "5\u2605 \u22643.5%, 4\u2605 \u22645.8%, 3\u2605 \u226411.6%, 2\u2605 \u226423.0%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "8.1%"
+        },
+        "decidiq": {
+         "stars": 2,
+         "text": "16.9%"
+        }
+       }
       }
-     }
-    },
-    {
-     "id": "php.unit_complexity.5",
-     "label": "unit complexity >5",
-     "minimum": false,
-     "four": 0.202,
-     "five": 0.101,
-     "cells": {
-      "buildiq": {
-       "share": 0.468,
-       "stars": "below"
-      },
-      "decidiq": {
-       "share": 0.2982,
-       "stars": "below"
-      },
-      "dossiq": {
-       "share": 0.3541,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.1993,
-       "stars": 4
-      },
-      "hermiq": {
-       "share": 0.3512,
-       "stars": "below"
-      },
-      "humaniq": {
-       "share": 0.3788,
-       "stars": "below"
-      },
-      "integriq": {
-       "share": 0.3288,
-       "stars": "below"
-      },
-      "keepiq": {
-       "share": 0.2548,
-       "stars": "below"
-      },
-      "larpinq": {
-       "share": 0.1557,
-       "stars": 4
-      },
-      "launchpad": {
-       "share": 0.3436,
-       "stars": "below"
-      },
-      "learniq": {
-       "share": 0.3246,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.2102,
-       "stars": "below"
-      },
-      "openregister": {
-       "share": 0.4286,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.3765,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.1028,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.422,
-       "stars": "below"
-      },
-      "shillinq": {
-       "share": 0.4405,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.4595,
-       "stars": "below"
-      },
-      "thematiq": {
-       "share": 0.2766,
-       "stars": "below"
-      },
-      "versioniq": {
-       "share": 0.2156,
-       "stars": "below"
-      }
-     }
-    },
-    {
-     "id": "php.unit_complexity.10",
-     "label": "unit complexity >10",
-     "minimum": false,
-     "four": 0.073,
-     "five": 0.037,
-     "cells": {
-      "buildiq": {
-       "share": 0.0696,
-       "stars": 4
-      },
-      "decidiq": {
-       "share": 0.0032,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0075,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0009,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0345,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0328,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0355,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0185,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0204,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0012,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0122,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0995,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.0323,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0036,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.007,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0802,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.1454,
-       "stars": "below"
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.018,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "php.unit_complexity.25",
-     "label": "unit complexity >25",
-     "minimum": false,
-     "four": 0.011,
-     "five": 0.0055,
-     "cells": {
-      "buildiq": {
-       "share": 0.0063,
-       "stars": 4
-      },
-      "decidiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0076,
-       "stars": 4
-      },
-      "humaniq": {
-       "share": 0.0046,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0102,
-       "stars": 4
-      },
-      "pipelinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0026,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0284,
-       "stars": "below"
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "php.unit_interfacing.2",
-     "label": "unit interfacing >=3",
-     "minimum": false,
-     "four": 0.15,
-     "five": 0.075,
-     "cells": {
-      "buildiq": {
-       "share": 0.2931,
-       "stars": "below"
-      },
-      "decidiq": {
-       "share": 0.2274,
-       "stars": "below"
-      },
-      "dossiq": {
-       "share": 0.302,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.2205,
-       "stars": "below"
-      },
-      "hermiq": {
-       "share": 0.2941,
-       "stars": "below"
-      },
-      "humaniq": {
-       "share": 0.2512,
-       "stars": "below"
-      },
-      "integriq": {
-       "share": 0.2843,
-       "stars": "below"
-      },
-      "keepiq": {
-       "share": 0.3548,
-       "stars": "below"
-      },
-      "larpinq": {
-       "share": 0.1325,
-       "stars": 4
-      },
-      "launchpad": {
-       "share": 0.2502,
-       "stars": "below"
-      },
-      "learniq": {
-       "share": 0.2369,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.1273,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.343,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.2426,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.1439,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.3621,
-       "stars": "below"
-      },
-      "shillinq": {
-       "share": 0.2668,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.1311,
-       "stars": 4
-      },
-      "thematiq": {
-       "share": 0.2183,
-       "stars": "below"
-      },
-      "versioniq": {
-       "share": 0.1717,
-       "stars": "below"
-      }
-     }
-    },
-    {
-     "id": "php.unit_interfacing.4",
-     "label": "unit interfacing >=5",
-     "minimum": false,
-     "four": 0.033,
-     "five": 0.0165,
-     "cells": {
-      "buildiq": {
-       "share": 0.0663,
-       "stars": "below"
-      },
-      "decidiq": {
-       "share": 0.0505,
-       "stars": "below"
-      },
-      "dossiq": {
-       "share": 0.0881,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.0508,
-       "stars": "below"
-      },
-      "hermiq": {
-       "share": 0.1147,
-       "stars": "below"
-      },
-      "humaniq": {
-       "share": 0.0325,
-       "stars": 4
-      },
-      "integriq": {
-       "share": 0.0956,
-       "stars": "below"
-      },
-      "keepiq": {
-       "share": 0.1206,
-       "stars": "below"
-      },
-      "larpinq": {
-       "share": 0.0252,
-       "stars": 4
-      },
-      "launchpad": {
-       "share": 0.0227,
-       "stars": 4
-      },
-      "learniq": {
-       "share": 0.0469,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.0249,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.1149,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.0604,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.0279,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.1288,
-       "stars": "below"
-      },
-      "shillinq": {
-       "share": 0.0776,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.027,
-       "stars": 4
-      },
-      "thematiq": {
-       "share": 0.0266,
-       "stars": 4
-      },
-      "versioniq": {
-       "share": 0.0169,
-       "stars": 4
-      }
-     }
-    },
-    {
-     "id": "php.unit_interfacing.6",
-     "label": "unit interfacing >=7",
-     "minimum": false,
-     "four": 0.009,
-     "five": 0.0045,
-     "cells": {
-      "buildiq": {
-       "share": 0.0059,
-       "stars": 4
-      },
-      "decidiq": {
-       "share": 0.0109,
-       "stars": "below"
-      },
-      "dossiq": {
-       "share": 0.0207,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.0033,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0463,
-       "stars": "below"
-      },
-      "humaniq": {
-       "share": 0.0037,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0352,
-       "stars": "below"
-      },
-      "keepiq": {
-       "share": 0.0444,
-       "stars": "below"
-      },
-      "larpinq": {
-       "share": 0.0018,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.006,
-       "stars": 4
-      },
-      "learniq": {
-       "share": 0.007,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.0058,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.0402,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.0077,
-       "stars": 4
-      },
-      "planninq": {
-       "share": 0.0078,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.0463,
-       "stars": "below"
-      },
-      "shillinq": {
-       "share": 0.022,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.0055,
-       "stars": 4
-      },
-      "thematiq": {
-       "share": 0.0031,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0011,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "php.duplication",
-     "label": "duplication",
-     "minimum": false,
-     "four": 0.056,
-     "five": 0.028,
-     "cells": {
-      "buildiq": {
-       "share": 0.0521,
-       "stars": 4
-      },
-      "decidiq": {
-       "share": 0.0503,
-       "stars": 4
-      },
-      "dossiq": {
-       "share": 0.0716,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.0448,
-       "stars": 4
-      },
-      "hermiq": {
-       "share": 0.0868,
-       "stars": "below"
-      },
-      "humaniq": {
-       "share": 0.0538,
-       "stars": 4
-      },
-      "integriq": {
-       "share": 0.0758,
-       "stars": "below"
-      },
-      "keepiq": {
-       "share": 0.0743,
-       "stars": "below"
-      },
-      "larpinq": {
-       "share": 0.0211,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0722,
-       "stars": "below"
-      },
-      "learniq": {
-       "share": 0.11,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.0367,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.0825,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.1153,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.0349,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.0543,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.1214,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.0898,
-       "stars": "below"
-      },
-      "thematiq": {
-       "share": 0.0175,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0191,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "php.module_coupling.10",
-     "label": "module coupling fan-in >10",
-     "minimum": false,
-     "four": 0.1,
-     "five": 0.05,
-     "cells": {
-      "buildiq": {
-       "share": 0.036,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0211,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0343,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0144,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0903,
-       "stars": 4
-      },
-      "humaniq": {
-       "share": 0.0368,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0279,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0738,
-       "stars": 4
-      },
-      "larpinq": {
-       "share": 0.0247,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0505,
-       "stars": 4
-      },
-      "learniq": {
-       "share": 0.0066,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0037,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.1161,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.0174,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0704,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.0609,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.0111,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0935,
-       "stars": 4
-      },
-      "thematiq": {
-       "share": 0.0648,
-       "stars": 4
-      },
-      "versioniq": {
-       "share": 0.0266,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "php.module_coupling.20",
-     "label": "module coupling fan-in >20",
-     "minimum": false,
-     "four": 0.056,
-     "five": 0.028,
-     "cells": {
-      "buildiq": {
-       "share": 0.0153,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0036,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0116,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0035,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0091,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0306,
-       "stars": 4
-      },
-      "integriq": {
-       "share": 0.0017,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0305,
-       "stars": 4
-      },
-      "larpinq": {
-       "share": 0.0247,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0282,
-       "stars": 4
-      },
-      "learniq": {
-       "share": 0.0054,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0017,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0805,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.0102,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0393,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.0353,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.0105,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0933,
-       "stars": "below"
-      },
-      "thematiq": {
-       "share": 0.0212,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0024,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "php.module_coupling.50",
-     "label": "module coupling fan-in >50",
-     "minimum": false,
-     "four": 0.019,
-     "five": 0.0095,
-     "cells": {
-      "buildiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.001,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0049,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0028,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0181,
-       "stars": 4
-      },
-      "integriq": {
-       "share": 0.0003,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0158,
-       "stars": 4
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0051,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0026,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0496,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.0055,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0061,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0092,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "thematiq": {
-       "share": 0.002,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "php.component_independence",
-     "label": "component independence",
-     "minimum": true,
-     "four": 0.937,
-     "five": 0.969,
-     "cells": {
-      "buildiq": {
-       "share": 0.4607,
-       "stars": "below"
-      },
-      "decidiq": {
-       "share": 0.4557,
-       "stars": "below"
-      },
-      "dossiq": {
-       "share": 0.4943,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.9382,
-       "stars": 4
-      },
-      "hermiq": {
-       "share": 0.4605,
-       "stars": "below"
-      },
-      "humaniq": {
-       "share": 0.4622,
-       "stars": "below"
-      },
-      "integriq": {
-       "share": 0.9374,
-       "stars": 4
-      },
-      "keepiq": {
-       "share": 0.4503,
-       "stars": "below"
-      },
-      "larpinq": {
-       "share": 0.4871,
-       "stars": "below"
-      },
-      "launchpad": {
-       "share": 0.4037,
-       "stars": "below"
-      },
-      "learniq": {
-       "share": 0.4509,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.9398,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.5086,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.4335,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.5102,
-       "stars": "below"
-      },
-      "portaliq": {
-       "share": 0.4641,
-       "stars": "below"
-      },
-      "shillinq": {
-       "share": 0.5265,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.3118,
-       "stars": "below"
-      },
-      "thematiq": {
-       "share": 0.5011,
-       "stars": "below"
-      },
-      "versioniq": {
-       "share": 0.641,
-       "stars": "below"
-      }
-     }
+     ]
     }
    ]
   },
   {
-   "language": "javascript",
-   "rows": [
+   "id": "sig-other",
+   "title": "SIG's other models",
+   "groups": [
     {
-     "id": "javascript.unit_size.15",
-     "label": "unit size >15",
-     "minimum": false,
-     "four": 0.471,
-     "five": 0.236,
-     "cells": {
-      "buildiq": {
-       "share": 0.3373,
-       "stars": 4
+     "title": "Open Source Health",
+     "rows": [
+      {
+       "id": "sig.osh_vulnerabilities",
+       "label": "vulnerabilities above moderate",
+       "limits": "4 stars: none",
+       "cells": {
+        "buildiq": {
+         "stars": "<4",
+         "text": "14",
+         "title": "composer 0 high, 0 critical; npm 9 high, 5 critical"
+        },
+        "decidiq": {
+         "stars": "<4",
+         "text": "6",
+         "title": "composer 0 high, 0 critical; npm 5 high, 1 critical"
+        }
+       }
       },
-      "decidiq": {
-       "share": 0.2924,
-       "stars": 4
+      {
+       "id": "sig.osh_licence",
+       "label": "dependencies with a licence risk",
+       "limits": "4 stars: no AGPL, GPL or other medium or worse, at most 3 low-risk (LGPL, EPL)",
+       "cells": {
+        "buildiq": {
+         "stars": "<4",
+         "text": "30",
+         "title": "critical 5, high 0, medium 25, low 0, none 759"
+        },
+        "decidiq": {
+         "stars": "<4",
+         "text": "17",
+         "title": "critical 4, high 0, medium 13, low 0, none 388"
+        }
+       }
       },
-      "dossiq": {
-       "share": 0.4944,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.3488,
-       "stars": 4
-      },
-      "hermiq": {
-       "share": 0.343,
-       "stars": 4
-      },
-      "humaniq": {
-       "share": 0.1789,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.1596,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.5135,
-       "stars": "below"
-      },
-      "larpinq": {
-       "share": 0.2142,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.3215,
-       "stars": 4
-      },
-      "learniq": {
-       "share": 0.4279,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.2462,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.2194,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.4143,
-       "stars": 4
-      },
-      "planninq": {
-       "share": 0.212,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.441,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.2696,
-       "stars": 4
-      },
-      "stackiq": {
-       "share": 0.3803,
-       "stars": 4
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.1839,
-       "stars": 5
+      {
+       "id": "sig.osh_management",
+       "label": "unmanaged dependencies (%)",
+       "limits": "4 stars: at most 6%",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "0.0",
+         "title": "0 unmanaged of 25 dependencies"
+        },
+        "decidiq": {
+         "stars": 4,
+         "text": "0.0",
+         "title": "0 unmanaged of 24 dependencies"
+        }
+       }
       }
-     }
+     ]
     },
     {
-     "id": "javascript.unit_size.30",
-     "label": "unit size >30",
-     "minimum": false,
-     "four": 0.231,
-     "five": 0.116,
-     "cells": {
-      "buildiq": {
-       "share": 0.0494,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0266,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.2147,
-       "stars": 4
-      },
-      "filinq": {
-       "share": 0.0688,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.1142,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.1586,
-       "stars": 4
-      },
-      "larpinq": {
-       "share": 0.0223,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0294,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.1229,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.1253,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.012,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.1499,
-       "stars": 4
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.118,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.037,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.1291,
-       "stars": 4
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
+     "title": "Architecture Quality",
+     "rows": [
+      {
+       "id": "sig.arch_adjacency",
+       "label": "component adjacency (estimate)",
+       "limits": "4 stars: a component talks to at most 6 others on average",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "5.0",
+         "title": "40 dependency lines between 16 components (estimate)"
+        },
+        "decidiq": {
+         "stars": 4,
+         "text": "4.7",
+         "title": "45 dependency lines between 19 components (estimate)"
+        }
+       }
       }
-     }
-    },
-    {
-     "id": "javascript.unit_size.60",
-     "label": "unit size >60",
-     "minimum": false,
-     "four": 0.083,
-     "five": 0.042,
-     "cells": {
-      "buildiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0515,
-       "stars": 4
-      },
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0192,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0228,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0586,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.0473,
-       "stars": 4
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0285,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "javascript.unit_complexity.5",
-     "label": "unit complexity >5",
-     "minimum": false,
-     "four": 0.202,
-     "five": 0.101,
-     "cells": {
-      "buildiq": {
-       "share": 0.1858,
-       "stars": 4
-      },
-      "decidiq": {
-       "share": 0.1979,
-       "stars": 4
-      },
-      "dossiq": {
-       "share": 0.4018,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.1941,
-       "stars": 4
-      },
-      "hermiq": {
-       "share": 0.1835,
-       "stars": 4
-      },
-      "humaniq": {
-       "share": 0.0666,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.019,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.3026,
-       "stars": "below"
-      },
-      "larpinq": {
-       "share": 0.0607,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.1747,
-       "stars": 4
-      },
-      "learniq": {
-       "share": 0.4649,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.0962,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0674,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.3211,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.175,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.4157,
-       "stars": "below"
-      },
-      "shillinq": {
-       "share": 0.1728,
-       "stars": 4
-      },
-      "stackiq": {
-       "share": 0.1896,
-       "stars": 4
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "javascript.unit_complexity.10",
-     "label": "unit complexity >10",
-     "minimum": false,
-     "four": 0.073,
-     "five": 0.037,
-     "cells": {
-      "buildiq": {
-       "share": 0.0106,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0182,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.1371,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0347,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0589,
-       "stars": 4
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0031,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.1121,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.028,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0031,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.0894,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.0155,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.1127,
-       "stars": "below"
-      },
-      "shillinq": {
-       "share": 0.026,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0073,
-       "stars": 5
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "javascript.unit_complexity.25",
-     "label": "unit complexity >25",
-     "minimum": false,
-     "four": 0.011,
-     "five": 0.0055,
-     "cells": {
-      "buildiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0259,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.009,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "javascript.unit_interfacing.2",
-     "label": "unit interfacing >=3",
-     "minimum": false,
-     "four": 0.15,
-     "five": 0.075,
-     "cells": {
-      "buildiq": {
-       "share": 0.052,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0848,
-       "stars": 4
-      },
-      "dossiq": {
-       "share": 0.0914,
-       "stars": 4
-      },
-      "filinq": {
-       "share": 0.0449,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.069,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.064,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0328,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.1097,
-       "stars": 4
-      },
-      "larpinq": {
-       "share": 0.0209,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0338,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.1078,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.0492,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.049,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.0843,
-       "stars": 4
-      },
-      "planninq": {
-       "share": 0.1267,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.1446,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.0696,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0601,
-       "stars": 5
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "javascript.unit_interfacing.4",
-     "label": "unit interfacing >=5",
-     "minimum": false,
-     "four": 0.033,
-     "five": 0.0165,
-     "cells": {
-      "buildiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0101,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.012,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0033,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0169,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.0078,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0023,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.0079,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0056,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0088,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0076,
-       "stars": 5
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "javascript.unit_interfacing.6",
-     "label": "unit interfacing >=7",
-     "minimum": false,
-     "four": 0.009,
-     "five": 0.0045,
-     "cells": {
-      "buildiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0015,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "javascript.duplication",
-     "label": "duplication",
-     "minimum": false,
-     "four": 0.056,
-     "five": 0.028,
-     "cells": {
-      "buildiq": {
-       "share": 0.0229,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.016,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0287,
-       "stars": 4
-      },
-      "filinq": {
-       "share": 0.0242,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0248,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0173,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0207,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0131,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0096,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0105,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0175,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.018,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.0242,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0155,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0263,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0109,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0333,
-       "stars": 4
-      },
-      "thematiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0254,
-       "stars": 5
-      }
-     }
+     ]
     }
    ]
   },
   {
-   "language": "typescript",
-   "rows": [
+   "id": "own",
+   "title": "Our own measures",
+   "groups": [
     {
-     "id": "typescript.unit_size.15",
-     "label": "unit size >15",
-     "minimum": false,
-     "four": 0.471,
-     "five": 0.236,
-     "cells": {
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
+     "title": "Tests",
+     "rows": [
+      {
+       "id": "own.php_coverage",
+       "label": "PHP line coverage",
+       "limits": "5\u2605 \u226595%, 4\u2605 \u226580%, 3\u2605 \u226560%, 2\u2605 \u226520%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 2,
+         "text": "57.4%",
+         "title": ".coverage-baseline, the coverage-guard floor recorded on development"
+        },
+        "decidiq": {
+         "stars": 2,
+         "text": "57.7%",
+         "title": ".coverage-baseline, the coverage-guard floor recorded on development"
+        }
+       }
       },
-      "keepiq": {
-       "share": 0.3315,
-       "stars": 4
+      {
+       "id": "own.spec_coverage",
+       "label": "spec coverage (gate 16)",
+       "limits": "5\u2605 \u226595%, 4\u2605 \u226580%, 3\u2605 \u226560%, 2\u2605 \u226520%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 4,
+         "text": "85.7%",
+         "title": "1905 of 2222 in-scope methods tagged"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "96.4%",
+         "title": "2328 of 2415 in-scope methods tagged"
+        }
+       }
       },
-      "opencatalogi": {
-       "share": 0.4526,
-       "stars": 4
+      {
+       "id": "own.e2e_coverage",
+       "label": "e2e scenario coverage (gate 19)",
+       "limits": "5\u2605 \u226595%, 4\u2605 \u226580%, 3\u2605 \u226560%, 2\u2605 \u226520%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 2,
+         "text": "23.1%",
+         "title": "93 of 403 scenarios (excluded 598)"
+        },
+        "decidiq": {
+         "stars": 1,
+         "text": "18.6%",
+         "title": "253 of 1357 scenarios (excluded 626)"
+        }
+       }
       },
-      "openregister": {
-       "share": 0.1876,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.1244,
-       "stars": 5
+      {
+       "id": "own.test_ratio",
+       "label": "test code ratio",
+       "limits": "5\u2605 \u2265120%, 4\u2605 \u2265100%, 3\u2605 \u226575%, 2\u2605 \u226525%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "99.8%",
+         "title": "84930 test LOC / 85080 production LOC"
+        },
+        "decidiq": {
+         "stars": 4,
+         "text": "107.8%",
+         "title": "94785 test LOC / 87953 production LOC"
+        }
+       }
       }
-     }
+     ]
     },
     {
-     "id": "typescript.unit_size.30",
-     "label": "unit size >30",
-     "minimum": false,
-     "four": 0.231,
-     "five": 0.116,
-     "cells": {
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
+     "title": "Debt",
+     "rows": [
+      {
+       "id": "own.baseline_debt",
+       "label": "baselined findings per kLOC PHP",
+       "limits": "5\u2605 \u22641, 4\u2605 \u22645, 3\u2605 \u226410, 2\u2605 \u226425, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "5.3",
+         "title": "172 baseline entries over 32127 PHP LOC"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0",
+         "title": "1 baseline entries over 45008 PHP LOC"
+        }
+       }
       },
-      "keepiq": {
-       "share": 0.1222,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.1486,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.0784,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
+      {
+       "id": "own.suppressions",
+       "label": "suppressions per kLOC",
+       "limits": "5\u2605 \u22640.5, 4\u2605 \u22642, 3\u2605 \u22645, 2\u2605 \u226410, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 3,
+         "text": "2.0",
+         "title": "174 suppressions over 85080 LOC"
+        },
+        "decidiq": {
+         "stars": 4,
+         "text": "0.7",
+         "title": "63 suppressions over 87953 LOC"
+        }
+       }
       }
-     }
+     ]
     },
     {
-     "id": "typescript.unit_size.60",
-     "label": "unit size >60",
-     "minimum": false,
-     "four": 0.083,
-     "five": 0.042,
-     "cells": {
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
+     "title": "Security",
+     "rows": [
+      {
+       "id": "own.security_findings",
+       "label": "security gate findings",
+       "limits": "5\u2605 \u22640, 4\u2605 \u22642, 3\u2605 \u22645, 2\u2605 \u226415, worse 1\u2605",
+       "cells": {}
       },
-      "keepiq": {
-       "share": 0.0126,
-       "stars": 5
+      {
+       "id": "own.audit",
+       "label": "vulnerable dependencies, high or critical",
+       "limits": "5\u2605 \u22640, 4\u2605 \u22640, 3\u2605 \u22642, 2\u2605 \u22645, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 1,
+         "text": "14",
+         "title": "composer 0 high, 0 critical; npm 9 high, 5 critical"
+        },
+        "decidiq": {
+         "stars": 1,
+         "text": "6",
+         "title": "composer 0 high, 0 critical; npm 5 high, 1 critical"
+        }
+       }
       },
-      "opencatalogi": {
-       "share": 0.0762,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
+      {
+       "id": "own.unmanaged",
+       "label": "unmanaged dependencies",
+       "limits": "5\u2605 \u22640%, 4\u2605 \u22646%, 3\u2605 \u226412%, 2\u2605 \u226425%, worse 1\u2605",
+       "cells": {
+        "buildiq": {
+         "stars": 5,
+         "text": "0.0%",
+         "title": "0 unmanaged of 25 dependencies"
+        },
+        "decidiq": {
+         "stars": 5,
+         "text": "0.0%",
+         "title": "0 unmanaged of 24 dependencies"
+        }
+       }
       }
-     }
+     ]
     },
     {
-     "id": "typescript.unit_complexity.5",
-     "label": "unit complexity >5",
-     "minimum": false,
-     "four": 0.202,
-     "five": 0.101,
-     "cells": {
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
+     "title": "Accessibility and UI",
+     "rows": [
+      {
+       "id": "own.a11y_density",
+       "label": "accessibility findings per .vue file",
+       "limits": "5\u2605 \u22640, 4\u2605 \u22640.05, 3\u2605 \u22640.2, 2\u2605 \u22640.5, worse 1\u2605",
+       "cells": {}
       },
-      "keepiq": {
-       "share": 0.3708,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.1769,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0845,
-       "stars": 5
+      {
+       "id": "own.ui_findings",
+       "label": "UI convention findings",
+       "limits": "5\u2605 \u22640, 4\u2605 \u22645, 3\u2605 \u226420, 2\u2605 \u226450, worse 1\u2605",
+       "cells": {}
       }
-     }
-    },
-    {
-     "id": "typescript.unit_complexity.10",
-     "label": "unit complexity >10",
-     "minimum": false,
-     "four": 0.073,
-     "five": 0.037,
-     "cells": {
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.1742,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.0596,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "typescript.unit_complexity.25",
-     "label": "unit complexity >25",
-     "minimum": false,
-     "four": 0.011,
-     "five": 0.0055,
-     "cells": {
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0075,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "typescript.unit_interfacing.2",
-     "label": "unit interfacing >=3",
-     "minimum": false,
-     "four": 0.15,
-     "five": 0.075,
-     "cells": {
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0784,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.0411,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.054,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "typescript.unit_interfacing.4",
-     "label": "unit interfacing >=5",
-     "minimum": false,
-     "four": 0.033,
-     "five": 0.0165,
-     "cells": {
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0077,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "typescript.unit_interfacing.6",
-     "label": "unit interfacing >=7",
-     "minimum": false,
-     "four": 0.009,
-     "five": 0.0045,
-     "cells": {
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0002,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "typescript.duplication",
-     "label": "duplication",
-     "minimum": false,
-     "four": 0.056,
-     "five": 0.028,
-     "cells": {
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0042,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0329,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.0061,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
+     ]
     }
    ]
+  }
+ ],
+ "gateCategories": [
+  {
+   "id": "cat.security",
+   "title": "Security",
+   "cells": {},
+   "gates": []
   },
   {
-   "language": "vue",
-   "rows": [
-    {
-     "id": "vue.unit_size.15",
-     "label": "unit size >15",
-     "minimum": false,
-     "four": 0.471,
-     "five": 0.236,
-     "cells": {
-      "buildiq": {
-       "share": 0.3362,
-       "stars": 4
-      },
-      "decidiq": {
-       "share": 0.4555,
-       "stars": 4
-      },
-      "dossiq": {
-       "share": 0.4509,
-       "stars": 4
-      },
-      "filinq": {
-       "share": 0.3345,
-       "stars": 4
-      },
-      "hermiq": {
-       "share": 0.3995,
-       "stars": 4
-      },
-      "humaniq": {
-       "share": 0.2509,
-       "stars": 4
-      },
-      "integriq": {
-       "share": 0.2576,
-       "stars": 4
-      },
-      "keepiq": {
-       "share": 0.3603,
-       "stars": 4
-      },
-      "larpinq": {
-       "share": 0.3026,
-       "stars": 4
-      },
-      "launchpad": {
-       "share": 0.3568,
-       "stars": 4
-      },
-      "learniq": {
-       "share": 0.5762,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.444,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.415,
-       "stars": 4
-      },
-      "pipelinq": {
-       "share": 0.4064,
-       "stars": 4
-      },
-      "planninq": {
-       "share": 0.2168,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.2849,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.4702,
-       "stars": 4
-      },
-      "stackiq": {
-       "share": 0.4348,
-       "stars": 4
-      },
-      "versioniq": {
-       "share": 0.3448,
-       "stars": 4
-      }
-     }
-    },
-    {
-     "id": "vue.unit_size.30",
-     "label": "unit size >30",
-     "minimum": false,
-     "four": 0.231,
-     "five": 0.116,
-     "cells": {
-      "buildiq": {
-       "share": 0.1234,
-       "stars": 4
-      },
-      "decidiq": {
-       "share": 0.1269,
-       "stars": 4
-      },
-      "dossiq": {
-       "share": 0.1597,
-       "stars": 4
-      },
-      "filinq": {
-       "share": 0.119,
-       "stars": 4
-      },
-      "hermiq": {
-       "share": 0.1033,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0225,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0801,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.1413,
-       "stars": 4
-      },
-      "larpinq": {
-       "share": 0.0648,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0852,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.2889,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.1846,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.1718,
-       "stars": 4
-      },
-      "pipelinq": {
-       "share": 0.1699,
-       "stars": 4
-      },
-      "planninq": {
-       "share": 0.0364,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.1037,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.1969,
-       "stars": 4
-      },
-      "stackiq": {
-       "share": 0.1406,
-       "stars": 4
-      },
-      "versioniq": {
-       "share": 0.0319,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "vue.unit_size.60",
-     "label": "unit size >60",
-     "minimum": false,
-     "four": 0.083,
-     "five": 0.042,
-     "cells": {
-      "buildiq": {
-       "share": 0.0088,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0311,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0253,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0088,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0147,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.024,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.079,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.043,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.0616,
-       "stars": 4
-      },
-      "pipelinq": {
-       "share": 0.0598,
-       "stars": 4
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0469,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.0112,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.008,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "vue.unit_complexity.5",
-     "label": "unit complexity >5",
-     "minimum": false,
-     "four": 0.202,
-     "five": 0.101,
-     "cells": {
-      "buildiq": {
-       "share": 0.2327,
-       "stars": "below"
-      },
-      "decidiq": {
-       "share": 0.1991,
-       "stars": 4
-      },
-      "dossiq": {
-       "share": 0.2226,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.0911,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.1987,
-       "stars": 4
-      },
-      "humaniq": {
-       "share": 0.1089,
-       "stars": 4
-      },
-      "integriq": {
-       "share": 0.0801,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.1838,
-       "stars": 4
-      },
-      "larpinq": {
-       "share": 0.0756,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.1922,
-       "stars": 4
-      },
-      "learniq": {
-       "share": 0.2597,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.2466,
-       "stars": "below"
-      },
-      "openregister": {
-       "share": 0.1941,
-       "stars": 4
-      },
-      "pipelinq": {
-       "share": 0.2494,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.0818,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.1633,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.2427,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.1884,
-       "stars": 4
-      },
-      "versioniq": {
-       "share": 0.1508,
-       "stars": 4
-      }
-     }
-    },
-    {
-     "id": "vue.unit_complexity.10",
-     "label": "unit complexity >10",
-     "minimum": false,
-     "four": 0.073,
-     "five": 0.037,
-     "cells": {
-      "buildiq": {
-       "share": 0.0569,
-       "stars": 4
-      },
-      "decidiq": {
-       "share": 0.0176,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0669,
-       "stars": 4
-      },
-      "filinq": {
-       "share": 0.0218,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0453,
-       "stars": 4
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0444,
-       "stars": 4
-      },
-      "larpinq": {
-       "share": 0.0157,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0275,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0611,
-       "stars": 4
-      },
-      "opencatalogi": {
-       "share": 0.0833,
-       "stars": "below"
-      },
-      "openregister": {
-       "share": 0.0465,
-       "stars": 4
-      },
-      "pipelinq": {
-       "share": 0.0796,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.0207,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0513,
-       "stars": 4
-      },
-      "shillinq": {
-       "share": 0.0452,
-       "stars": 4
-      },
-      "stackiq": {
-       "share": 0.024,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0149,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "vue.unit_complexity.25",
-     "label": "unit complexity >25",
-     "minimum": false,
-     "four": 0.011,
-     "five": 0.0055,
-     "cells": {
-      "buildiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0174,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0063,
-       "stars": 4
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0081,
-       "stars": 4
-      },
-      "openregister": {
-       "share": 0.0169,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.0337,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0318,
-       "stars": "below"
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "vue.unit_interfacing.2",
-     "label": "unit interfacing >=3",
-     "minimum": false,
-     "four": 0.15,
-     "five": 0.075,
-     "cells": {
-      "buildiq": {
-       "share": 0.0209,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.005,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0053,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0022,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0043,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0054,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0088,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0148,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.005,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0045,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.0072,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0072,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.007,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0121,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0041,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0216,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "vue.unit_interfacing.4",
-     "label": "unit interfacing >=5",
-     "minimum": false,
-     "four": 0.033,
-     "five": 0.0165,
-     "cells": {
-      "buildiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0009,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "vue.unit_interfacing.6",
-     "label": "unit interfacing >=7",
-     "minimum": false,
-     "four": 0.009,
-     "five": 0.0045,
-     "cells": {
-      "buildiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "decidiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "dossiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "filinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "hermiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "humaniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "integriq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "larpinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "launchpad": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "learniq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "opencatalogi": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "pipelinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "planninq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "portaliq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "shillinq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "stackiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "versioniq": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "vue.duplication",
-     "label": "duplication",
-     "minimum": false,
-     "four": 0.056,
-     "five": 0.028,
-     "cells": {
-      "buildiq": {
-       "share": 0.1039,
-       "stars": "below"
-      },
-      "decidiq": {
-       "share": 0.1693,
-       "stars": "below"
-      },
-      "dossiq": {
-       "share": 0.0944,
-       "stars": "below"
-      },
-      "filinq": {
-       "share": 0.0606,
-       "stars": "below"
-      },
-      "hermiq": {
-       "share": 0.1262,
-       "stars": "below"
-      },
-      "humaniq": {
-       "share": 0.0364,
-       "stars": 4
-      },
-      "integriq": {
-       "share": 0.0924,
-       "stars": "below"
-      },
-      "keepiq": {
-       "share": 0.0996,
-       "stars": "below"
-      },
-      "larpinq": {
-       "share": 0.0384,
-       "stars": 4
-      },
-      "launchpad": {
-       "share": 0.051,
-       "stars": 4
-      },
-      "learniq": {
-       "share": 0.1078,
-       "stars": "below"
-      },
-      "opencatalogi": {
-       "share": 0.1349,
-       "stars": "below"
-      },
-      "openregister": {
-       "share": 0.1648,
-       "stars": "below"
-      },
-      "pipelinq": {
-       "share": 0.0909,
-       "stars": "below"
-      },
-      "planninq": {
-       "share": 0.0531,
-       "stars": 4
-      },
-      "portaliq": {
-       "share": 0.0714,
-       "stars": "below"
-      },
-      "shillinq": {
-       "share": 0.0909,
-       "stars": "below"
-      },
-      "stackiq": {
-       "share": 0.122,
-       "stars": "below"
-      },
-      "versioniq": {
-       "share": 0.0255,
-       "stars": 5
-      }
-     }
-    }
-   ]
+   "id": "cat.accessibility",
+   "title": "Accessibility",
+   "cells": {},
+   "gates": []
   },
   {
-   "language": "python",
-   "rows": [
-    {
-     "id": "python.unit_size.15",
-     "label": "unit size >15",
-     "minimum": false,
-     "four": 0.471,
-     "five": 0.236,
-     "cells": {
-      "keepiq": {
-       "share": 0.0567,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.unit_size.30",
-     "label": "unit size >30",
-     "minimum": false,
-     "four": 0.231,
-     "five": 0.116,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.unit_size.60",
-     "label": "unit size >60",
-     "minimum": false,
-     "four": 0.083,
-     "five": 0.042,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.unit_complexity.5",
-     "label": "unit complexity >5",
-     "minimum": false,
-     "four": 0.202,
-     "five": 0.101,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.unit_complexity.10",
-     "label": "unit complexity >10",
-     "minimum": false,
-     "four": 0.073,
-     "five": 0.037,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.unit_complexity.25",
-     "label": "unit complexity >25",
-     "minimum": false,
-     "four": 0.011,
-     "five": 0.0055,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.unit_interfacing.2",
-     "label": "unit interfacing >=3",
-     "minimum": false,
-     "four": 0.15,
-     "five": 0.075,
-     "cells": {
-      "keepiq": {
-       "share": 0.03,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.unit_interfacing.4",
-     "label": "unit interfacing >=5",
-     "minimum": false,
-     "four": 0.033,
-     "five": 0.0165,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.unit_interfacing.6",
-     "label": "unit interfacing >=7",
-     "minimum": false,
-     "four": 0.009,
-     "five": 0.0045,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.duplication",
-     "label": "duplication",
-     "minimum": false,
-     "four": 0.056,
-     "five": 0.028,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.module_coupling.10",
-     "label": "module coupling fan-in >10",
-     "minimum": false,
-     "four": 0.1,
-     "five": 0.05,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.module_coupling.20",
-     "label": "module coupling fan-in >20",
-     "minimum": false,
-     "four": 0.056,
-     "five": 0.028,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.module_coupling.50",
-     "label": "module coupling fan-in >50",
-     "minimum": false,
-     "four": 0.019,
-     "five": 0.0095,
-     "cells": {
-      "keepiq": {
-       "share": 0.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 0.0,
-       "stars": 5
-      }
-     }
-    },
-    {
-     "id": "python.component_independence",
-     "label": "component independence",
-     "minimum": true,
-     "four": 0.937,
-     "five": 0.969,
-     "cells": {
-      "keepiq": {
-       "share": 1.0,
-       "stars": 5
-      },
-      "openregister": {
-       "share": 1.0,
-       "stars": 5
-      }
-     }
-    }
-   ]
+   "id": "cat.architecture",
+   "title": "Architecture",
+   "cells": {},
+   "gates": []
+  },
+  {
+   "id": "cat.specs",
+   "title": "Specs and traceability",
+   "cells": {},
+   "gates": []
+  },
+  {
+   "id": "cat.licensing",
+   "title": "Licensing",
+   "cells": {},
+   "gates": []
+  },
+  {
+   "id": "cat.dependencies",
+   "title": "Dependencies",
+   "cells": {},
+   "gates": []
+  },
+  {
+   "id": "cat.ui",
+   "title": "UI conventions",
+   "cells": {},
+   "gates": []
+  },
+  {
+   "id": "cat.other",
+   "title": "Other",
+   "cells": {},
+   "gates": []
+  }
+ ],
+ "beyond": [
+  {
+   "label": "PHP line coverage",
+   "why": "SIG rates no tests. Coverage shows how much of the code a unit or integration test runs.",
+   "basis": "Heitlager, Kuipers and Visser 2007: unit test coverage ++ 95-100%, + 80-95%, o 60-80%, - 20-60%, -- 0-20%"
+  },
+  {
+   "label": "spec coverage (gate 16)",
+   "why": "Share of in-scope methods that name the spec they implement, so a change can be traced to a requirement.",
+   "basis": "our choice: Heitlager's coverage bands applied to traceability"
+  },
+  {
+   "label": "e2e scenario coverage (gate 19)",
+   "why": "Share of non-excluded spec scenarios a running Playwright test cites: the behaviour a user sees is proven.",
+   "basis": "our choice: Heitlager's coverage bands applied to spec scenarios"
+  },
+  {
+   "label": "test code ratio",
+   "why": "SIG's own test volume figure (test LOC / production LOC), shown in Sigrid without stars.",
+   "basis": "Sigrid: a 100% test code ratio is roughly 80% coverage, so Heitlager's 95/80/60/20% coverage bands become 120/100/75/25% test code"
+  },
+  {
+   "label": "baselined findings per kLOC PHP",
+   "why": "psalm, phpstan and phpmd baselines hide findings from the gates. Each entry is debt a reviewer no longer sees.",
+   "basis": "our own bands; no published benchmark"
+  },
+  {
+   "label": "suppressions per kLOC",
+   "why": "Inline @psalm-suppress, @phpstan-ignore, @SuppressWarnings, phpcs:ignore and eslint-disable silence a tool where SIG still counts the code.",
+   "basis": "our own bands; no published benchmark"
+  },
+  {
+   "label": "security gate findings",
+   "why": "Gates 5-9, 11, 30, 48, 50, 82, 97 and 121 find missing auth, IDOR and fail-open checks that SAST tools do not know about Nextcloud.",
+   "basis": "our own bands; 0 is the only passing state of each gate"
+  },
+  {
+   "label": "vulnerable dependencies, high or critical",
+   "why": "composer audit and npm audit on the lockfiles; SIG rates the same CVEs in Open Source Health.",
+   "basis": "SIG Open Source Health: 4 stars means no vulnerability above moderate; 5 stars also no moderate"
+  },
+  {
+   "label": "unmanaged dependencies",
+   "why": "Third-party code committed into the repository (minified or vendored files) gets no security updates.",
+   "basis": "SIG Open Source Health: 4 stars at most 6% unmanaged; 3 and 2 stars double that"
+  },
+  {
+   "label": "accessibility findings per .vue file",
+   "why": "SIG has no accessibility model. Gates 12 and 31-45 check WCAG 2.2 AA rules in the source.",
+   "basis": "our own bands; WCAG 2.2 AA asks for none"
+  },
+  {
+   "label": "UI convention findings",
+   "why": "The UI gates keep every app on the shared nextcloud-vue patterns, so users meet one interface.",
+   "basis": "our own bands; 0 is the only passing state of each gate"
   }
  ],
  "floors": {
@@ -4423,78 +1013,6 @@
      "decidiq": {
       "value": 24,
       "detail": ".github/sig-floor.json"
-     },
-     "dossiq": {
-      "value": 19,
-      "detail": ".github/sig-floor.json"
-     },
-     "filinq": {
-      "value": 40,
-      "detail": ".github/sig-floor.json"
-     },
-     "hermiq": {
-      "value": 25,
-      "detail": ".github/sig-floor.json"
-     },
-     "humaniq": {
-      "value": 29,
-      "detail": ".github/sig-floor.json"
-     },
-     "integriq": {
-      "value": 26,
-      "detail": ".github/sig-floor.json"
-     },
-     "keepiq": {
-      "value": 46,
-      "detail": ".github/sig-floor.json"
-     },
-     "larpinq": {
-      "value": 29,
-      "detail": ".github/sig-floor.json"
-     },
-     "launchpad": {
-      "value": 28,
-      "detail": ".github/sig-floor.json"
-     },
-     "learniq": {
-      "value": 22,
-      "detail": ".github/sig-floor.json"
-     },
-     "opencatalogi": {
-      "value": 39,
-      "detail": ".github/sig-floor.json"
-     },
-     "openregister": {
-      "value": 43,
-      "detail": ".github/sig-floor.json"
-     },
-     "pipelinq": {
-      "value": 21,
-      "detail": ".github/sig-floor.json"
-     },
-     "planninq": {
-      "value": 32,
-      "detail": ".github/sig-floor.json"
-     },
-     "portaliq": {
-      "value": 24,
-      "detail": ".github/sig-floor.json"
-     },
-     "shillinq": {
-      "value": 32,
-      "detail": ".github/sig-floor.json"
-     },
-     "stackiq": {
-      "value": 17,
-      "detail": ".github/sig-floor.json"
-     },
-     "thematiq": {
-      "value": 21,
-      "detail": ".github/sig-floor.json"
-     },
-     "versioniq": {
-      "value": 41,
-      "detail": ".github/sig-floor.json"
      }
     }
    },
@@ -4508,78 +1026,6 @@
       "detail": ".procedure-code-baseline.json"
      },
      "decidiq": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "dossiq": {
-      "value": 166,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "filinq": {
-      "value": 1,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "hermiq": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "humaniq": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "integriq": {
-      "value": 10,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "keepiq": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "larpinq": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "launchpad": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "learniq": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "opencatalogi": {
-      "value": 27,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "openregister": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "pipelinq": {
-      "value": 3,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "planninq": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "portaliq": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "shillinq": {
-      "value": 10,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "stackiq": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "thematiq": {
-      "value": 0,
-      "detail": ".procedure-code-baseline.json"
-     },
-     "versioniq": {
       "value": 0,
       "detail": ".procedure-code-baseline.json"
      }
@@ -4597,74 +1043,6 @@
      "decidiq": {
       "value": "57.66%",
       "detail": ".coverage-baseline"
-     },
-     "dossiq": {
-      "value": "29.69%",
-      "detail": ".coverage-baseline"
-     },
-     "filinq": {
-      "value": "61.41%",
-      "detail": ".coverage-baseline"
-     },
-     "hermiq": {
-      "value": "68.25%",
-      "detail": ".coverage-baseline"
-     },
-     "humaniq": {
-      "value": "77.60%",
-      "detail": ".coverage-baseline"
-     },
-     "integriq": {
-      "value": "60.65%",
-      "detail": ".coverage-baseline"
-     },
-     "keepiq": {
-      "value": "55.79%",
-      "detail": ".coverage-baseline"
-     },
-     "larpinq": {
-      "value": "67.68%",
-      "detail": ".coverage-baseline"
-     },
-     "launchpad": {
-      "value": "49.47%",
-      "detail": ".coverage-baseline"
-     },
-     "learniq": {
-      "value": "71.16%",
-      "detail": ".coverage-baseline"
-     },
-     "opencatalogi": {
-      "value": "70.69%",
-      "detail": ".coverage-baseline"
-     },
-     "openregister": {
-      "value": "58.88%",
-      "detail": ".coverage-baseline"
-     },
-     "pipelinq": {
-      "value": "45.36%",
-      "detail": ".coverage-baseline"
-     },
-     "planninq": {
-      "value": "69.15%",
-      "detail": ".coverage-baseline"
-     },
-     "portaliq": {
-      "value": "79.70%",
-      "detail": ".coverage-baseline"
-     },
-     "shillinq": {
-      "value": "57.71%",
-      "detail": ".coverage-baseline"
-     },
-     "stackiq": {
-      "value": "13.01%",
-      "detail": ".coverage-baseline"
-     },
-     "thematiq": {
-      "value": "77.48%",
-      "detail": ".coverage-baseline"
      }
     }
    },
@@ -4680,57 +1058,6 @@
      "decidiq": {
       "value": "phpunit 52.25% / vitest 1.62%",
       "detail": "tests/.coverage-baseline.json"
-     },
-     "dossiq": {
-      "value": "phpunit 22.48% / vitest 1.03%",
-      "detail": "tests/.coverage-baseline.json"
-     },
-     "filinq": {
-      "value": "phpunit 46.68% / vitest 4.24%",
-      "detail": "tests/.coverage-baseline.json"
-     },
-     "integriq": {
-      "value": "vitest 2.34%",
-      "detail": "tests/.coverage-baseline.json"
-     },
-     "keepiq": {
-      "value": "phpunit 57.59% / vitest 18.31%",
-      "detail": "tests/.coverage-baseline.json"
-     },
-     "larpinq": {
-      "value": "phpunit 57.34% / vitest 8.48%",
-      "detail": "tests/.coverage-baseline.json"
-     },
-     "opencatalogi": {
-      "value": "phpunit 82.39% / vitest 1.59%",
-      "detail": "tests/.coverage-baseline.json"
-     },
-     "openregister": {
-      "value": "phpunit 54.55%",
-      "detail": "tests/.coverage-baseline.json"
-     },
-     "shillinq": {
-      "value": "phpunit 55.42% / vitest 0.37%",
-      "detail": "tests/.coverage-baseline.json"
-     },
-     "stackiq": {
-      "value": "phpunit 0.38%",
-      "detail": "tests/.coverage-baseline.json"
-     },
-     "thematiq": {
-      "value": "phpunit 11.37% / vitest 66.25%",
-      "detail": "tests/.coverage-baseline.json"
-     }
-    }
-   },
-   {
-    "id": "debt_ratchet",
-    "label": "debt ratchet",
-    "what": "suppressions and ignores counted by check:debt-ratchet",
-    "cells": {
-     "dossiq": {
-      "value": 862,
-      "detail": "eslint.inlineDisables 14, eslint.suppressedViolations 302, phpcs.inlineIgnores 3, phpmd.suppressWarnings 178, phpstan.ignorePatterns 11, phpstan.inlineIgnores 4, phpunit.skips 6, psalm.blanketHandlers 17, psalm.inlineSuppressions 249, psalm.referencedClasses 78"
      }
     }
    },
@@ -4745,54 +1072,6 @@
      },
      "decidiq": {
       "value": 182,
-      "detail": "eslint-suppressions.json"
-     },
-     "dossiq": {
-      "value": 151,
-      "detail": "eslint-suppressions.json"
-     },
-     "filinq": {
-      "value": 152,
-      "detail": "eslint-suppressions.json"
-     },
-     "hermiq": {
-      "value": 160,
-      "detail": "eslint-suppressions.json"
-     },
-     "integriq": {
-      "value": 162,
-      "detail": "eslint-suppressions.json"
-     },
-     "keepiq": {
-      "value": 110,
-      "detail": "eslint-suppressions.json"
-     },
-     "launchpad": {
-      "value": 0,
-      "detail": "eslint-suppressions.json"
-     },
-     "learniq": {
-      "value": 62,
-      "detail": "eslint-suppressions.json"
-     },
-     "opencatalogi": {
-      "value": 559,
-      "detail": "eslint-suppressions.json"
-     },
-     "openregister": {
-      "value": 731,
-      "detail": "eslint-suppressions.json"
-     },
-     "portaliq": {
-      "value": 0,
-      "detail": "eslint-suppressions.json"
-     },
-     "shillinq": {
-      "value": 121,
-      "detail": "eslint-suppressions.json"
-     },
-     "stackiq": {
-      "value": 414,
       "detail": "eslint-suppressions.json"
      }
     }
@@ -4809,89 +1088,6 @@
      "decidiq": {
       "value": 1,
       "detail": "phpstan-baseline.neon"
-     },
-     "filinq": {
-      "value": 0,
-      "detail": "phpstan-baseline.neon"
-     },
-     "hermiq": {
-      "value": 2,
-      "detail": "phpstan-baseline.neon"
-     },
-     "humaniq": {
-      "value": 6,
-      "detail": "phpstan-baseline.neon"
-     },
-     "integriq": {
-      "value": 62,
-      "detail": "phpstan-baseline.neon"
-     },
-     "larpinq": {
-      "value": 0,
-      "detail": "phpstan-baseline.neon"
-     },
-     "opencatalogi": {
-      "value": 0,
-      "detail": "phpstan-baseline.neon"
-     },
-     "openregister": {
-      "value": 1391,
-      "detail": "phpstan-baseline-jsonresponse-invariance.neon, phpstan-baseline-nc34-ocp.neon, phpstan-baseline-nc35-ocp.neon, phpstan-baseline.neon"
-     },
-     "pipelinq": {
-      "value": 79,
-      "detail": "phpstan-baseline.neon"
-     },
-     "planninq": {
-      "value": 0,
-      "detail": "phpstan-baseline.neon"
-     },
-     "portaliq": {
-      "value": 0,
-      "detail": "phpstan-baseline.neon"
-     },
-     "shillinq": {
-      "value": 0,
-      "detail": "phpstan-baseline.neon"
-     },
-     "stackiq": {
-      "value": 146,
-      "detail": "phpstan-baseline.neon"
-     }
-    }
-   },
-   {
-    "id": "psalm",
-    "label": "psalm baseline",
-    "what": "baselined psalm issues",
-    "cells": {
-     "filinq": {
-      "value": 0,
-      "detail": "psalm-baseline.xml"
-     },
-     "hermiq": {
-      "value": 0,
-      "detail": "psalm-baseline.xml"
-     },
-     "humaniq": {
-      "value": 4,
-      "detail": "psalm-baseline.xml"
-     },
-     "opencatalogi": {
-      "value": 0,
-      "detail": "psalm-baseline.xml"
-     },
-     "openregister": {
-      "value": 94,
-      "detail": "psalm-baseline.xml"
-     },
-     "portaliq": {
-      "value": 0,
-      "detail": "psalm-baseline.xml"
-     },
-     "versioniq": {
-      "value": 34,
-      "detail": "psalm-baseline.xml"
      }
     }
    },
@@ -4902,34 +1098,6 @@
     "cells": {
      "buildiq": {
       "value": 170,
-      "detail": "phpmd.baseline.xml"
-     },
-     "humaniq": {
-      "value": 199,
-      "detail": "phpmd.baseline.xml"
-     },
-     "integriq": {
-      "value": 388,
-      "detail": "phpmd.baseline.xml"
-     },
-     "launchpad": {
-      "value": 106,
-      "detail": "phpmd.baseline.xml"
-     },
-     "opencatalogi": {
-      "value": 43,
-      "detail": "phpmd.baseline.xml"
-     },
-     "openregister": {
-      "value": 480,
-      "detail": "phpmd.baseline.xml"
-     },
-     "pipelinq": {
-      "value": 26,
-      "detail": "phpmd.baseline.xml"
-     },
-     "stackiq": {
-      "value": 8,
       "detail": "phpmd.baseline.xml"
      }
     }
@@ -4946,129 +1114,14 @@
      "decidiq": {
       "value": 1590,
       "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "dossiq": {
-      "value": 0,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "filinq": {
-      "value": 213,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "hermiq": {
-      "value": 0,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "humaniq": {
-      "value": 0,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "integriq": {
-      "value": 0,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "keepiq": {
-      "value": 0,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "larpinq": {
-      "value": 84,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "launchpad": {
-      "value": 15,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "learniq": {
-      "value": 2151,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "opencatalogi": {
-      "value": 219,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "openregister": {
-      "value": 569,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "pipelinq": {
-      "value": 0,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "planninq": {
-      "value": 123,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "portaliq": {
-      "value": 0,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "shillinq": {
-      "value": 12169,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     },
-     "stackiq": {
-      "value": 479,
-      "detail": "l10n/.schema-l10n-baseline.json"
-     }
-    }
-   },
-   {
-    "id": "other:.reuse-baseline.json",
-    "label": ".reuse-baseline.json",
-    "what": "other floor-like file",
-    "cells": {
-     "portaliq": {
-      "value": "present",
-      "detail": ".reuse-baseline.json"
-     }
-    }
-   },
-   {
-    "id": "other:l10n/.l10n-parity-baseline.json",
-    "label": "l10n/.l10n-parity-baseline.json",
-    "what": "other floor-like file",
-    "cells": {
-     "learniq": {
-      "value": "present",
-      "detail": "l10n/.l10n-parity-baseline.json"
-     }
-    }
-   },
-   {
-    "id": "other:tests/nav-reachability-baseline.json",
-    "label": "tests/nav-reachability-baseline.json",
-    "what": "other floor-like file",
-    "cells": {
-     "shillinq": {
-      "value": "present",
-      "detail": "tests/nav-reachability-baseline.json"
      }
     }
    }
   ],
   "refs": {
-   "buildiq": "6e5bb7eda8b244c5ba850e42c9e2f8a60da650b0",
-   "decidiq": "527cc29d397ea732264d48cac36a7089b94b2b7c",
-   "dossiq": "7b7f39dc4bc0f484066f75847a810396deae718c",
-   "filinq": "e4aaaf0d9bbe4b28be5e08cf2102b68fc8301dab",
-   "hermiq": "5441f8bc06b49ffc1f99806a68b2f7986b019067",
-   "humaniq": "5a66e36aefab474fc1a3105f52360ff6ae1aab51",
-   "integriq": "4e77e956904255fc301166f9ae4de0b548d2e739",
-   "keepiq": "8288f8b50c1ddefb3a94aa9540e2fd2f324b3654",
-   "larpinq": "4bb8327c0021a41f71c5cc3adada43cac37e7c0e",
-   "launchpad": "cb104a991544ad4da2e19c4367c291c4b2cc4821",
-   "learniq": "4cb9cdda07a24445536b4ed60e76ea2567ae0e5a",
-   "opencatalogi": "63c364fca562988cb9cbc51834b64056fc303836",
-   "openregister": "05806b135b71167c46b5d65350060c7c4c179564",
-   "pipelinq": "adf78a643c7a8641b36ee6b1573fe804eddff741",
-   "planninq": "562b61131441600d6362a29c12a7abc46b4e635b",
-   "portaliq": "a66e0840cfe341a1b8d2f617c98f297f07c3a30f",
-   "shillinq": "d4b355086dc41afac2e5a3d3215d279f89a89d6c",
-   "stackiq": "7f5b34993f74be851543b5cbad089adbe52af66a",
-   "thematiq": "9deef84925df4a789e9cc53994caaacd9472f937",
-   "versioniq": "0ee3a27ea11eab2172664d93ef6021d3105af583"
+   "buildiq": "f11dbbd52d3db72eda818cbf3880c6e94d156317",
+   "decidiq": "e38d886b3be6f936c01b48a51e1e2eb7653f015d"
   },
-  "read": "2026-11-04"
+  "read": "2026-11-05"
  }
 }
