@@ -14117,7 +14117,7 @@ _gates_json="${HYDRA_GATE_GATES_JSON:-${HYDRA_GATE_LOG_DIR}/gates.json}"
 _gates_declared="${HYDRA_GATE_LOG_DIR}/gates-declared.txt"
 printf '%s\n' "${_declared}" > "${_gates_declared}" 2>/dev/null
 if command -v python3 > /dev/null 2>&1 && [ -f "${SCRIPT_DIR}/lib/write_gates_json.py" ]; then
-    _gates_scope=full; [ "${SCOPE_TO_DIFF}" = "1" ] && _gates_scope=diff
+    _gates_scope="full"; [ "${SCOPE_TO_DIFF}" = "1" ] && _gates_scope="diff"
     printf '%s' "${_GATE_RECORDS}" | python3 "${SCRIPT_DIR}/lib/write_gates_json.py" --out "${_gates_json}" \
         --scope "${_gates_scope}" --declared "${_gates_declared}" --log-dir "${HYDRA_GATE_LOG_DIR}" \
         --app "$(basename "$(pwd)")" --base "${BASE_REF:-}" \
