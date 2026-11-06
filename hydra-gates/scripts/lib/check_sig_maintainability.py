@@ -7,7 +7,7 @@ The Software Improvement Group (SIG, platform Sigrid) rates maintainability per
 language from risk profiles: the share of code that sits in units (methods and
 functions) above a size, complexity or parameter bound, plus duplication and a
 few architecture properties. The 4-star limits come from the SIG/TUV NORD CERT
-"Guidance for Producers" v17.0. hydra's phpmd runs at its own defaults with
+"Guidance for Producers" v18.1 (the 2026 model). hydra's phpmd runs at its own defaults with
 baselines, so a green phpmd is not a green SIG profile.
 
 TWO MODES
@@ -32,14 +32,22 @@ report    (nightly, or a full-scope run with no base)
 
 PROFILES (report mode)
 ----------------------
-four-star   the default: the 4-star limits of the Guidance for Producers.
-five-star   half of every 4-star limit (SIG does not publish 5-star limits,
-            so half the share of code allowed in each risk band is the
-            yardstick, rounded to one decimal where the half has two):
-            duplication 2.8%, unit size 23.6/11.6/4.2%, complexity
-            10.1/3.7/0.55%, parameters 7.5/1.65/0.45%, module coupling
-            5.0/2.8/0.95%, component independence 96.9% (half the exposed
-            share), entanglement 0.0385.
+four-star   the default: the 4-star limits of the Guidance for Producers
+            v18.1: unit size 48.0/24.2/9.1%, complexity 20.7/7.5/1.1%,
+            parameters 15.4/3.4/0.9%, module coupling 9.7/5.3/1.8%,
+            duplication 5.8%, component independence 94.5%, entanglement
+            0.075. Volume is no longer rated.
+five-star   SIG publishes no 5-star limits. The 2011 benchmark table of Alves,
+            Correia and Visser gives the distance between star bands; its
+            ratios applied to the v18.1 limits give unit size 36.0/17.0/5.5%,
+            complexity 15.8/4.4/0.5%, parameters 12.5/2.5/0.6%, module
+            coupling 7.4/3.3/1.2%, duplication 3.5%. Independence 97.3% and
+            entanglement 0.0375 halve the 4-star exposure.
+
+Every row of a report also carries `stars`, the level its share earns on the
+same derived scale (STAR_BANDS): 5 to 2 stars, and 1 star for anything worse
+than 2. Component independence and entanglement have no band under 4 stars
+and read "<4" there.
 Chosen with --profile, or HYDRA_GATE_SIG_PROFILE when the flag is absent.
 The profile changes only the limits a report is compared with; the ratchet's
 unit bounds and the gate's advisory status do not change.
@@ -128,22 +136,61 @@ RATCHET = {"nloc": 60, "ccn": 10, "params": 4}
 RATCHET_LABEL = {"nloc": "NLOC > 60", "ccn": "McCabe > 10", "params": "5 or more parameters"}
 DUP_MIN_LINES = 6
 
-# 4-star limits, per language, as (bound, max share of unit LOC strictly above bound).
-LIMITS = {
-    "unit_size": [(15, .471), (30, .231), (60, .083)],
-    "unit_complexity": [(5, .202), (10, .073), (25, .011)],
-    "unit_interfacing": [(2, .150), (4, .033), (6, .009)],  # 3+, 5+, 7+ parameters
-    "module_coupling": [(10, .100), (20, .056), (50, .019)],
+# Star bands, per language: for each level, the max share of unit LOC strictly
+# above each bound. 4 stars is the SIG/TUV NORD CERT Guidance for Producers
+# v18.1 (31 March 2026, the 2026 model). SIG publishes no other level, so 5, 3
+# and 2 stars apply the band-to-4-star ratios of Alves, Correia and Visser 2011
+# (Table III) to the v18.1 limits, and duplication the Heitlager 2007 band
+# ratios. Worse than 2 stars is 1 star. Volume is not rated since v18.1.
+BOUNDS = {
+    "unit_size": (15, 30, 60),
+    "unit_complexity": (5, 10, 25),
+    "unit_interfacing": (2, 4, 6),  # 3+, 5+, 7+ parameters
+    "module_coupling": (10, 20, 50),
 }
-DUPLICATION_LIMIT = .056
-INDEPENDENCE_MIN = .937
-ENTANGLEMENT_LIMIT = .077
+STAR_BANDS = {
+    "unit_size": {5: (.360, .170, .055), 4: (.480, .242, .091), 3: (.630, .347, .154), 2: (.847, .490, .253)},
+    "unit_complexity": {5: (.158, .044, .005), 4: (.207, .075, .011), 3: (.277, .106, .017), 2: (.346, .132, .027)},
+    "unit_interfacing": {5: (.125, .025, .006), 4: (.154, .034, .009), 3: (.183, .048, .014), 2: (.260, .072, .021)},
+    "module_coupling": {5: (.074, .033, .012), 4: (.097, .053, .018), 3: (.107, .059, .023), 2: (.130, .080, .038)},
+    "duplication": {5: .035, 4: .058, 3: .116, 2: .230},
+}
+# Component independence (a minimum) and entanglement have a published 4-star
+# limit only. 5 stars halves the exposed share (1 - independence) and the
+# entanglement limit; below 4 stars no level is estimated, shown as "<4".
+INDEPENDENCE_BANDS = {5: .973, 4: .945}
+ENTANGLEMENT_BANDS = {5: .0375, 4: .075}
+BELOW_FOUR = "<4"
+
+
+def band_limits(level):
+    """{property: [(bound, cap), ...]} of one star level."""
+    return {prop: list(zip(BOUNDS[prop], STAR_BANDS[prop][level])) for prop in BOUNDS}
+
+
+def stars_of(kind, share, index=None):
+    """The star level (5 to 1) one measured share earns. Independence and
+    entanglement have no level under 4, so they return 5, 4 or "<4"."""
+    if kind == "component_independence":
+        return next((lvl for lvl in (5, 4) if share >= INDEPENDENCE_BANDS[lvl]), BELOW_FOUR)
+    if kind == "component_entanglement":
+        return next((lvl for lvl in (5, 4) if share <= ENTANGLEMENT_BANDS[lvl]), BELOW_FOUR)
+    bands = STAR_BANDS[kind]
+    caps = {lvl: bands[lvl] if index is None else bands[lvl][index] for lvl in bands}
+    return next((lvl for lvl in (5, 4, 3, 2) if share <= caps[lvl]), 1)
+
+
+LIMITS = band_limits(4)
+DUPLICATION_LIMIT = STAR_BANDS["duplication"][4]
+INDEPENDENCE_MIN = INDEPENDENCE_BANDS[4]
+ENTANGLEMENT_LIMIT = ENTANGLEMENT_BANDS[4]
+GUIDANCE = "SIG/TUV NORD CERT Guidance for Producers v18.1"
 
 
 PROFILES = {
     "four-star": {
         "stars": "4-star",
-        "source": "SIG/TUV NORD CERT Guidance for Producers v17.0, 4 stars",
+        "source": f"{GUIDANCE}, 4 stars",
         "limits": LIMITS,
         "duplication": DUPLICATION_LIMIT,
         "independence_min": INDEPENDENCE_MIN,
@@ -151,17 +198,13 @@ PROFILES = {
     },
     "five-star": {
         "stars": "5-star",
-        "source": "half of each 4-star limit of the SIG/TUV NORD CERT Guidance for Producers v17.0 "
+        "source": f"5-star limits derived from the {GUIDANCE} 4-star limits with the band ratios of "
+                  "Alves, Correia and Visser 2011; independence and entanglement at half the exposed share "
                   "(SIG publishes no 5-star limits)",
-        "limits": {
-            "unit_size": [(15, .236), (30, .116), (60, .042)],
-            "unit_complexity": [(5, .101), (10, .037), (25, .0055)],
-            "unit_interfacing": [(2, .075), (4, .0165), (6, .0045)],
-            "module_coupling": [(10, .050), (20, .028), (50, .0095)],
-        },
-        "duplication": .028,
-        "independence_min": .969,
-        "entanglement": .0385,
+        "limits": band_limits(5),
+        "duplication": STAR_BANDS["duplication"][5],
+        "independence_min": INDEPENDENCE_BANDS[5],
+        "entanglement": ENTANGLEMENT_BANDS[5],
     },
 }
 DEFAULT_PROFILE = "four-star"
@@ -518,12 +561,15 @@ def code_lines(text, lang):
 # report
 # --------------------------------------------------------------------------
 
-def profile(units, key, limits):
+def profile(units, key, limits, kind):
+    """One row per bound: the share of unit LOC above it, the profile's limit,
+    and the star level the share earns."""
     total = sum(u["nloc"] for u in units) or 1
     rows = []
-    for bound, cap in limits:
+    for i, (bound, cap) in enumerate(limits):
         share = sum(u["nloc"] for u in units if u[key] > bound) / total
-        rows.append({"above": bound, "share": round(share, 4), "limit": cap, "ok": share <= cap})
+        rows.append({"above": bound, "share": round(share, 4), "limit": cap, "ok": share <= cap,
+                     "stars": stars_of(kind, round(share, 4), i)})
     return rows
 
 
@@ -571,7 +617,7 @@ def duplication_profile(app, clones, files_by_lang, limit=DUPLICATION_LIMIT):
     def row(dup, total):
         share = dup / total if total else 0.0
         return {"code_lines": total, "redundant_lines": dup, "share": round(share, 4),
-                "limit": limit, "ok": share <= limit}
+                "limit": limit, "ok": share <= limit, "stars": stars_of("duplication", round(share, 4))}
     out = {}
     for lang in sorted(set(files_by_lang.values())):
         files = [f for f, lg in files_by_lang.items() if lg == lang]
@@ -806,9 +852,10 @@ def structure(app, files, deps, prof=PROFILES[DEFAULT_PROFILE]):
             incoming[t].add(src)
     total = sum(loc.values()) or 1
     coupling = []
-    for bound, cap in prof["limits"]["module_coupling"]:
+    for i, (bound, cap) in enumerate(prof["limits"]["module_coupling"]):
         share = sum(loc[m] for m in modules if len(incoming[m]) > bound) / total
-        coupling.append({"above": bound, "share": round(share, 4), "limit": cap, "ok": share <= cap})
+        coupling.append({"above": bound, "share": round(share, 4), "limit": cap, "ok": share <= cap,
+                         "stars": stars_of("module_coupling", round(share, 4), i)})
     root, comp = component_of_factory(modules)
     hidden = sum(loc[m] for m in modules if all(comp(s) == comp(m) for s in incoming[m]))
     lines = collections.Counter()
@@ -832,7 +879,8 @@ def structure(app, files, deps, prof=PROFILES[DEFAULT_PROFILE]):
         "component_root": root or ".",
         "components": dict(comp_loc.most_common()),
         "component_independence": {"hidden_share": round(independence, 4), "limit_min": prof["independence_min"],
-                                   "ok": independence >= prof["independence_min"]},
+                                   "ok": independence >= prof["independence_min"],
+                                   "stars": stars_of("component_independence", round(independence, 4))},
         "component_entanglement": {
             "communication_lines": len(lines),
             "connected_components": len(connected),
@@ -842,8 +890,11 @@ def structure(app, files, deps, prof=PROFILES[DEFAULT_PROFILE]):
             "violation_examples": examples[:12],
             "limit": prof["entanglement"],
             "ok": None,
+            "stars": stars_of("component_entanglement", round(degree, 4)),
             "note": "SIG normalises density and violation degree by benchmark maxima it does not publish, "
-                    "so this is the two inputs, not the rated value. Lower is better on both.",
+                    "so this is the two inputs, not the rated value. Lower is better on both. "
+                    "`stars` rates the violation degree against the entanglement bands as an estimate; "
+                    "it is not a floored check.",
         },
     }
 
@@ -881,9 +932,9 @@ def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE, reader=None):
             "files": sum(1 for v in files.values() if v == lang),
             "units": len(rows),
             "unit_loc": sum(u["nloc"] for u in rows),
-            "unit_size": profile(rows, "nloc", prof["limits"]["unit_size"]),
-            "unit_complexity": profile(rows, "ccn", prof["limits"]["unit_complexity"]),
-            "unit_interfacing": profile(rows, "params", prof["limits"]["unit_interfacing"]),
+            "unit_size": profile(rows, "nloc", prof["limits"]["unit_size"], "unit_size"),
+            "unit_complexity": profile(rows, "ccn", prof["limits"]["unit_complexity"], "unit_complexity"),
+            "unit_interfacing": profile(rows, "params", prof["limits"]["unit_interfacing"], "unit_interfacing"),
             "duplication": dup[lang][0] if lang in dup else None,
             "duplication_jscpd": dup[lang][1] if lang in dup and jscpd else None,
             "largest_units": worst(rows, "nloc"),
@@ -925,15 +976,16 @@ def pct(x):
 def markdown(report):
     out = [f"## SIG maintainability profile: {report['app']}", "",
            f"lizard {LIZARD_VERSION}, jscpd {JSCPD_VERSION}; limits: {report['limits']}. "
-           f"Each cell is the share of code above the bound, against the {report['stars']} limit.", "",
+           f"Each cell is the share of code above the bound, against the {report['stars']} limit, "
+           f"with the star level it earns.", "",
            "| language | units | size >15/30/60 | complexity >5/10/25 | params 3+/5+/7+ | duplication | jscpd |",
            "|---|---|---|---|---|---|---|"]
 
     def cells(rows):
-        return " / ".join(f"{pct(r['share'])}{'' if r['ok'] else ' ✗'}" for r in rows)
+        return " / ".join(f"{pct(r['share'])} {r['stars']}★{'' if r['ok'] else ' ✗'}" for r in rows)
     for lang, d in report["languages"].items():
         dup = d.get("duplication")
-        dcell = f"{pct(dup['share'])}{'' if dup['ok'] else ' ✗'}" if dup else "n/a"
+        dcell = f"{pct(dup['share'])} {dup['stars']}★{'' if dup['ok'] else ' ✗'}" if dup else "n/a"
         jdup = d.get("duplication_jscpd")
         jcell = pct(jdup["share"]) if jdup else "n/a"
         out.append(f"| {lang} | {d['units']} | {cells(d['unit_size'])} | {cells(d['unit_complexity'])} "
@@ -945,7 +997,7 @@ def markdown(report):
         ci = s["component_independence"]
         out += ["", f"{lang} structure ({s['modules']} modules, components under `{s['component_root']}`): "
                 f"module coupling >10/20/50 {cells(s['module_coupling'])}; "
-                f"component independence {pct(ci['hidden_share'])}{'' if ci['ok'] else ' ✗'} (min {pct(ci['limit_min'])}); "
+                f"component independence {pct(ci['hidden_share'])} {ci['stars']}★{'' if ci['ok'] else ' ✗'} (min {pct(ci['limit_min'])}); "
                 f"entanglement inputs: {e['communication_lines']} lines between {e['connected_components']} components, "
                 f"density {e['communication_density']}, violation degree {e['violation_degree']}."]
     checks = checks_of(report)

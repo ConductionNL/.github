@@ -1947,16 +1947,24 @@ _gate_stamp() {
 "
     _GATE_T_PREV="${_now}"
 }
+# _record <n> <name> <verdict> <reason> — one line of gates.json input, kept in
+# memory and written once by the summary (scripts/lib/write_gates_json.py).
+_GATE_RECORDS=""
+_record() {
+    _GATE_RECORDS="${_GATE_RECORDS}$1	$2	$3	$(printf '%s' "${4:-}" | tr '\t\n' '  ')
+"
+}
 _fail() {
     set +e   # backstop — see the errexit invariant at the top of this file
     local _reason
     _reason=$(printf '%s' "${3:-}" | tr '\n' ' ')
+    _record "$1" "$2" FAIL "${_reason}"
     echo "[gate-$1] $2: FAIL${_reason:+ — ${_reason}}"
     _FAILED=$((_FAILED + 1))
     _EMITTED_GATES="${_EMITTED_GATES}$1 "
     _gate_stamp "$1"
 }
-_pass() { set +e; echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; _gate_stamp "$1"; }
+_pass() { set +e; _record "$1" "$2" PASS ""; echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; _gate_stamp "$1"; }
 
 # _warn — A GATE THAT REPORTED A REAL FINDING AND IS DELIBERATELY NOT BLOCKING.
 #
@@ -1976,6 +1984,7 @@ _warn() {
     set +e
     local _reason
     _reason=$(printf '%s' "${3:-}" | tr '\n' ' ')
+    _record "$1" "$2" WARNING "${_reason}"
     echo "[gate-$1] $2: WARNING${_reason:+ — ${_reason}}"
     _WARNED=$((_WARNED + 1))
     _EMITTED_GATES="${_EMITTED_GATES}$1 "
@@ -2173,15 +2182,18 @@ _skip() {
     _gate_stamp "$1"
     case "${_cat}" in
         na)
+            _record "$1" "$2" "NOT APPLICABLE" "${_reason}"
             echo "[gate-$1] $2: NOT APPLICABLE — ${_reason}"
             _NA_GATES="${_NA_GATES}$1 "
             ;;
         structural|wiring)
+            _record "$1" "$2" SKIPPED "${_cat}: ${_reason}"
             echo "[gate-$1] $2: SKIPPED (${_cat}) — ${_reason}"
             _SKIPPED_GATES="${_SKIPPED_GATES}$1 "
             ;;
         *)
             echo "[gate-$1] $2: FAIL — internal error: _skip called with reason category '${_cat}', which is not one of na|structural|wiring. Refusing to guess: an unclassified skip would silently stop counting against coverage."
+            _record "$1" "$2" FAIL "internal error: _skip called with reason category '${_cat}'"
             _FAILED=$((_FAILED + 1))
             _EMITTED_GATES="${_EMITTED_GATES}$1 "
             ;;
@@ -13805,8 +13817,9 @@ fi
 #     REPORT. The whole risk profile against the 4-star limits, written to
 #     sig-profile.json and sig-profile.md in $HYDRA_GATE_SIG_REPORT_DIR (the
 #     log directory by default). Report-only: it PASSES with its census line.
-#     HYDRA_GATE_SIG_PROFILE=five-star compares the report with half of each
-#     4-star limit instead (the checker reads it; the ratchet ignores it).
+#     HYDRA_GATE_SIG_PROFILE=five-star compares the report with the derived
+#     5-star limits instead (the checker reads it; the ratchet ignores it).
+#     Every row also carries the star level (5 to 1) its share earns.
 #
 # Ships as a WARNING under the fleet rule for new gates: the package resolves
 # at @main for every core app, so a blocking ratchet would land everywhere the
@@ -14131,6 +14144,25 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
 # test-hydra-gates-bin.sh's all-not-applicable fixture the same way.
 [ -f composer.json ] || _declare_na "no composer.json — this repo has no Composer surface, so there is no dependency resolution for a release-age cooldown to govern." \
     93
+
+# ---------------------------------------------------------------------------
+# gates.json: every declared gate as one JSON record (gate, name, verdict,
+# findings, scope, category), next to the findings logs, so a consumer reads
+# the run without parsing verdict lines. $HYDRA_GATE_GATES_JSON moves it.
+# A writer that fails is reported and never changes the run's verdict.
+# ---------------------------------------------------------------------------
+_gates_json="${HYDRA_GATE_GATES_JSON:-${HYDRA_GATE_LOG_DIR}/gates.json}"
+_gates_declared="${HYDRA_GATE_LOG_DIR}/gates-declared.txt"
+printf '%s\n' "${_declared}" > "${_gates_declared}" 2>/dev/null
+if command -v python3 > /dev/null 2>&1 && [ -f "${SCRIPT_DIR}/lib/write_gates_json.py" ]; then
+    _gates_scope="full"; [ "${SCOPE_TO_DIFF}" = "1" ] && _gates_scope="diff"
+    printf '%s' "${_GATE_RECORDS}" | python3 "${SCRIPT_DIR}/lib/write_gates_json.py" --out "${_gates_json}" \
+        --scope "${_gates_scope}" --declared "${_gates_declared}" --log-dir "${HYDRA_GATE_LOG_DIR}" \
+        --app "$(basename "$(pwd)")" --base "${BASE_REF:-}" \
+        || echo "[hydra-gates] gates.json: the writer failed; the verdict lines above are the record of this run."
+else
+    echo "[hydra-gates] gates.json: not written (python3 or write_gates_json.py missing)."
+fi
 
 _emitted_n=$(printf '%s\n' ${_EMITTED_GATES} | grep -c . || true)
 _emitted_n="${_emitted_n:-0}"

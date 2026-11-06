@@ -23,8 +23,11 @@
   4. REPORT: the shares are code-weighted and compared with the 4-star limits.
   5. STRUCTURE: PHP and Python dependencies, the component root, and the
      violation degree on the examples in SIG's Guidance for Producers.
-  6. PROFILES: five-star is half of every 4-star limit; a share between the
-     two passes four-star and misses five-star; HYDRA_GATE_SIG_PROFILE picks
+  6. PROFILES: four-star is the v18.1 guidance; five-star is the derived
+     5-star band, stricter than four-star on every check; a share between the
+     two passes four-star and misses five-star; every report row carries the
+     star level its share earns (5 to 1, "<4" for independence and
+     entanglement below 4 stars); HYDRA_GATE_SIG_PROFILE picks
      the profile, --profile overrides it, four-star is the default, and an
      unknown profile is exit 2.
 
@@ -444,13 +447,13 @@ class Report(unittest.TestCase):
 
 
 class Profiles(unittest.TestCase):
-    """A fixture whose PHP has 44 of 260 unit lines (16.9%) in a unit over 30
-    lines: inside the 4-star limit (23.1%), outside the 5-star one (11.6%)."""
+    """A fixture whose PHP has 44 of 242 unit lines (18.2%) in a unit over 30
+    lines: inside the 4-star limit (24.2%), outside the 5-star one (17.0%)."""
 
     def setUp(self):
         self.repo = Repo()
         methods = [php_method("long", lines=40, tag="a")]
-        methods += [php_method(f"s{i}", lines=5, tag=f"b{i}") for i in range(24)]
+        methods += [php_method(f"s{i}", lines=5, tag=f"b{i}") for i in range(22)]
         self.repo.write("lib/Service/A.php", php_class("A", methods))
         self.repo.commit("base")
         self.saved_env = os.environ.pop("HYDRA_GATE_SIG_PROFILE", None)
@@ -473,35 +476,69 @@ class Profiles(unittest.TestCase):
     def above_30(self, report):
         return {r["above"]: r for r in report["languages"]["php"]["unit_size"]}[30]
 
-    def test_five_star_is_half_of_every_four_star_limit(self):
-        four, five = sig.PROFILES["four-star"], sig.PROFILES["five-star"]
-        for prop, rows in four["limits"].items():
-            for (b4, c4), (b5, c5) in zip(rows, five["limits"][prop]):
-                self.assertEqual(b4, b5, prop)
-                self.assertAlmostEqual(c5, c4 / 2, delta=.00051, msg=f"{prop} >{b4}")
-        self.assertAlmostEqual(five["duplication"], four["duplication"] / 2, delta=.00051)
-        self.assertAlmostEqual(1 - five["independence_min"], (1 - four["independence_min"]) / 2, delta=.00051)
-        self.assertAlmostEqual(five["entanglement"], four["entanglement"] / 2, delta=.00005)
+    def test_four_star_is_the_v18_1_guidance(self):
+        four = sig.PROFILES["four-star"]
+        self.assertEqual(four["limits"], {
+            "unit_size": [(15, .480), (30, .242), (60, .091)],
+            "unit_complexity": [(5, .207), (10, .075), (25, .011)],
+            "unit_interfacing": [(2, .154), (4, .034), (6, .009)],
+            "module_coupling": [(10, .097), (20, .053), (50, .018)],
+        })
+        self.assertEqual((four["duplication"], four["independence_min"], four["entanglement"]), (.058, .945, .075))
+        self.assertIn("v18.1", four["source"])
+
+    def test_every_band_is_stricter_than_the_one_below_it(self):
+        for prop, bands in sig.STAR_BANDS.items():
+            for hi, lo in ((5, 4), (4, 3), (3, 2)):
+                for a, b in zip(*(bands[x] if isinstance(bands[x], tuple) else (bands[x],) for x in (hi, lo))):
+                    self.assertLess(a, b, f"{prop} {hi} vs {lo}")
+        five = sig.PROFILES["five-star"]
+        self.assertEqual(five["limits"]["unit_size"], [(15, .360), (30, .170), (60, .055)])
+        self.assertEqual((five["duplication"], five["independence_min"], five["entanglement"]), (.035, .973, .0375))
+
+    def test_stars_of_each_band_edge(self):
+        for share, want in ((.360, 5), (.3601, 4), (.480, 4), (.4801, 3), (.630, 3), (.847, 2), (.8471, 1)):
+            self.assertEqual(sig.stars_of("unit_size", share, 0), want, share)
+        self.assertEqual(sig.stars_of("unit_complexity", .006, 2), 4)
+        self.assertEqual(sig.stars_of("unit_complexity", .012, 2), 3)
+        for share, want in ((.035, 5), (.058, 4), (.116, 3), (.230, 2), (.231, 1)):
+            self.assertEqual(sig.stars_of("duplication", share), want, share)
+
+    def test_independence_and_entanglement_have_no_band_under_four(self):
+        self.assertEqual(sig.stars_of("component_independence", .973), 5)
+        self.assertEqual(sig.stars_of("component_independence", .945), 4)
+        self.assertEqual(sig.stars_of("component_independence", .10), "<4")
+        self.assertEqual(sig.stars_of("component_entanglement", .0375), 5)
+        self.assertEqual(sig.stars_of("component_entanglement", .075), 4)
+        self.assertEqual(sig.stars_of("component_entanglement", .9), "<4")
+
+    def test_report_rows_carry_their_stars(self):
+        report, out = self.report()
+        php = report["languages"]["php"]
+        self.assertEqual(self.above_30(report)["stars"], 4)
+        self.assertEqual(php["duplication"]["stars"], 5)
+        self.assertIn(php["unit_size"][0]["stars"], (1, 2, 3, 4, 5))
+        self.assertIn("4★", out)
 
     def test_default_is_four_star(self):
         report, out = self.report()
         self.assertEqual(report["profile"], "four-star")
         row = self.above_30(report)
-        self.assertAlmostEqual(row["share"], round(nloc(40) / (nloc(40) + 24 * nloc(5)), 4))
-        self.assertEqual(row["limit"], .231)
+        self.assertAlmostEqual(row["share"], round(nloc(40) / (nloc(40) + 22 * nloc(5)), 4))
+        self.assertEqual(row["limit"], .242)
         self.assertTrue(row["ok"])
-        self.assertEqual(report["languages"]["php"]["duplication"]["limit"], .056)
+        self.assertEqual(report["languages"]["php"]["duplication"]["limit"], .058)
         self.assertIn("4-star checks met", out)
 
-    def test_five_star_flag_holds_the_same_code_to_half_the_limits(self):
+    def test_five_star_flag_holds_the_same_code_to_the_five_star_band(self):
         report, out = self.report("--profile", "five-star")
         self.assertEqual(report["profile"], "five-star")
         row = self.above_30(report)
-        self.assertEqual(row["limit"], .116)
+        self.assertEqual(row["limit"], .170)
         self.assertFalse(row["ok"])
-        self.assertEqual(report["languages"]["php"]["duplication"]["limit"], .028)
-        self.assertEqual(report["structure"]["php"]["component_independence"]["limit_min"], .969)
-        self.assertEqual(report["structure"]["php"]["component_entanglement"]["limit"], .0385)
+        self.assertEqual(report["languages"]["php"]["duplication"]["limit"], .035)
+        self.assertEqual(report["structure"]["php"]["component_independence"]["limit_min"], .973)
+        self.assertEqual(report["structure"]["php"]["component_entanglement"]["limit"], .0375)
         self.assertIn("5-star checks met; missed: ", out)
         self.assertIn("php unit_size >30", out)
         self.assertIn("against the 5-star limit", out)
