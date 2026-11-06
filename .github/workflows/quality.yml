@@ -8461,9 +8461,24 @@ jobs:
               # commits, is NOT matched. That targets development as ordinary
               # work and must keep being judged against it.
               development|beta|release/beta-to-main-*) IS_PROMOTION=yes ;;
+              # A hotfix into `main` is cut from `beta` (the release line) and
+              # is a promotion of that line plus the fix, so `beta` is its base.
+              #
+              # A hotfix into `beta` is NOT a promotion: it is cut from `beta`
+              # itself and carries only the fix. Judging it against
+              # `development` asks "what does beta lack compared to
+              # development?", and the answer is every commit development
+              # gained since the release cut -- in the wrong direction.
+              # Measured 2026-11-06 on opencatalogi#2394 (hotfix/beta-... ->
+              # beta, a docs-only cherry-pick): 728 changed files against
+              # development, gate-16 reported a changed method missing @spec
+              # and gate-119 a raised procedure-code baseline, on content that
+              # beta had already cleared and the pull request did not touch.
+              # The same branch judged against `beta` reports one changed
+              # file and passes both gates. So the target stays the base.
               hotfix/*)
                 case "${BASE_REF:-}" in
-                  beta|main) IS_PROMOTION=yes ;;
+                  main) IS_PROMOTION=yes ;;
                 esac
                 ;;
             esac
