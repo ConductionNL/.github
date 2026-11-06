@@ -3993,6 +3993,44 @@ if [ -f appinfo/routes.php ] && [ -n "$(_enum_controllers tracked | head -1)" ];
         # arms are recorded here rather than at one convenient place.
         echo "${_ctrl_path}" >> "${_rr_seen}"
 
+        # THE ENGINE'S OWN GENERICS ARE A LIBRARY, NOT THIS APP'S ENDPOINTS.
+        #
+        # ADR-040: the AppHost generics (`lib/AppHost/Controller/Generic*`)
+        # are shipped by the engine — the repo that carries
+        # `lib/AppHost/Bootstrap.php` — and served in a LEAF app, where
+        # `Bootstrap::register()` binds them and `Routes::standard()` names
+        # their routes. In the engine repo itself they are source files with
+        # no route of their own, by design: the engine routes what it uses
+        # (`AppHost\Controller\GenericHealth#index`, `…GenericMetrics#index`)
+        # and leaves the rest to the adopters.
+        #
+        # Judged like any controller they are a permanent finding in exactly
+        # one repo. MEASURED 2026-11-06 on openregister, `beta` and
+        # `development` alike: twelve `missing-route` lines over
+        # GenericDashboard, GenericPreferences, GenericSettings and
+        # GenericStore, on every pull request, with no route anyone would
+        # add — adding one would turn a library class into a live endpoint.
+        #
+        # Narrow on purpose: the file must sit under lib/AppHost/Controller/
+        # AND this repo must define the engine's Bootstrap (a leaf imports
+        # `OCA\OpenRegister\AppHost\Bootstrap`; it never ships the file). A
+        # leaf that copies a generic into its own lib/AppHost/Controller/ is
+        # still judged — `apphost-engine-generics-leaf/` asserts that — and
+        # so is every conventional controller in the engine
+        # (`apphost-engine-generics/` keeps a `gadget#run` that MUST fail).
+        # A generic the engine DOES route is unaffected: the route-side
+        # check (`method-not-found-on-target-controller`) runs on route
+        # names, not on this enumeration.
+        case "${_ctrl_path}" in
+            lib/AppHost/Controller/Generic*Controller.php)
+                if [ -f lib/AppHost/Bootstrap.php ] \
+                    && _php_code_only lib/AppHost/Bootstrap.php | grep -qE '^[[:space:]]*(abstract[[:space:]]+|final[[:space:]]+)?class[[:space:]]+Bootstrap\b' \
+                    && _php_code_only lib/AppHost/Bootstrap.php | grep -qE 'function[[:space:]]+register[[:space:]]*\('; then
+                    continue
+                fi
+                ;;
+        esac
+
         # Derive the controller route slug — strip lib/Controller/ prefix +
         # Controller.php suffix, lowercase the first character. Settings/
         # subnamespace becomes `Settings\Foo`.
