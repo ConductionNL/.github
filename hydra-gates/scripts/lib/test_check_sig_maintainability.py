@@ -674,6 +674,98 @@ def rated_report(langs, structure=None):
 GOOD = (10000, (.30, .10, .02), (.10, .03, .0), (.10, .02, .0), (10000, 200))
 
 
+def crossing_sfc(name):
+    """A Vue file that shares with its twins only the lines around the
+    script/style boundary: 3 code lines before it, 3 after."""
+    return (f"<script>\nconst {name} = 1\nexport const {name}2 = {name}\n"
+            "shared.first()\nshared.second()\nshared.third()\n</script>\n\n"
+            "<style scoped>\n.same-one { color: red; }\n.same-two { color: red; }\n.same-three { color: red; }\n"
+            f".{name} {{ color: blue; }}\n</style>\n")
+
+
+class VuePieces(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="gate122-vue-")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def profile(self, texts):
+        for rel, text in texts.items():
+            with open(os.path.join(self.dir, rel), "w") as fh:
+                fh.write(text)
+        return sig.duplication_profile(self.dir, [], {rel: "vue" for rel in texts})["vue"][0]
+
+    def pieces(self, text):
+        lines = text.splitlines()
+        return [[lines[n - 1].strip() for n in piece]
+                for piece in sig.sfc_pieces(lines, sig.code_lines(text, "vue"))]
+
+    def test_a_window_does_not_span_script_and_style(self):
+        row = self.profile({"A.vue": crossing_sfc("a"), "B.vue": crossing_sfc("b")})
+        self.assertEqual(row["redundant_lines"], 0)
+
+    def test_the_same_lines_are_a_clone_when_no_block_boundary_separates_them(self):
+        # Control: the shared lines of crossing_sfc() in one block, so the fixture bites.
+        shared = ("shared.first()\nshared.second()\nshared.third()\n"
+                  ".same-one { color: red; }\n.same-two { color: red; }\n.same-three { color: red; }\n")
+        row = self.profile({"A.vue": f"<script>\nconst a = 1\n{shared}</script>\n",
+                            "B.vue": f"<script>\nconst b = 2\n{shared}</script>\n"})
+        self.assertEqual(row["redundant_lines"], 6)
+
+    def test_a_clone_inside_one_block_still_counts(self):
+        body = "".join(f"  step{i}()\n" for i in range(6))
+        row = self.profile({"A.vue": f"<script>\nconst a = 1\n{body}</script>\n",
+                            "B.vue": f"<script>\nconst b = 2\n{body}</script>\n"})
+        self.assertEqual(row["redundant_lines"], 6)
+
+    def test_a_window_does_not_span_template_and_script(self):
+        tail = "".join(f"  <p>{i}</p>\n" for i in range(3))
+        head = "".join(f"step{i}()\n" for i in range(3))
+        row = self.profile({"A.vue": f"<template>\n  <a />\n{tail}</template>\n<script>\n{head}a()\n</script>\n",
+                            "B.vue": f"<template>\n  <b />\n{tail}</template>\n<script>\n{head}b()\n</script>\n"})
+        self.assertEqual(row["redundant_lines"], 0)
+
+    def test_blocks_are_pieces_and_their_tags_belong_to_none(self):
+        text = ("<template>\n  <div>\n    <template #x>\n      <a />\n    </template>\n  </div>\n</template>\n"
+                "<script setup>\nconst a = 1\n</script>\n<style src=\"./a.css\"></style>\n"
+                "<style lang=\"scss\" scoped>\n.a { top: 0; }\n</style>\n")
+        self.assertEqual(self.pieces(text), [
+            ["<div>", "<template #x>", "<a />", "</template>", "</div>"], ["const a = 1"], [".a { top: 0; }"]])
+
+    def test_boundaries_hold_when_the_code_lines_leave_the_tags_out(self):
+        lines = ["<script>", "a()", "</script>", "<style>", ".a { top: 0; }", "</style>"]
+        self.assertEqual(sig.sfc_pieces(lines, {2, 5}), [[2], [5]])
+
+    def test_other_languages_keep_one_piece(self):
+        lines = [f"$a{i} = {i};" for i in range(8)]
+        self.assertEqual(len(list(sig.dup_windows(lines, set(range(1, 9)), "php"))), 3)
+
+    def test_the_denominator_keeps_every_code_line(self):
+        row = self.profile({"A.vue": crossing_sfc("a")})
+        self.assertEqual(row["code_lines"], len(sig.code_lines(crossing_sfc("a"), "vue")))
+
+
+class VueAssumption(unittest.TestCase):
+    def report(self, rel, text):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        repo.write(rel, text)
+        repo.commit("app")
+        return sig.build_report(repo.dir, LIZARD, None)
+
+    def test_a_report_with_vue_states_the_assumption(self):
+        report = self.report("src/A.vue", crossing_sfc("a"))
+        self.assertEqual(report["assumptions"], [sig.VUE_PIECES_ASSUMPTION])
+        self.assertIn(f"Assumption: {sig.VUE_PIECES_ASSUMPTION}", sig.markdown(report))
+        self.assertIn("until a real Sigrid scan confirms it", sig.VUE_PIECES_ASSUMPTION)
+
+    def test_a_report_without_vue_states_none(self):
+        report = self.report("lib/A.php", php_class("A", [php_method("a")]))
+        self.assertEqual(report["assumptions"], [])
+        self.assertNotIn("Assumption:", sig.markdown(report))
+
+
 class Rating(unittest.TestCase):
     def test_interpolation_reproduces_alves_2011_argouml(self):
         # Table III (b), McCabe: cumulative caps for moderate / high / very high.

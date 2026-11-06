@@ -77,7 +77,10 @@ TOOLS, PINNED
 lizard 1.24.3 (units: NLOC, McCabe, parameters) and jscpd 4.0.5 (the
 ratchet's clones). The report's duplication follows SIG's line definition
 directly (windows of 6 code lines equal modulo whitespace) and shows jscpd's
-figure next to it as a cross-check.
+figure next to it as a cross-check. In a Vue file the windows stay inside one
+top-level block: template, script and style are separate pieces, and the tag
+lines belong to none. That is our assumption until a real Sigrid scan confirms
+it, and every report with Vue files says so. jscpd's figure does not apply it.
 A different version produces different numbers, so the pinned version is
 loaded or installed into the tool cache (HYDRA_GATE_TOOLS_DIR, default
 ~/.cache/hydra-gates/tools) and any other version is refused. Set
@@ -145,6 +148,8 @@ LANG_OF_EXT = {
 RATCHET = {"nloc": 60, "ccn": 10, "params": 4}
 RATCHET_LABEL = {"nloc": "NLOC > 60", "ccn": "McCabe > 10", "params": "5 or more parameters"}
 DUP_MIN_LINES = 6
+VUE_PIECES_ASSUMPTION = ("Vue duplication treats template, script and style as separate pieces, so no 6-line "
+                         "window crosses a block boundary. This is our assumption until a real Sigrid scan confirms it.")
 
 # Star bands, per language: for each level, the max share of unit LOC strictly
 # above each bound. 4 stars is the SIG/TUV NORD CERT Guidance for Producers
@@ -589,18 +594,51 @@ def worst(units, key, n=8):
     return [f"{u['file']}:{u['start']} {u['name']} ({u[key]})" for u in ranked]
 
 
-def dup_windows(lines, code):
+SFC_OPEN = re.compile(r"^<([a-zA-Z][\w-]*)\b")
+
+
+def sfc_pieces(lines, code):
+    """The code lines of a Vue file as one sorted list per piece: the inside
+    of each top-level block (template, script, style, custom blocks) and each
+    run of lines between blocks. The block's own tag lines are in no piece.
+    A top-level tag starts in the first column, so an indented nested
+    `<template>` stays inside its block. Boundaries are read from `lines`, so
+    they hold when `code` leaves the tag lines out."""
+    pieces, current, block = [], [], None
+    for n, s in enumerate(lines, 1):
+        opened = SFC_OPEN.match(s) if block is None else None
+        if opened:
+            pieces.append(current)
+            current = []
+            name = opened.group(1)
+            if f"</{name}" not in s and not s.rstrip().endswith("/>"):
+                block = name
+        elif block is not None and re.match(rf"^</{re.escape(block)}\s*>", s):
+            pieces.append(current)
+            current, block = [], None
+        elif n in code:
+            current.append(n)
+    pieces.append(current)
+    return [p for p in pieces if p]
+
+
+def dup_windows(lines, code, lang=None):
     """SIG's duplication windows of one file: (index, key, line numbers) for
     every run of DUP_MIN_LINES consecutive code lines, keyed by the lines
     without whitespace. `lines` is the file's text split into lines, `code`
     the line numbers code_lines() returns. Windows made only of brackets are
-    skipped."""
-    seq = [(n, "".join(lines[n - 1].split())) for n in sorted(code)]
-    for i in range(len(seq) - DUP_MIN_LINES + 1):
-        win = seq[i:i + DUP_MIN_LINES]
-        key = tuple(t for _n, t in win)
-        if not all(len(t) <= 2 for t in key):
-            yield i, key, [n for n, _t in win]
+    skipped. In a Vue file no window crosses a block boundary (sfc_pieces),
+    which is VUE_PIECES_ASSUMPTION."""
+    pieces = sfc_pieces(lines, code) if lang == "vue" else [sorted(code)]
+    index = 0
+    for piece in pieces:
+        seq = [(n, "".join(lines[n - 1].split())) for n in piece]
+        for i in range(len(seq) - DUP_MIN_LINES + 1):
+            win = seq[i:i + DUP_MIN_LINES]
+            key = tuple(t for _n, t in win)
+            if not all(len(t) <= 2 for t in key):
+                yield index + i, key, [n for n, _t in win]
+        index += len(seq)
 
 
 def duplication_profile(app, clones, files_by_lang, limit=DUPLICATION_LIMIT):
@@ -623,7 +661,7 @@ def duplication_profile(app, clones, files_by_lang, limit=DUPLICATION_LIMIT):
     redundant = collections.defaultdict(set)
     for rel in sorted(files_by_lang):
         seen = windows[files_by_lang[rel]]
-        for i, key, nums in dup_windows(lines_of[rel], code[rel]):
+        for i, key, nums in dup_windows(lines_of[rel], code[rel], files_by_lang[rel]):
             if key in seen and seen[key] != (rel, i):
                 redundant[rel].update(nums)
             else:
@@ -946,6 +984,7 @@ def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE, reader=None):
         "limits": prof["source"],
         "files": len(files),
         "skipped_files": reader.skipped,
+        "assumptions": [VUE_PIECES_ASSUMPTION] if "vue" in files.values() else [],
         "languages": {},
     }
     for lang in sorted(set(files.values())):
@@ -1284,6 +1323,8 @@ def markdown(report):
     checks = checks_of(report)
     out += ["", f"{sum(1 for _c, ok in checks if ok)} of {len(checks)} {report['stars']} checks met. ✗ marks a miss."]
     out += rating_markdown(report.get("rating"))
+    for assumption in report.get("assumptions", []):
+        out += ["", f"Assumption: {assumption}"]
     if report["skipped_files"]:
         out += ["", f"{len(report['skipped_files'])} file(s) lizard could not read, NOT measured: "
                 + ", ".join(s["file"] for s in report["skipped_files"][:10])]

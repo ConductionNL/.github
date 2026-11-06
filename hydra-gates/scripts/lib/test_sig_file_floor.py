@@ -205,6 +205,15 @@ class CloneLines(FileFloorCase):
         self.assertIn("warning: five-star file src/views/Two.vue:", out)
         self.assertIn("duplicated block of 6+ code lines, same as src/views/One.vue:", out)
 
+    def test_a_vue_window_does_not_cross_a_block_boundary(self):
+        def sfc(name):
+            return (f"<script>\nconst {name} = 1\nshared.first()\nshared.second()\nshared.third()\n</script>\n"
+                    "<style>\n.same-one { top: 0; }\n.same-two { top: 0; }\n.same-three { top: 0; }\n</style>\n")
+        self.write("src/views/One.vue", sfc("one"))
+        rc, out = self.hold("src/views/Two.vue", sfc("two"))
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("duplicated block", out)
+
     def test_a_bare_closing_brace_still_counts(self):
         self.assertIn(2, files.floor_code_lines("<?php\n}\n}//end x()\n", "php"))
         self.assertNotIn(3, files.floor_code_lines("<?php\n}\n}//end x()\n", "php"))

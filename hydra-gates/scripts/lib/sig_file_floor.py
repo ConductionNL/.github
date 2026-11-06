@@ -20,7 +20,8 @@ comment-only lines such as the `}//end methodName()` marker. In Vue, JS and
 TS files also the SFC block tags (`<template>`, `<script setup>`, `</style>`
 and the like) and the `export default {` line with its closing `}`.
 Everything else counts: a bare `}`, component lists, lifecycle bodies and
-template markup included.
+template markup included. In a Vue file a window stays inside one block, as in
+gate 122 (VUE_PIECES_ASSUMPTION).
 
 Three kinds of unit are exempt from the parameter rule only, detected from the
 source and never listed by hand. Size, complexity and clones still apply.
@@ -517,7 +518,7 @@ def duplicated_blocks(app, targets, corpus):
     for rel, lang in corpus.items():
         text = sig.read_text(os.path.join(app, rel))
         lines_of[rel] = text.splitlines()
-        windows[rel] = list(sig.dup_windows(lines_of[rel], floor_code_lines(text, lang)))
+        windows[rel] = list(sig.dup_windows(lines_of[rel], floor_code_lines(text, lang), lang))
     where = {}
     for rel in sorted(corpus):
         for _i, key, nums in windows[rel]:
