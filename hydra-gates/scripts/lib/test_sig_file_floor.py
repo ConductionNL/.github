@@ -9,8 +9,9 @@ check_sig_floor.py check), on real git histories.
   2. CLONE LINES: shared `use` / `namespace` / import blocks and
      `}//end name()` markers do not make a clone; other lines still do.
   3. EXEMPTIONS (parameters only): a constructor that only wires its
-     dependencies, and a method of an interface in the class's implements
-     chain; size and complexity still apply to both.
+     dependencies, a method of an interface in the class's implements chain,
+     and a public controller method whose parameters are all path parameters
+     of a route in appinfo/routes.php; size, complexity and clones still apply.
   4. HONEST LIST: a listed file that is gone fails in both modes, and so does
      removing a path from the list while the file exists.
   5. MODES: diff mode judges only the listed files the change touches or adds
@@ -327,6 +328,107 @@ class Exemptions(FileFloorCase):
         rc, out = self.hold("lib/Service/Ext.php", php_class("Ext", [
             method("other", params="int $a, int $b, int $c", tag="h")], " implements \\OCP\\External\\IHandler"))
         self.assertEqual(rc, 1, out)
+
+
+ROUTES = """<?php
+// ['name' => 'item#commented', 'url' => '/x/{a}/{b}/{c}'],
+return [
+    'routes' => [
+        ['name' => 'item#show', 'url' => '/api/{register}/{schema}/{id}', 'verb' => 'GET',
+         'requirements' => ['register' => '[^/]+', 'id' => '[^/]+']],
+        ['name' => 'item_list#find_all', 'url' => '/api/{register}/{schema}/{id}/all', 'verb' => 'GET'],
+        ['name' => 'item#partial', 'url' => '/api/{register}/{schema}', 'verb' => 'GET'],
+        ['name' => 'item#hidden', 'url' => '/api/{register}/{schema}/{id}/hidden', 'verb' => 'GET'],
+        ['name' => 'item#split', 'url' => '/a/{register}', 'verb' => 'GET'],
+        ['name' => 'item#split', 'url' => '/b/{schema}/{id}', 'verb' => 'GET'],
+        ['name' => 'Settings\\Item#show', 'url' => '/s/{register}/{schema}/{id}', 'verb' => 'GET'],
+    ],
+];
+"""
+CONTROLLER = "<?php\n\nnamespace OCA\\Fx\\Controller;\n\n"
+PATH_PARAMS = "string $register, string $schema, string $id"
+
+
+class RouteTargets(FileFloorCase):
+    def controller(self, name, members, header=CONTROLLER):
+        self.write("appinfo/routes.php", ROUTES)
+        return self.hold(f"lib/Controller/{name}.php", php_class(name, members, header=header))
+
+    def test_a_route_target_with_only_path_parameters_is_exempt(self):
+        rc, out = self.controller("ItemController", [method("show", params=PATH_PARAMS, tag="r")])
+        self.assertEqual(rc, 0, out)
+
+    def test_snake_case_route_names_map_to_the_class_and_method(self):
+        rc, out = self.controller("ItemListController", [method("findAll", params=PATH_PARAMS, tag="r")])
+        self.assertEqual(rc, 0, out)
+
+    def test_a_route_into_a_controller_subfolder_is_matched_to_that_folder(self):
+        folder = "<?php\n\nnamespace OCA\\Fx\\Controller\\Settings;\n\n"
+        self.write("appinfo/routes.php", ROUTES.replace("'name' => 'item#show'", "'name' => 'item#other'"))
+        text = php_class("ItemController", [method("show", params=PATH_PARAMS, tag="r")], header=folder)
+        rc, out = self.hold("lib/Controller/Settings/ItemController.php", text)
+        self.assertEqual(rc, 0, out)
+        rc, out = self.hold("lib/Controller/ItemController.php", text.replace("\\Settings;", ";"))
+        self.assertEqual(rc, 1, out)
+        self.assertRegex(out, r"lib/Controller/ItemController\.php:\d+ ItemController::show: 3 parameters > 2")
+
+    def test_a_parameter_outside_the_path_is_not_exempt(self):
+        rc, out = self.controller("ItemController", [method("partial", params=PATH_PARAMS, tag="r")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ItemController::partial: 3 parameters > 2", out)
+
+    def test_one_route_must_fix_the_signature_on_its_own(self):
+        rc, out = self.controller("ItemController", [method("split", params=PATH_PARAMS, tag="r")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ItemController::split: 3 parameters > 2", out)
+
+    def test_a_method_no_route_names_is_not_exempt(self):
+        rc, out = self.controller("ItemController", [method("helper", params=PATH_PARAMS, tag="r")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ItemController::helper: 3 parameters > 2", out)
+
+    def test_a_commented_out_route_does_not_count(self):
+        rc, out = self.controller("ItemController", [method("commented", params="string $a, string $b, string $c")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ItemController::commented: 3 parameters > 2", out)
+
+    def test_a_private_method_is_not_exempt(self):
+        hidden = method("hidden", params=PATH_PARAMS, tag="r").replace("public function", "private function")
+        rc, out = self.controller("ItemController", [hidden])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ItemController::hidden: 3 parameters > 2", out)
+
+    def test_a_class_outside_the_controller_namespace_is_not_exempt(self):
+        rc, out = self.controller("ItemController", [method("show", params=PATH_PARAMS, tag="r")], header=HEADER)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ItemController::show: 3 parameters > 2", out)
+
+    def test_a_route_target_still_has_the_size_rule(self):
+        rc, out = self.controller("ItemController", [method("show", statements=12, params=PATH_PARAMS, tag="r")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ItemController::show: NLOC 16 > 15", out)
+        self.assertNotIn("parameters > 2", out)
+
+    def test_a_route_target_still_has_the_complexity_rule(self):
+        branchy = complex_method("show", 5).replace("(int $a)", f"({PATH_PARAMS})").replace("$a ===", "$id ===")
+        rc, out = self.controller("ItemController", [branchy])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ItemController::show: McCabe 6 > 5", out)
+        self.assertNotIn("parameters > 2", out)
+
+    def test_a_route_target_still_has_the_clone_rule(self):
+        self.write("lib/Controller/OtherController.php",
+                   php_class("OtherController", [method("show", params=PATH_PARAMS, tag="r")], header=CONTROLLER))
+        rc, out = self.controller("ItemController", [method("show", params=PATH_PARAMS, tag="r")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("duplicated block of 6+ code lines, same as lib/Controller/OtherController.php:", out)
+        self.assertNotIn("parameters > 2", out)
+
+    def test_without_a_routes_file_nothing_is_exempt(self):
+        rc, out = self.hold("lib/Controller/ItemController.php", php_class(
+            "ItemController", [method("show", params=PATH_PARAMS, tag="r")], header=CONTROLLER))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ItemController::show: 3 parameters > 2", out)
 
 
 class HonestList(FileFloorCase):

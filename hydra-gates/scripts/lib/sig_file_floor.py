@@ -22,7 +22,7 @@ and the like) and the `export default {` line with its closing `}`.
 Everything else counts: a bare `}`, component lists, lifecycle bodies and
 template markup included.
 
-Two kinds of unit are exempt from the parameter rule only, detected from the
+Three kinds of unit are exempt from the parameter rule only, detected from the
 source and never listed by hand. Size, complexity and clones still apply.
   * A constructor that only wires its dependencies: every parameter is
     promoted (PHP 8, TypeScript), assigned to a property (as is, or one of
@@ -34,6 +34,11 @@ source and never listed by hand. Size, complexity and clones still apply.
     the files vendor/composer's autoload maps point at. When a type in the
     chain cannot be read, a method marked `@inheritDoc` or `#[\\Override]`
     counts as implementing it.
+  * A public controller method that a `name` entry in appinfo/routes.php
+    targets, when every parameter is a path parameter of that one route. A
+    parameter that comes from the query, the body or the route's `defaults`
+    is not fixed by the path, so the method stays under the rule. `resources`
+    entries name no method and do not count.
 
 A listed path that does not exist, is not a measured source file, or that
 lizard cannot read fails, so the list stays honest. Removing a path from the
@@ -100,13 +105,17 @@ def js_reliable(version=None):
 # the constructor exemption
 # --------------------------------------------------------------------------
 
+PHP_STRING_OR_COMMENT = re.compile(
+    r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|/\*.*?\*/|//[^\n]*|#(?!\[)[^\n]*""", re.S)
+
+
 def _strip_comments(src, lang):
+    if lang == "php":
+        return PHP_STRING_OR_COMMENT.sub(lambda m: m.group(0) if m.group(0)[0] in "'\"" else " ", src)
     src = re.sub(r"/\*.*?\*/", " ", src, flags=re.S)
     src = re.sub(r"//[^\n]*", "", src)
     if lang == "python":
         src = re.sub(r"#[^\n]*", "", src)
-    elif lang == "php":
-        src = re.sub(r"#(?!\[)[^\n]*", "", src)
     return src
 
 
@@ -353,6 +362,92 @@ def implements_interface_method(unit, source, types):
 
 
 # --------------------------------------------------------------------------
+# the route exemption (PHP)
+# --------------------------------------------------------------------------
+
+ROUTES_PATH = "appinfo/routes.php"
+PHP_STRING_VALUE = re.compile(r"""['"](\w+)['"]\s*=>\s*(?:'([^']*)'|"([^"]*)")""")
+ROUTE_TARGET = re.compile(r"^((?:\w+\\+)*)(\w+)#(\w+)$")
+PATH_PARAMETER = re.compile(r"\{(\w+)\}")
+HIDDEN_METHOD = re.compile(r"\b(private|protected)\b")
+
+
+def _php_arrays(code):
+    """The text of every PHP array in `code`, nested arrays cut out, so a key
+    found in one belongs to that array. Brackets inside strings do not count."""
+    mask = re.sub(r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*\"""",
+                  lambda m: " " * len(m.group(0)), code, flags=re.S)
+    frames = [[]]
+    for i, ch in enumerate(mask):
+        if ch in "[(":
+            frames.append([])
+        elif ch in "])":
+            if len(frames) > 1:
+                yield "".join(frames.pop())
+        else:
+            frames[-1].append(code[i])
+
+
+def _camel(name, first_upper):
+    """A route name segment as Nextcloud's router maps it: `foo_bar` to
+    FooBar or fooBar; a name without underscores keeps its case."""
+    parts = name.split("_")
+    head = parts[0][:1].upper() + parts[0][1:] if first_upper else parts[0][:1].lower() + parts[0][1:]
+    return head + "".join(p[:1].upper() + p[1:] for p in parts[1:])
+
+
+def routes_of(text):
+    """{(controller class, method): [set of path parameters per route]} of the
+    `name` and `url` entries of a routes.php. The class is relative to the
+    app's Controller namespace: `Settings\\Foo#bar` is in its Settings folder."""
+    out = {}
+    for entry in _php_arrays(_strip_comments(text, "php")):
+        values = {m.group(1): m.group(2) if m.group(2) is not None else m.group(3)
+                  for m in PHP_STRING_VALUE.finditer(entry)}
+        target = ROUTE_TARGET.match(values.get("name", ""))
+        if target and "url" in values:
+            folder = re.sub(r"\\+", r"\\", target.group(1))
+            key = (folder + _camel(target.group(2), True) + "Controller", _camel(target.group(3), False))
+            out.setdefault(key, []).append(set(PATH_PARAMETER.findall(values["url"])))
+    return out
+
+
+class Routes:
+    """The routes of the app's appinfo/routes.php. Read lazily."""
+
+    def __init__(self, app):
+        self.app = app
+        self.table = None
+
+    def paths_of(self, cls, method):
+        if self.table is None:
+            path = os.path.join(self.app, ROUTES_PATH)
+            self.table = routes_of(sig.read_text(path)) if os.path.isfile(path) else {}
+        return self.table.get((cls, method), [])
+
+
+def route_fixes_signature(unit, source, routes):
+    """Whether PHP `unit` is a public controller method that a route names as
+    its target, with every parameter a path parameter of that one route."""
+    if "::" not in unit["name"]:
+        return False
+    cls, method = unit["name"].rsplit("::", 1)
+    short = cls.split("\\")[-1]
+    fqcn = next((n for n in php_types_of(source) if n.split("\\")[-1] == short), "")
+    paths = routes.paths_of(fqcn.partition("\\Controller\\")[2], method)
+    if not paths:
+        return False
+    lines = source.splitlines()
+    src = _strip_comments("\n".join(lines[unit["start"] - 1:unit["end"]]), "php")
+    name = re.search(r"\bfunction\s+&?\s*\w+\s*\(", src)
+    if not name or HIDDEN_METHOD.search(src[:name.start()]):
+        return False
+    close_at = _close(src, name.end() - 1)
+    params = {n for n, _p in _params(src[name.end():close_at], "php")} if close_at > 0 else set()
+    return bool(params) and any(params <= path for path in paths)
+
+
+# --------------------------------------------------------------------------
 # duplication
 # --------------------------------------------------------------------------
 
@@ -454,6 +549,7 @@ def judge(app, paths, reader, scope=None):
     failures, warnings = [], []
     lenient = not js_reliable()
     types = PhpTypes(app)
+    routes = Routes(app)
     measured = {}
     for rel in paths:
         full = os.path.normpath(os.path.join(app, rel))
@@ -484,7 +580,8 @@ def judge(app, paths, reader, scope=None):
                 if u[key] <= bound:
                     continue
                 if key == "params" and (is_wiring_constructor(u, source, lang) or (
-                        lang == "php" and implements_interface_method(u, source, types))):
+                        lang == "php" and (implements_interface_method(u, source, types)
+                                           or route_fixes_signature(u, source, routes)))):
                     continue
                 sink.append(f"{rel}:{u['start']} {u['name']}: {LABEL[key].format(v=u[key])}")
         for first, last, other in dups[rel]:
