@@ -137,7 +137,8 @@ for _f in routes-standard routes-standard-missing-update \
           delegated-registrar delegated-registrar-absent \
           store-plane store-plane-absent store-plane-coincidental \
           monitoring-capitalised monitoring-per-object monitoring-per-object-only \
-          monitoring-none knr-braces; do
+          monitoring-none knr-braces \
+          apphost-engine-generics apphost-engine-generics-leaf; do
     [ -d "${FIXTURES}/${_f}" ] || _bad "fixture ${FIXTURES}/${_f} does not exist — this suite would be green on nothing"
 done
 
@@ -393,6 +394,51 @@ if _run "${FIXTURES}/knr-braces"; then
         "knr-braces: ui#dashboard is routed and resolves, so it is NOT reported"
     _expect_lines "${_RRLOG}" 1 \
         "knr-braces: exactly ONE finding — brace style changed nothing but the phantom"
+fi
+
+# ---------------------------------------------------------------------------
+# THE ENGINE'S OWN GENERICS ARE A LIBRARY, NOT ITS ENDPOINTS (2026-11-06)
+#
+# ADR-040: `lib/AppHost/Controller/Generic*` is shipped by the engine (the
+# repo with lib/AppHost/Bootstrap.php) and SERVED in a leaf app, where
+# `Bootstrap::register()` binds the classes and `Routes::standard()` names
+# their routes. In the engine repo the generics it does not use itself have
+# no route, by design. Enumerated like any controller they were a permanent
+# finding in exactly one repo — measured on openregister, `beta` and
+# `development` alike: twelve `missing-route` lines over GenericDashboard,
+# GenericPreferences, GenericSettings and GenericStore on every pull request.
+#
+# Control pair. `apphost-engine-generics/` carries Bootstrap.php and an
+# unrouted GenericDashboard (page, catchAll): NOT reported. Its `gadget#run`
+# — a conventional controller, routed nowhere — MUST still be reported, so
+# the exemption is one directory in one kind of repo, not a blanket. The
+# routed GenericHealth stays judged on the route side. The anti-widening
+# half, `apphost-engine-generics-leaf/`, is the SAME tree minus
+# Bootstrap.php — a leaf that copied a generic in — and there both
+# GenericDashboard methods MUST be reported.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/apphost-engine-generics"; then
+    _expect_gate 14 "FAIL" "apphost-engine-generics: the engine's genuinely unrouted conventional method is still a finding"
+    _expect_log "${_RRLOG}" "GadgetController\.php method=run .*rule=missing-route" \
+        "apphost-engine-generics: gadget#run — routed nowhere — IS reported"
+    _expect_not_log "${_RRLOG}" "GenericDashboardController" \
+        "apphost-engine-generics: the engine's unrouted GenericDashboard is a library class and is NOT reported"
+    _expect_not_log "${_RRLOG}" "GenericHealthController" \
+        "apphost-engine-generics: the routed GenericHealth resolves through its binding and is NOT reported"
+    _expect_lines "${_RRLOG}" 1 \
+        "apphost-engine-generics: exactly ONE finding — the exemption is lib/AppHost/Controller/Generic* in the engine, nothing else"
+fi
+
+if _run "${FIXTURES}/apphost-engine-generics-leaf"; then
+    _expect_gate 14 "FAIL" "apphost-engine-generics-leaf: without Bootstrap.php this is a leaf, and its copied generic IS judged"
+    _expect_log "${_RRLOG}" "GenericDashboardController\.php method=page .*rule=missing-route" \
+        "apphost-engine-generics-leaf: genericDashboard#page IS reported"
+    _expect_log "${_RRLOG}" "GenericDashboardController\.php method=catchAll .*rule=missing-route" \
+        "apphost-engine-generics-leaf: genericDashboard#catchAll IS reported"
+    _expect_log "${_RRLOG}" "GadgetController\.php method=run .*rule=missing-route" \
+        "apphost-engine-generics-leaf: gadget#run IS reported"
+    _expect_lines "${_RRLOG}" 3 \
+        "apphost-engine-generics-leaf: exactly THREE findings — the same tree minus the engine marker loses the exemption and nothing else changes"
 fi
 
 echo
