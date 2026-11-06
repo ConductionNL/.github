@@ -1,9 +1,9 @@
 {
- "measured": "2026-11-05",
+ "measured": "2026-11-06",
  "profile": "half of each 4-star limit of the SIG/TUV NORD CERT Guidance for Producers v17.0 (SIG publishes no 5-star limits)",
  "apps": {
   "buildiq": {
-   "head": "f11dbbd52d3db72eda818cbf3880c6e94d156317",
+   "head": "d6f563510b359c2ce417ea978ab54a29d12bb076",
    "checks": 34,
    "four": 26,
    "five": 17,
@@ -42,7 +42,7 @@
    }
   },
   "decidiq": {
-   "head": "e38d886b3be6f936c01b48a51e1e2eb7653f015d",
+   "head": "3a356e7e9b691fbdee08a39524cd6b86c1fe63f4",
    "checks": 34,
    "four": 27,
    "five": 19,
@@ -78,7 +78,7 @@
    }
   },
   "dossiq": {
-   "head": "a7102388fe7e01e62e5bafe3f26fa48eecec8fbb",
+   "head": "9622acd963bb0cc29b7d5a2b7f43ce5e171bcaa1",
    "checks": 34,
    "four": 19,
    "five": 12,
@@ -109,7 +109,7 @@
    }
   },
   "filinq": {
-   "head": "420e1aae82e2d152e028b2e5237c95a5ba11fe4b",
+   "head": "ab6c1ebb435627aedeb92face7148663e6040cce",
    "checks": 44,
    "four": 41,
    "five": 32,
@@ -161,7 +161,7 @@
    }
   },
   "hermiq": {
-   "head": "21c8494fcb36703f891768c8da86cb28dfd37702",
+   "head": "1fad89928e978b92ede4bd307497fc59c94add89",
    "checks": 34,
    "four": 25,
    "five": 16,
@@ -198,7 +198,7 @@
    }
   },
   "humaniq": {
-   "head": "9e40656e643d43f36ac8d8a5ae4d17d0cf5c0adc",
+   "head": "5589f3ab5b4880acb7e225cef92d3a1c721efc60",
    "checks": 34,
    "four": 30,
    "five": 22,
@@ -239,9 +239,9 @@
    }
   },
   "integriq": {
-   "head": "39620e560ce8eced6dacba3e767bf8d80571cd78",
+   "head": "cd844692cca2453c365bb25ed6bd558aa62022a7",
    "checks": 34,
-   "four": 26,
+   "four": 25,
    "five": 24,
    "floor": {
     "measured_at": "45eaf576b23a5caea7ce9c5a59feba8b4a58453a",
@@ -277,7 +277,7 @@
    }
   },
   "keepiq": {
-   "head": "799e2880b9556db9cf03f27ae32da9950a4730b2",
+   "head": "ee758777dbc45a0bc9040b4ff7486204e708015b",
    "checks": 58,
    "four": 46,
    "five": 33,
@@ -335,7 +335,7 @@
    }
   },
   "larpinq": {
-   "head": "99c5cba5c6503865c8292751e03d1b1cda2f2ca0",
+   "head": "5ad762be2ec9d27a9498c41e207f5699fc6ec34e",
    "checks": 34,
    "four": 33,
    "five": 27,
@@ -376,7 +376,7 @@
    }
   },
   "launchpad": {
-   "head": "5e2596991fcfd328e7ed02af577baf21139abaaf",
+   "head": "3e7bf07b30f2a422b68b0e492d79126dab2e7acb",
    "checks": 34,
    "four": 28,
    "five": 19,
@@ -416,7 +416,7 @@
    }
   },
   "learniq": {
-   "head": "6644a5ef6b3e4abb2be52c6419fb74ced9bd9aa1",
+   "head": "4d971c74d73858f22c586e6adc0b61c7c882f1f5",
    "checks": 34,
    "four": 23,
    "five": 17,
@@ -450,7 +450,7 @@
    }
   },
   "opencatalogi": {
-   "head": "0f33d553cb1eef6596dbcc891fc7c3be2bbd675d",
+   "head": "7a191dbb7a3b3c705ae48b746f993408b155f8dd",
    "checks": 44,
    "four": 40,
    "five": 20,
@@ -501,10 +501,10 @@
    }
   },
   "openregister": {
-   "head": "2f51ea3b0bbd37d3b90e2797d56b1468c39ad9f2",
+   "head": "061df3ec519178a79b09f1b6edcc2465e1e8f983",
    "checks": 58,
    "four": 49,
-   "five": 42,
+   "five": 44,
    "floor": {
     "measured_at": "eb3a390862dddf4da46f08d2e811541a43247193",
     "profile": "four-star",
@@ -556,7 +556,7 @@
    }
   },
   "pipelinq": {
-   "head": "330a78b71ee44a230d0f8d761cc44f92c5a5cbed",
+   "head": "e4d420d4271a6892d4a2b6743057f23ba7a5856d",
    "checks": 34,
    "four": 21,
    "five": 13,
@@ -589,7 +589,7 @@
    }
   },
   "planninq": {
-   "head": "0504f4cf502fe0ba83137c267362374a70e924d4",
+   "head": "19c35bed88b9d10f519fae6826e1d3726187e0e6",
    "checks": 34,
    "four": 33,
    "five": 22,
@@ -633,7 +633,7 @@
    }
   },
   "portaliq": {
-   "head": "e68fc05cbdb1edfba03f646eb8d9cbea5adac5d5",
+   "head": "795da17ba3f56c7ce6f37607a37ac0db0071c822",
    "checks": 34,
    "four": 24,
    "five": 14,
@@ -669,7 +669,7 @@
    }
   },
   "shillinq": {
-   "head": "7c72ec07b3e64297799d31a4e74f87b7e44270ac",
+   "head": "f1e580b0534cbd05652d034cae935bd7efd31241",
    "checks": 44,
    "four": 32,
    "five": 27,
@@ -713,7 +713,7 @@
    }
   },
   "stackiq": {
-   "head": "81cdbccbc74cac000c16707a74e644b07991f19a",
+   "head": "9ad6a74fd5b14e252c1ae07725e94f44b1e2be9a",
    "checks": 34,
    "four": 24,
    "five": 13,
@@ -864,7 +864,7 @@
        "stars": "below"
       },
       "integriq": {
-       "share": 0.6752,
+       "share": 0.67,
        "stars": "below"
       },
       "keepiq": {
@@ -880,7 +880,7 @@
        "stars": "below"
       },
       "learniq": {
-       "share": 0.5822,
+       "share": 0.5753,
        "stars": "below"
       },
       "opencatalogi": {
@@ -888,11 +888,11 @@
        "stars": 4
       },
       "openregister": {
-       "share": 0.6841,
+       "share": 0.6592,
        "stars": "below"
       },
       "pipelinq": {
-       "share": 0.651,
+       "share": 0.6502,
        "stars": "below"
       },
       "planninq": {
@@ -900,7 +900,7 @@
        "stars": 4
       },
       "portaliq": {
-       "share": 0.5637,
+       "share": 0.5629,
        "stars": "below"
       },
       "shillinq": {
@@ -953,7 +953,7 @@
        "stars": 4
       },
       "integriq": {
-       "share": 0.3127,
+       "share": 0.3101,
        "stars": "below"
       },
       "keepiq": {
@@ -969,7 +969,7 @@
        "stars": "below"
       },
       "learniq": {
-       "share": 0.1916,
+       "share": 0.1886,
        "stars": 4
       },
       "opencatalogi": {
@@ -977,11 +977,11 @@
        "stars": 4
       },
       "openregister": {
-       "share": 0.3345,
+       "share": 0.3143,
        "stars": "below"
       },
       "pipelinq": {
-       "share": 0.2872,
+       "share": 0.2867,
        "stars": "below"
       },
       "planninq": {
@@ -989,7 +989,7 @@
        "stars": 5
       },
       "portaliq": {
-       "share": 0.1619,
+       "share": 0.1618,
        "stars": 4
       },
       "shillinq": {
@@ -1042,7 +1042,7 @@
        "stars": 5
       },
       "integriq": {
-       "share": 0.038,
+       "share": 0.0375,
        "stars": 5
       },
       "keepiq": {
@@ -1058,7 +1058,7 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.0121,
+       "share": 0.0119,
        "stars": 5
       },
       "opencatalogi": {
@@ -1066,7 +1066,7 @@
        "stars": 5
       },
       "openregister": {
-       "share": 0.0549,
+       "share": 0.049,
        "stars": 4
       },
       "pipelinq": {
@@ -1131,7 +1131,7 @@
        "stars": "below"
       },
       "integriq": {
-       "share": 0.327,
+       "share": 0.3252,
        "stars": "below"
       },
       "keepiq": {
@@ -1147,7 +1147,7 @@
        "stars": "below"
       },
       "learniq": {
-       "share": 0.3207,
+       "share": 0.3161,
        "stars": "below"
       },
       "opencatalogi": {
@@ -1155,11 +1155,11 @@
        "stars": "below"
       },
       "openregister": {
-       "share": 0.3869,
+       "share": 0.3747,
        "stars": "below"
       },
       "pipelinq": {
-       "share": 0.3643,
+       "share": 0.3636,
        "stars": "below"
       },
       "planninq": {
@@ -1167,7 +1167,7 @@
        "stars": 4
       },
       "portaliq": {
-       "share": 0.405,
+       "share": 0.4043,
        "stars": "below"
       },
       "shillinq": {
@@ -1220,7 +1220,7 @@
        "stars": 5
       },
       "integriq": {
-       "share": 0.0355,
+       "share": 0.0351,
        "stars": 5
       },
       "keepiq": {
@@ -1244,11 +1244,11 @@
        "stars": 5
       },
       "openregister": {
-       "share": 0.0586,
+       "share": 0.055,
        "stars": 4
       },
       "pipelinq": {
-       "share": 0.0318,
+       "share": 0.0317,
        "stars": 5
       },
       "planninq": {
@@ -1333,7 +1333,7 @@
        "stars": 5
       },
       "openregister": {
-       "share": 0.0005,
+       "share": 0.0014,
        "stars": 5
       },
       "pipelinq": {
@@ -1398,7 +1398,7 @@
        "stars": "below"
       },
       "integriq": {
-       "share": 0.2839,
+       "share": 0.2815,
        "stars": "below"
       },
       "keepiq": {
@@ -1414,7 +1414,7 @@
        "stars": "below"
       },
       "learniq": {
-       "share": 0.2252,
+       "share": 0.2239,
        "stars": "below"
       },
       "opencatalogi": {
@@ -1422,11 +1422,11 @@
        "stars": 4
       },
       "openregister": {
-       "share": 0.3083,
+       "share": 0.3018,
        "stars": "below"
       },
       "pipelinq": {
-       "share": 0.2463,
+       "share": 0.2458,
        "stars": "below"
       },
       "planninq": {
@@ -1434,7 +1434,7 @@
        "stars": 4
       },
       "portaliq": {
-       "share": 0.3513,
+       "share": 0.351,
        "stars": "below"
       },
       "shillinq": {
@@ -1487,7 +1487,7 @@
        "stars": 4
       },
       "integriq": {
-       "share": 0.0956,
+       "share": 0.0947,
        "stars": "below"
       },
       "keepiq": {
@@ -1511,11 +1511,11 @@
        "stars": 4
       },
       "openregister": {
-       "share": 0.0897,
+       "share": 0.0857,
        "stars": "below"
       },
       "pipelinq": {
-       "share": 0.0603,
+       "share": 0.0602,
        "stars": "below"
       },
       "planninq": {
@@ -1523,7 +1523,7 @@
        "stars": 4
       },
       "portaliq": {
-       "share": 0.1245,
+       "share": 0.1243,
        "stars": "below"
       },
       "shillinq": {
@@ -1576,7 +1576,7 @@
        "stars": 5
       },
       "integriq": {
-       "share": 0.0352,
+       "share": 0.0348,
        "stars": "below"
       },
       "keepiq": {
@@ -1592,7 +1592,7 @@
        "stars": 4
       },
       "learniq": {
-       "share": 0.0041,
+       "share": 0.004,
        "stars": 5
       },
       "opencatalogi": {
@@ -1600,7 +1600,7 @@
        "stars": 4
       },
       "openregister": {
-       "share": 0.0277,
+       "share": 0.0268,
        "stars": "below"
       },
       "pipelinq": {
@@ -1665,7 +1665,7 @@
        "stars": 4
       },
       "integriq": {
-       "share": 0.0729,
+       "share": 0.0722,
        "stars": "below"
       },
       "keepiq": {
@@ -1681,7 +1681,7 @@
        "stars": "below"
       },
       "learniq": {
-       "share": 0.1064,
+       "share": 0.1051,
        "stars": "below"
       },
       "opencatalogi": {
@@ -1689,11 +1689,11 @@
        "stars": 4
       },
       "openregister": {
-       "share": 0.0701,
+       "share": 0.0581,
        "stars": "below"
       },
       "pipelinq": {
-       "share": 0.0974,
+       "share": 0.0973,
        "stars": "below"
       },
       "planninq": {
@@ -1701,7 +1701,7 @@
        "stars": 4
       },
       "portaliq": {
-       "share": 0.0529,
+       "share": 0.0527,
        "stars": 4
       },
       "shillinq": {
@@ -1754,7 +1754,7 @@
        "stars": 5
       },
       "integriq": {
-       "share": 0.028,
+       "share": 0.0278,
        "stars": 5
       },
       "keepiq": {
@@ -1770,7 +1770,7 @@
        "stars": 4
       },
       "learniq": {
-       "share": 0.0083,
+       "share": 0.0082,
        "stars": 5
       },
       "opencatalogi": {
@@ -1778,7 +1778,7 @@
        "stars": 5
       },
       "openregister": {
-       "share": 0.0525,
+       "share": 0.0519,
        "stars": 4
       },
       "pipelinq": {
@@ -1790,7 +1790,7 @@
        "stars": 4
       },
       "portaliq": {
-       "share": 0.0602,
+       "share": 0.0601,
        "stars": 4
       },
       "shillinq": {
@@ -1867,7 +1867,7 @@
        "stars": 5
       },
       "openregister": {
-       "share": 0.0219,
+       "share": 0.0217,
        "stars": 5
       },
       "pipelinq": {
@@ -1948,7 +1948,7 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.0027,
+       "share": 0.0026,
        "stars": 5
       },
       "opencatalogi": {
@@ -1956,7 +1956,7 @@
        "stars": 5
       },
       "openregister": {
-       "share": 0.0088,
+       "share": 0.009,
        "stars": 5
       },
       "pipelinq": {
@@ -2021,8 +2021,8 @@
        "stars": "below"
       },
       "integriq": {
-       "share": 0.9374,
-       "stars": 4
+       "share": 0.9369,
+       "stars": "below"
       },
       "keepiq": {
        "share": 0.4503,
@@ -2037,7 +2037,7 @@
        "stars": "below"
       },
       "learniq": {
-       "share": 0.4529,
+       "share": 0.4568,
        "stars": "below"
       },
       "opencatalogi": {
@@ -2045,11 +2045,11 @@
        "stars": 4
       },
       "openregister": {
-       "share": 0.5118,
+       "share": 0.5288,
        "stars": "below"
       },
       "pipelinq": {
-       "share": 0.4317,
+       "share": 0.432,
        "stars": "below"
       },
       "planninq": {
@@ -2057,7 +2057,7 @@
        "stars": "below"
       },
       "portaliq": {
-       "share": 0.4668,
+       "share": 0.4673,
        "stars": "below"
       },
       "shillinq": {
@@ -2099,7 +2099,7 @@
        "stars": 4
       },
       "dossiq": {
-       "share": 0.4923,
+       "share": 0.4893,
        "stars": "below"
       },
       "filinq": {
@@ -2119,7 +2119,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.4944,
+       "share": 0.4926,
        "stars": "below"
       },
       "larpinq": {
@@ -2131,19 +2131,19 @@
        "stars": 4
       },
       "learniq": {
-       "share": 0.402,
+       "share": 0.3852,
        "stars": 4
       },
       "opencatalogi": {
-       "share": 0.2462,
+       "share": 0.2457,
        "stars": 4
       },
       "openregister": {
-       "share": 0.2193,
+       "share": 0.1981,
        "stars": 5
       },
       "pipelinq": {
-       "share": 0.4157,
+       "share": 0.4102,
        "stars": 4
       },
       "planninq": {
@@ -2151,7 +2151,7 @@
        "stars": 5
       },
       "portaliq": {
-       "share": 0.4235,
+       "share": 0.4229,
        "stars": 4
       },
       "shillinq": {
@@ -2188,7 +2188,7 @@
        "stars": 5
       },
       "dossiq": {
-       "share": 0.2123,
+       "share": 0.211,
        "stars": 4
       },
       "filinq": {
@@ -2208,7 +2208,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.1547,
+       "share": 0.1565,
        "stars": 4
       },
       "larpinq": {
@@ -2220,19 +2220,19 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.1154,
+       "share": 0.1096,
        "stars": 5
       },
       "opencatalogi": {
-       "share": 0.1253,
+       "share": 0.1251,
        "stars": 4
       },
       "openregister": {
-       "share": 0.012,
+       "share": 0.0081,
        "stars": 5
       },
       "pipelinq": {
-       "share": 0.1504,
+       "share": 0.1409,
        "stars": 4
       },
       "planninq": {
@@ -2240,7 +2240,7 @@
        "stars": 5
       },
       "portaliq": {
-       "share": 0.1155,
+       "share": 0.1153,
        "stars": 5
       },
       "shillinq": {
@@ -2277,7 +2277,7 @@
        "stars": 5
       },
       "dossiq": {
-       "share": 0.0492,
+       "share": 0.0489,
        "stars": 4
       },
       "filinq": {
@@ -2297,7 +2297,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.0187,
+       "share": 0.0186,
        "stars": 5
       },
       "larpinq": {
@@ -2309,11 +2309,11 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.0214,
+       "share": 0.0186,
        "stars": 5
       },
       "opencatalogi": {
-       "share": 0.0586,
+       "share": 0.0585,
        "stars": 4
       },
       "openregister": {
@@ -2321,7 +2321,7 @@
        "stars": 5
       },
       "pipelinq": {
-       "share": 0.0475,
+       "share": 0.0477,
        "stars": 4
       },
       "planninq": {
@@ -2329,7 +2329,7 @@
        "stars": 5
       },
       "portaliq": {
-       "share": 0.0285,
+       "share": 0.0284,
        "stars": 5
       },
       "shillinq": {
@@ -2366,7 +2366,7 @@
        "stars": 4
       },
       "dossiq": {
-       "share": 0.3994,
+       "share": 0.3991,
        "stars": "below"
       },
       "filinq": {
@@ -2386,7 +2386,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.2975,
+       "share": 0.2964,
        "stars": "below"
       },
       "larpinq": {
@@ -2398,19 +2398,19 @@
        "stars": 4
       },
       "learniq": {
-       "share": 0.4361,
+       "share": 0.4136,
        "stars": "below"
       },
       "opencatalogi": {
-       "share": 0.0962,
+       "share": 0.0961,
        "stars": 5
       },
       "openregister": {
-       "share": 0.0674,
+       "share": 0.0656,
        "stars": 5
       },
       "pipelinq": {
-       "share": 0.3222,
+       "share": 0.3175,
        "stars": "below"
       },
       "planninq": {
@@ -2418,7 +2418,7 @@
        "stars": 4
       },
       "portaliq": {
-       "share": 0.3981,
+       "share": 0.3975,
        "stars": "below"
       },
       "shillinq": {
@@ -2455,7 +2455,7 @@
        "stars": 5
       },
       "dossiq": {
-       "share": 0.1343,
+       "share": 0.1335,
        "stars": "below"
       },
       "filinq": {
@@ -2475,7 +2475,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.0574,
+       "share": 0.0584,
        "stars": 4
       },
       "larpinq": {
@@ -2487,19 +2487,19 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.1053,
+       "share": 0.0915,
        "stars": "below"
       },
       "opencatalogi": {
-       "share": 0.028,
+       "share": 0.0279,
        "stars": 5
       },
       "openregister": {
-       "share": 0.0031,
+       "share": 0.003,
        "stars": 5
       },
       "pipelinq": {
-       "share": 0.0897,
+       "share": 0.0902,
        "stars": "below"
       },
       "planninq": {
@@ -2507,7 +2507,7 @@
        "stars": 5
       },
       "portaliq": {
-       "share": 0.108,
+       "share": 0.1079,
        "stars": "below"
       },
       "shillinq": {
@@ -2544,7 +2544,7 @@
        "stars": 5
       },
       "dossiq": {
-       "share": 0.0252,
+       "share": 0.0251,
        "stars": "below"
       },
       "filinq": {
@@ -2596,7 +2596,7 @@
        "stars": 5
       },
       "portaliq": {
-       "share": 0.009,
+       "share": 0.0089,
        "stars": 4
       },
       "shillinq": {
@@ -2633,7 +2633,7 @@
        "stars": 4
       },
       "dossiq": {
-       "share": 0.0956,
+       "share": 0.0951,
        "stars": 4
       },
       "filinq": {
@@ -2653,7 +2653,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.1091,
+       "share": 0.1097,
        "stars": 4
       },
       "larpinq": {
@@ -2665,19 +2665,19 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.1012,
+       "share": 0.1142,
        "stars": 4
       },
       "opencatalogi": {
-       "share": 0.0492,
+       "share": 0.051,
        "stars": 5
       },
       "openregister": {
-       "share": 0.049,
+       "share": 0.0418,
        "stars": 5
       },
       "pipelinq": {
-       "share": 0.083,
+       "share": 0.0859,
        "stars": 4
       },
       "planninq": {
@@ -2685,7 +2685,7 @@
        "stars": 4
       },
       "portaliq": {
-       "share": 0.1427,
+       "share": 0.1425,
        "stars": 4
       },
       "shillinq": {
@@ -2722,7 +2722,7 @@
        "stars": 5
       },
       "dossiq": {
-       "share": 0.0127,
+       "share": 0.0126,
        "stars": 5
       },
       "filinq": {
@@ -2754,7 +2754,7 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.0159,
+       "share": 0.0138,
        "stars": 5
       },
       "opencatalogi": {
@@ -2762,7 +2762,7 @@
        "stars": 5
       },
       "openregister": {
-       "share": 0.0023,
+       "share": 0.0022,
        "stars": 5
       },
       "pipelinq": {
@@ -2900,7 +2900,7 @@
        "stars": 5
       },
       "dossiq": {
-       "share": 0.0285,
+       "share": 0.0284,
        "stars": 4
       },
       "filinq": {
@@ -2920,7 +2920,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.0203,
+       "share": 0.0202,
        "stars": 5
       },
       "larpinq": {
@@ -2932,19 +2932,19 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.0099,
+       "share": 0.0086,
        "stars": 5
       },
       "opencatalogi": {
-       "share": 0.0175,
+       "share": 0.0174,
        "stars": 5
       },
       "openregister": {
-       "share": 0.018,
+       "share": 0.0172,
        "stars": 5
       },
       "pipelinq": {
-       "share": 0.0242,
+       "share": 0.0243,
        "stars": 5
       },
       "planninq": {
@@ -2990,7 +2990,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.2854,
+       "share": 0.2622,
        "stars": 4
       },
       "opencatalogi": {
@@ -3023,7 +3023,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.088,
+       "share": 0.079,
        "stars": 5
       },
       "opencatalogi": {
@@ -3056,7 +3056,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.0105,
+       "share": 0.0098,
        "stars": 5
       },
       "opencatalogi": {
@@ -3089,7 +3089,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.3417,
+       "share": 0.3346,
        "stars": "below"
       },
       "opencatalogi": {
@@ -3122,7 +3122,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.1142,
+       "share": 0.1073,
        "stars": "below"
       },
       "opencatalogi": {
@@ -3155,7 +3155,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.0029,
+       "share": 0.0027,
        "stars": 5
       },
       "opencatalogi": {
@@ -3188,7 +3188,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.0842,
+       "share": 0.0872,
        "stars": 4
       },
       "opencatalogi": {
@@ -3221,7 +3221,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.0064,
+       "share": 0.006,
        "stars": 5
       },
       "opencatalogi": {
@@ -3287,7 +3287,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.0034,
+       "share": 0.0031,
        "stars": 5
       },
       "opencatalogi": {
@@ -3329,7 +3329,7 @@
        "stars": 4
       },
       "dossiq": {
-       "share": 0.4464,
+       "share": 0.4443,
        "stars": 4
       },
       "filinq": {
@@ -3349,7 +3349,7 @@
        "stars": 4
       },
       "keepiq": {
-       "share": 0.3584,
+       "share": 0.3586,
        "stars": 4
       },
       "larpinq": {
@@ -3361,19 +3361,19 @@
        "stars": 4
       },
       "learniq": {
-       "share": 0.5719,
+       "share": 0.5321,
        "stars": "below"
       },
       "opencatalogi": {
-       "share": 0.444,
+       "share": 0.4406,
        "stars": 4
       },
       "openregister": {
-       "share": 0.4083,
+       "share": 0.3351,
        "stars": 4
       },
       "pipelinq": {
-       "share": 0.4083,
+       "share": 0.4081,
        "stars": 4
       },
       "planninq": {
@@ -3414,7 +3414,7 @@
        "stars": 4
       },
       "dossiq": {
-       "share": 0.1574,
+       "share": 0.1588,
        "stars": 4
       },
       "filinq": {
@@ -3434,7 +3434,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.1331,
+       "share": 0.133,
        "stars": 4
       },
       "larpinq": {
@@ -3446,16 +3446,16 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.2877,
+       "share": 0.2591,
        "stars": "below"
       },
       "opencatalogi": {
-       "share": 0.1846,
+       "share": 0.1848,
        "stars": 4
       },
       "openregister": {
-       "share": 0.1626,
-       "stars": 4
+       "share": 0.09,
+       "stars": 5
       },
       "pipelinq": {
        "share": 0.1718,
@@ -3499,7 +3499,7 @@
        "stars": 5
       },
       "dossiq": {
-       "share": 0.0312,
+       "share": 0.0314,
        "stars": 5
       },
       "filinq": {
@@ -3531,19 +3531,19 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.0788,
+       "share": 0.0709,
        "stars": 4
       },
       "opencatalogi": {
-       "share": 0.043,
+       "share": 0.0431,
        "stars": 4
       },
       "openregister": {
-       "share": 0.0448,
-       "stars": 4
+       "share": 0.0056,
+       "stars": 5
       },
       "pipelinq": {
-       "share": 0.0605,
+       "share": 0.0604,
        "stars": 4
       },
       "planninq": {
@@ -3584,7 +3584,7 @@
        "stars": 4
       },
       "dossiq": {
-       "share": 0.219,
+       "share": 0.2208,
        "stars": "below"
       },
       "filinq": {
@@ -3604,7 +3604,7 @@
        "stars": 5
       },
       "keepiq": {
-       "share": 0.1871,
+       "share": 0.1869,
        "stars": 4
       },
       "larpinq": {
@@ -3616,19 +3616,19 @@
        "stars": 4
       },
       "learniq": {
-       "share": 0.257,
+       "share": 0.2425,
        "stars": "below"
       },
       "opencatalogi": {
-       "share": 0.2466,
+       "share": 0.2459,
        "stars": "below"
       },
       "openregister": {
-       "share": 0.1836,
+       "share": 0.1307,
        "stars": 4
       },
       "pipelinq": {
-       "share": 0.2508,
+       "share": 0.2505,
        "stars": "below"
       },
       "planninq": {
@@ -3669,7 +3669,7 @@
        "stars": 5
       },
       "dossiq": {
-       "share": 0.0665,
+       "share": 0.067,
        "stars": 4
       },
       "filinq": {
@@ -3701,19 +3701,19 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.061,
+       "share": 0.0549,
        "stars": 4
       },
       "opencatalogi": {
-       "share": 0.0833,
+       "share": 0.0828,
        "stars": "below"
       },
       "openregister": {
-       "share": 0.0327,
+       "share": 0.0034,
        "stars": 5
       },
       "pipelinq": {
-       "share": 0.0798,
+       "share": 0.0797,
        "stars": "below"
       },
       "planninq": {
@@ -3754,7 +3754,7 @@
        "stars": 5
       },
       "dossiq": {
-       "share": 0.0177,
+       "share": 0.0178,
        "stars": "below"
       },
       "filinq": {
@@ -3798,7 +3798,7 @@
        "stars": 5
       },
       "pipelinq": {
-       "share": 0.0341,
+       "share": 0.034,
        "stars": "below"
       },
       "planninq": {
@@ -3871,7 +3871,7 @@
        "stars": 5
       },
       "learniq": {
-       "share": 0.0139,
+       "share": 0.0125,
        "stars": 5
       },
       "opencatalogi": {
@@ -3879,7 +3879,7 @@
        "stars": 5
       },
       "openregister": {
-       "share": 0.0046,
+       "share": 0.0052,
        "stars": 5
       },
       "pipelinq": {
@@ -4094,7 +4094,7 @@
        "stars": "below"
       },
       "dossiq": {
-       "share": 0.0929,
+       "share": 0.0919,
        "stars": "below"
       },
       "filinq": {
@@ -4126,7 +4126,7 @@
        "stars": 4
       },
       "learniq": {
-       "share": 0.1056,
+       "share": 0.1052,
        "stars": "below"
       },
       "opencatalogi": {
@@ -4134,11 +4134,11 @@
        "stars": "below"
       },
       "openregister": {
-       "share": 0.1648,
+       "share": 0.1316,
        "stars": "below"
       },
       "pipelinq": {
-       "share": 0.0898,
+       "share": 0.0897,
        "stars": "below"
       },
       "planninq": {
@@ -4146,7 +4146,7 @@
        "stars": 4
       },
       "portaliq": {
-       "share": 0.0714,
+       "share": 0.0713,
        "stars": "below"
       },
       "shillinq": {
@@ -4780,7 +4780,7 @@
       "detail": "eslint-suppressions.json"
      },
      "openregister": {
-      "value": 731,
+      "value": 706,
       "detail": "eslint-suppressions.json"
      },
      "portaliq": {
@@ -4835,7 +4835,7 @@
       "detail": "phpstan-baseline.neon"
      },
      "openregister": {
-      "value": 1369,
+      "value": 1342,
       "detail": "phpstan-baseline-jsonresponse-invariance.neon, phpstan-baseline-nc34-ocp.neon, phpstan-baseline-nc35-ocp.neon, phpstan-baseline.neon"
      },
      "pipelinq": {
@@ -4921,7 +4921,7 @@
       "detail": "phpmd.baseline.xml"
      },
      "openregister": {
-      "value": 477,
+      "value": 480,
       "detail": "phpmd.baseline.xml"
      },
      "pipelinq": {
@@ -4980,7 +4980,7 @@
       "detail": "l10n/.schema-l10n-baseline.json"
      },
      "learniq": {
-      "value": 2151,
+      "value": 1935,
       "detail": "l10n/.schema-l10n-baseline.json"
      },
      "opencatalogi": {
@@ -5048,27 +5048,27 @@
    }
   ],
   "refs": {
-   "buildiq": "f11dbbd52d3db72eda818cbf3880c6e94d156317",
-   "decidiq": "e38d886b3be6f936c01b48a51e1e2eb7653f015d",
-   "dossiq": "a7102388fe7e01e62e5bafe3f26fa48eecec8fbb",
-   "filinq": "420e1aae82e2d152e028b2e5237c95a5ba11fe4b",
-   "hermiq": "21c8494fcb36703f891768c8da86cb28dfd37702",
-   "humaniq": "9e40656e643d43f36ac8d8a5ae4d17d0cf5c0adc",
-   "integriq": "39620e560ce8eced6dacba3e767bf8d80571cd78",
-   "keepiq": "799e2880b9556db9cf03f27ae32da9950a4730b2",
-   "larpinq": "99c5cba5c6503865c8292751e03d1b1cda2f2ca0",
-   "launchpad": "5e2596991fcfd328e7ed02af577baf21139abaaf",
-   "learniq": "6644a5ef6b3e4abb2be52c6419fb74ced9bd9aa1",
-   "opencatalogi": "0f33d553cb1eef6596dbcc891fc7c3be2bbd675d",
-   "openregister": "2f51ea3b0bbd37d3b90e2797d56b1468c39ad9f2",
-   "pipelinq": "330a78b71ee44a230d0f8d761cc44f92c5a5cbed",
-   "planninq": "0504f4cf502fe0ba83137c267362374a70e924d4",
-   "portaliq": "e68fc05cbdb1edfba03f646eb8d9cbea5adac5d5",
-   "shillinq": "7c72ec07b3e64297799d31a4e74f87b7e44270ac",
-   "stackiq": "81cdbccbc74cac000c16707a74e644b07991f19a",
+   "buildiq": "d6f563510b359c2ce417ea978ab54a29d12bb076",
+   "decidiq": "3a356e7e9b691fbdee08a39524cd6b86c1fe63f4",
+   "dossiq": "9622acd963bb0cc29b7d5a2b7f43ce5e171bcaa1",
+   "filinq": "ab6c1ebb435627aedeb92face7148663e6040cce",
+   "hermiq": "1fad89928e978b92ede4bd307497fc59c94add89",
+   "humaniq": "5589f3ab5b4880acb7e225cef92d3a1c721efc60",
+   "integriq": "cd844692cca2453c365bb25ed6bd558aa62022a7",
+   "keepiq": "ee758777dbc45a0bc9040b4ff7486204e708015b",
+   "larpinq": "5ad762be2ec9d27a9498c41e207f5699fc6ec34e",
+   "launchpad": "3e7bf07b30f2a422b68b0e492d79126dab2e7acb",
+   "learniq": "4d971c74d73858f22c586e6adc0b61c7c882f1f5",
+   "opencatalogi": "7a191dbb7a3b3c705ae48b746f993408b155f8dd",
+   "openregister": "061df3ec519178a79b09f1b6edcc2465e1e8f983",
+   "pipelinq": "e4d420d4271a6892d4a2b6743057f23ba7a5856d",
+   "planninq": "19c35bed88b9d10f519fae6826e1d3726187e0e6",
+   "portaliq": "795da17ba3f56c7ce6f37607a37ac0db0071c822",
+   "shillinq": "f1e580b0534cbd05652d034cae935bd7efd31241",
+   "stackiq": "9ad6a74fd5b14e252c1ae07725e94f44b1e2be9a",
    "thematiq": "3a5ccb201dcca2f311d5607c9110796825e6f20c",
    "versioniq": "ab0f16d6e67011aebcdcb2b7dbab032e0206c9f7"
   },
-  "read": "2026-11-05"
+  "read": "2026-11-06"
  }
 }
