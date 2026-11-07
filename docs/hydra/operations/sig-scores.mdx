@@ -44,6 +44,17 @@ Each column is an app. The rows come in five sections.
 5. **Gates per category.** Each row shows the gates that pass out of the gates
    that apply, and the findings of all of them. Open a row to see its gates.
 
+- **Unit size, complexity and interfacing:** the share of unit code above the
+  bound, for example the code in units longer than 15 lines.
+- **Duplication:** the share of redundant lines, in fragments of 6 lines or more.
+  In a Vue file we treat template, script and style as separate pieces, so a
+  fragment never crosses from one into the next. This is our assumption until a
+  real Sigrid scan confirms it.
+- **Module coupling:** the share of module code in files with more than 10, 20
+  or 50 incoming dependencies.
+- **Component independence:** the share of code that no other component calls.
+  Higher is better here. For every other check, lower is better.
+
 A cell shows the stars and the measured value. Hover a cell for the details.
 An empty cell (`·`) means the app has no such code or the gate does not apply.
 

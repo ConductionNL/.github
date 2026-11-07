@@ -9,6 +9,8 @@
 #          sig-floor.md (with its 5-star line) is written to the report dir
 #   ARM 3  no floor file: NOT APPLICABLE
 #   ARM 4  the pinned tools are unavailable: SKIPPED (wiring), never PASS
+#   ARM 5  a file in .sig/five-star-files.txt over a 5-star bound: FAIL
+#   ARM 6  the same in a Vue file: WARNING, naming terryyin/lizard#549
 #
 # The rule-by-rule arms (inherited breaches, the floor read from the base, a
 # lowered floor file, the raised floor, the cache) are in
@@ -67,6 +69,17 @@ _branch nofloor
 git rm --quiet .github/sig-floor.json
 git commit --quiet -m "no floor"
 
+_branch wide
+_class Wide "$(_method m1 2 | sed 's/(int \$p)/(int $p, int $q, int $r)/')"
+mkdir -p .sig && printf '# five-star files\nlib/Service/Wide.php\n' > .sig/five-star-files.txt
+git add -A && git commit --quiet -m "a listed file with a 3-parameter unit"
+
+_branch vue
+mkdir -p src .sig
+printf '<template>\n  <div />\n</template>\n<script>\nexport default {\n  methods: {\n    total(a, b, c) {\n      return a + b + c\n    },\n  },\n}\n</script>\n' > src/Total.vue
+printf 'src/Total.vue\n' > .sig/five-star-files.txt
+git add -A && git commit --quiet -m "a listed Vue file with a 3-parameter unit"
+
 _run() {  # <branch> [extra runner args...]
     local _b="$1"; shift
     git -C "${APP}" checkout --quiet "${_b}"
@@ -117,6 +130,30 @@ case "${_v}" in
     *"NOT APPLICABLE"*) _ok "a repository with no floor file is not applicable" ;;
     *)                  _bad "expected NOT APPLICABLE, got: ${_v:-<no verdict>}" ;;
 esac
+
+echo "-- ARM 5: a listed five-star file over a bound: FAIL --"
+_out="$(_run wide --base base)"
+case "$(_verdict "${_out}")" in
+    *FAIL*) _ok "a five-star file with a 3-parameter unit fails" ;;
+    *)      _bad "expected FAIL, got: $(_verdict "${_out}")" ;;
+esac
+if printf '%s\n' "${_out}" | grep -q '^  five-star file lib/Service/Wide.php:.*3 parameters > 2'; then
+    _ok "the failure names the file, the unit and the bound"
+else
+    _bad "the failure does not name lib/Service/Wide.php"
+fi
+
+echo "-- ARM 6: a Vue five-star file over a bound: WARNING (lizard#549) --"
+_out="$(_run vue --base base)"
+case "$(_verdict "${_out}")" in
+    *WARNING*) _ok "a Vue finding is a warning while lizard 1.25.0 or older is pinned" ;;
+    *)         _bad "expected WARNING, got: $(_verdict "${_out}")" ;;
+esac
+if printf '%s\n' "${_out}" | grep -q 'terryyin/lizard#549'; then
+    _ok "the run names the lizard issue"
+else
+    _bad "the run does not name terryyin/lizard#549"
+fi
 
 echo "-- ARM 4: tools unavailable: SKIPPED (wiring) --"
 if python3 -c 'import lizard' > /dev/null 2>&1; then

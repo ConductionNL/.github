@@ -43,13 +43,28 @@ with the current reader, on a base whose floor an older reader wrote, may drop
 the unit checks (size, complexity, interfacing) of the languages a newer
 reader measures differently (UNIT_READER_RE_MEASURED). Every other check stays.
 
-Without a floor file the gate is NOT APPLICABLE (exit 4) before any tool is
-loaded or any base resolved.
+THE FIVE-STAR FILES
+-------------------
+`.sig/five-star-files.txt` lists files held at SIG's 5-star unit bounds:
+repo-relative paths, one per line, `#` comments allowed. Every unit in a
+listed file keeps NLOC <= 15, McCabe <= 5 and at most 2 parameters, and the
+file holds no duplicated block of 6+ code lines. With a base (the PR gate)
+only the listed files the change touches or adds to the list are judged;
+without one (the nightly run) every listed file is. In both modes a listed
+file that no longer exists fails, and so does removing a path from the list
+while its file still exists. The rules, the clone lines left out, the
+parameter exemptions and the lizard#549 warning for Vue, JS and TS are in
+sig_file_floor.py.
+
+Without a floor file and without a five-star list the gate is NOT APPLICABLE
+(exit 4) before any tool is loaded or any base resolved. Either one alone
+makes it apply; the app floor is then judged only when its file exists.
 
 The 5-star checks (gate 122's five-star profile, derived from the v18.1 4-star
 limits) are reported next to the 4-star ones and never block.
 
-`write` never lowers a floor. When the floor file already exists, every check
+`write` re-records the floor at the current values and never lowers it: it
+adds every check the tree meets now. When the floor file already exists, every check
 it lists stays in it, also one the current limits no longer meet (the 4-star
 limits moved from v17.0 to v18.1, stricter on coupling and independence). Such
 a check is printed as floored but missed, so the change of status is visible;
@@ -88,6 +103,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_sig_maintainability as sig  # noqa: E402
+import sig_file_floor as files  # noqa: E402
 
 GATE = "[gate-123] sig-floor"
 FLOOR_PATH = ".github/sig-floor.json"
@@ -398,20 +414,13 @@ def cmd_write(args, lizard):
 
 def no_floor(path):
     print(f"{GATE}: this repository has no {path}; generate it with "
-          f"`check_sig_floor.py write .` to adopt the floor")
+          f"`check_sig_floor.py write .` to adopt the floor, or list five-star files in {files.LIST_PATH}")
     return 4
 
 
-def cmd_check(args, lizard):
-    app = args.app
-    mb = None
-    if args.base_ref:
-        rc, out = git(app, "merge-base", args.base_ref, "HEAD")
-        if rc != 0 or not out.strip():
-            print(f"{GATE}: the base '{args.base_ref}' has no merge base with HEAD, so the floor cannot be read")
-            return 3
-        mb = out.strip()
-
+def check_app_floor(args, app, mb, reader, lizard):
+    """The app-level floor: prints its findings and returns (lost, floored,
+    inherited, met, measured, five-star findings, raised) or an exit status."""
     head_file = os.path.join(app, args.floor)
     head_doc = json.loads(sig.read_text(head_file)) if os.path.isfile(head_file) else None
     head_floor = parse_floor(json.dumps(head_doc), args.floor) if head_doc is not None else None
@@ -419,7 +428,7 @@ def cmd_check(args, lizard):
     base_floor = parse_floor(json.dumps(base_doc), f"{mb}:{args.floor}") if base_doc is not None else None
     committed = base_floor if base_floor is not None else head_floor
     if committed is None:
-        return no_floor(args.floor)
+        return None
     scope_changed = bool(mb) and sigrid_changed(app, mb)
     removed = sorted(set(base_floor) - set(head_floor or [])) if base_floor is not None else []
     # A floor re-recorded by a newer unit reader may drop the checks that reader re-measures.
@@ -428,8 +437,6 @@ def cmd_check(args, lizard):
             and unit_reader_of(base_doc) < sig.UNIT_READER_VERSION == unit_reader_of(head_doc):
         reread = re_measured_checks(removed, unit_reader_of(base_doc))
 
-    cache = load_cache(args.cache)
-    reader = CachedUnitReader(lizard, cache)
     head_report = measure(app, lizard, reader)
     head4, head5 = check_rows(head_report, "four-star"), check_rows(head_report, "five-star")
     base4 = None
@@ -439,7 +446,6 @@ def cmd_check(args, lizard):
             print(f"{GATE}: could not check out the merge base {mb[:12]} to measure it")
             return 3
         base4 = check_rows(base_report, "four-star")
-    save_cache(args.cache, cache, reader.used)
 
     floor = set(committed) | ({lbl for lbl, r in base4.items() if r["ok"]} if base4 else set())
     new, inherited = judge(floor, head4, base4, scope_changed)
@@ -477,14 +483,75 @@ def cmd_check(args, lizard):
     for lbl, why in inherited:
         print(f"  inherited, not counted: {lbl}: {why}")
     five = sum(1 for r in head5.values() if not r["ok"])
-    tail = (f"{len(met_head)} of {len(head4)} 4-star checks met at head; {five} 5-star finding(s), not blocking; "
-            f"{len(inherited)} inherited; lizard {sig.LIZARD_VERSION}, cache {reader.hits} hit(s) {reader.misses} miss(es)"
-            + (f"; {len(raise_to)} check(s) above the committed floor" if raise_to else ""))
-    if new or lowered:
-        print(f"{GATE}: FAIL: {len(new) + len(lowered)} floored check(s) lost "
-              f"({len(new)} no longer met, {len(lowered)} removed from the floor file); {tail}")
+    return {"new": len(new), "lowered": len(lowered), "floor": len(floor), "inherited": len(inherited),
+            "met": len(met_head), "measured": len(head4), "five": five, "raise": len(raise_to)}
+
+
+def check_file_floor(app, mb, reader):
+    """The five-star file floor: prints its findings and returns (failures,
+    warnings, files judged, files listed, mode), or None without a list."""
+    head_list = files.list_at_head(app)
+    base_list = files.list_at(app, mb) if mb else None
+    if head_list is None and base_list is None:
+        return None
+    head_list = head_list or []
+    paths = files.selected(app, mb, head_list, base_list)
+    failures, warnings = files.judge(app, paths, reader)
+    failures += [f"{p}: removed from {files.LIST_PATH} while the file still exists; the list only grows"
+                 for p in files.lowered(app, head_list, base_list)]
+    js = [p for p in paths if sig.LANG_OF_EXT.get(os.path.splitext(p)[1].lower()) in files.JS_LANGS]
+    for f in failures:
+        print(f"  five-star file {f}")
+    for w in warnings:
+        print(f"  warning: five-star file {w}")
+    if js and not files.js_reliable():
+        print(f"  lizard {sig.LIZARD_VERSION} reads vue, js and ts unreliably up to 1.25.0 "
+              f"({files.LIZARD_JS_ISSUE}): {len(js)} listed file(s) judged, findings reported as warnings "
+              f"until a newer lizard is pinned")
+    return {"failures": len(failures), "warnings": len(warnings), "judged": len(paths),
+            "listed": len(head_list), "mode": "diff" if mb else "full"}
+
+
+def cmd_check(args, lizard):
+    app = args.app
+    mb = None
+    if args.base_ref:
+        rc, out = git(app, "merge-base", args.base_ref, "HEAD")
+        if rc != 0 or not out.strip():
+            print(f"{GATE}: the base '{args.base_ref}' has no merge base with HEAD, so the floor cannot be read")
+            return 3
+        mb = out.strip()
+
+    cache = load_cache(args.cache)
+    reader = CachedUnitReader(lizard, cache)
+    app_floor = check_app_floor(args, app, mb, reader, lizard)
+    if isinstance(app_floor, int):
+        return app_floor
+    file_floor = check_file_floor(app, mb, reader)
+    save_cache(args.cache, cache, reader.used)
+    if app_floor is None and file_floor is None:
+        return no_floor(args.floor)
+
+    a = app_floor or {"new": 0, "lowered": 0, "floor": 0, "inherited": 0}
+    f = file_floor or {"failures": 0, "warnings": 0}
+    parts = []
+    if app_floor:
+        parts.append(f"{a['met']} of {a['measured']} 4-star checks met at head; {a['five']} 5-star finding(s), "
+                     f"not blocking; {a['inherited']} inherited")
+    if file_floor:
+        parts.append(f"five-star files ({f['mode']} mode): {f['judged']} of {f['listed']} listed file(s) judged, "
+                     f"{f['failures']} failure(s), {f['warnings']} warning(s)")
+    parts.append(f"lizard {sig.LIZARD_VERSION}, cache {reader.hits} hit(s) {reader.misses} miss(es)")
+    if app_floor and a["raise"]:
+        parts.append(f"{a['raise']} check(s) above the committed floor")
+    tail = "; ".join(parts)
+    lost = a["new"] + a["lowered"] + f["failures"]
+    if lost:
+        print(f"{GATE}: FAIL: {lost} floored check(s) lost "
+              f"({a['new']} no longer met, {a['lowered']} removed from the floor file, "
+              f"{f['failures']} on five-star files); {tail}")
         return 1
-    print(f"{GATE}: PASS: {len(floor)} floored check(s) held; {tail}")
+    print(f"{GATE}: PASS: {a['floor']} floored check(s) held; {tail}")
     return 0
 
 
@@ -505,7 +572,8 @@ def main(argv):
     w.add_argument("--cache")
     args = ap.parse_args(argv)
     args.app = os.path.abspath(args.app)
-    if args.mode == "check" and not floor_present(args.app, args.floor, args.base_ref):
+    if args.mode == "check" and not floor_present(args.app, args.floor, args.base_ref) \
+            and not files.list_present(args.app, args.base_ref):
         return no_floor(args.floor)
     lizard, why = sig.load_lizard()
     if not lizard:
