@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.171.0",
+	"version": "2.176.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -97,7 +97,32 @@
 							"type": { "type": "string", "enum": ["info", "config-fields", "choice", "run-action", "summary", "component"], "description": "Built-in step renderer." },
 							"title": { "type": "string" },
 							"body": { "type": "string", "description": "info: explanatory copy." },
-							"note": { "type": "string", "minLength": 1, "description": "choice: a footnote under the options, translated like body." },
+							"note": { "type": "string", "minLength": 1, "description": "choice: a footnote under the options, translated like body. summary: an info card under the rows." },
+							"cancelLabel": { "type": "string", "minLength": 1, "description": "This step's cancel button, translated like body; the wizard's cancel label otherwise." },
+							"submitLabel": { "type": "string", "minLength": 1, "description": "The last step's submit button, translated like body; the wizard's submit label otherwise." },
+							"rows": {
+								"type": "array",
+								"description": "summary, board look: the readiness rows in order. `step` takes that step's recap, otherwise `id` + `title`, done when `doneWhen` (a setup status path, or { path, equals }) holds. `detail` is the line under the title, `detailWhenOpen` replaces it while the row is not done, `link` names the screen to change it on.",
+								"items": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"step": { "type": "string", "minLength": 1 },
+										"id": { "type": "string", "minLength": 1 },
+										"title": { "type": "string", "minLength": 1 },
+										"detail": { "type": "string", "minLength": 1 },
+										"detailWhenOpen": { "type": "string", "minLength": 1 },
+										"doneWhen": {},
+										"readinessItem": { "type": "string", "minLength": 1, "description": "The id of an item in the setup status `readiness` list; the row is done when that item is." },
+										"link": {
+											"type": "object",
+											"additionalProperties": false,
+											"required": ["label", "href"],
+											"properties": { "label": { "type": "string", "minLength": 1 }, "href": { "type": "string", "minLength": 1 } }
+										}
+									}
+								}
+							},
 							"visibleWhen": { "description": "Offer the step only when the setup status says so: a dotted path into the setup status document whose value must be truthy, or { path, equals } for an exact value. Hidden while the status loads.", "oneOf": [ { "type": "string", "minLength": 1 }, { "type": "object", "required": ["path"], "additionalProperties": false, "properties": { "path": { "type": "string", "minLength": 1 }, "equals": {} } } ] },
 							"footnote": { "type": "string", "minLength": 1, "description": "choice: the same footnote under another name; note wins when both are set." },
 							"required": { "type": "boolean", "default": false, "description": "When true the step gates the app until done." },
@@ -643,10 +668,13 @@
 		"breadcrumbCrumb": {
 			"type": "object",
 			"additionalProperties": false,
-			"required": ["label"],
-			"description": "One breadcrumb crumb (config.breadcrumb).",
+			"anyOf": [{ "required": ["label"] }, { "required": ["parent"] }],
+			"description": "One breadcrumb crumb (config.breadcrumb): a label, or the record's parent (`parent`).",
 			"properties": {
 				"label": { "type": "string", "minLength": 1 },
+				"parent": { "type": "string", "minLength": 1, "description": "A `visibilityContext` entry of the detail page naming the record's parent. The crumb shows that record, linked to its page, and drops out when the record has no parent (detail-parent-crumb). `label` is then the fallback when the parent has no label of its own." },
+				"labelField": { "type": "string", "minLength": 1, "description": "With `parent`: the parent's field (dotted path, e.g. `identifier`) shown as the crumb, else its name or title (detail-parent-crumb)." },
+				"param": { "type": "string", "minLength": 1, "description": "With `parent` and `route`: the route param that carries the parent's id, `id` by default (detail-parent-crumb)." },
 				"route": { "type": "string" },
 				"params": { "type": "object", "additionalProperties": true },
 				"query": { "type": "object", "additionalProperties": true, "description": "Query of the `route` link, such as `{ savedView: 'default:<slug>' }` to land on a view (saved-view-overrides)." },
@@ -933,8 +961,8 @@
 		},
 		"sentinelDeclarativeToken": {
 			"type": "string",
-			"pattern": "^@self\\.[A-Za-z][A-Za-z0-9_]*$|^@ref:[A-Za-z][A-Za-z0-9_./-]*$|^@aggregate:.+$",
-			"description": "Declarative context (OpenRegister direction, resolved server-side): @self.<field> (the object's own field in a cross-object calc), @ref:<path>, @aggregate:<expr>. @ref/@aggregate are first-class members even though currently unused fleet-wide. Mirrors SENTINEL_TOKEN_PATTERNS.declarative."
+			"pattern": "^@self\\.[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_-]*)*$|^@ref:[A-Za-z][A-Za-z0-9_./-]*$|^@aggregate:.+$",
+			"description": "Declarative context (OpenRegister direction, resolved server-side): @self.<field> (the object's own field in a cross-object calc, or a dotted path into @self such as @self.can.update), @ref:<path>, @aggregate:<expr>. @ref/@aggregate are first-class members even though currently unused fleet-wide. Mirrors SENTINEL_TOKEN_PATTERNS.declarative."
 		},
 		"sentinelDeprecatedToken": {
 			"type": "string",
@@ -1320,6 +1348,14 @@
 						"currency": { "type": "string" },
 						"decimals": { "type": "integer", "minimum": 0 }
 					}
+				},
+				"fullNote": {
+					"type": "string",
+					"description": "board-column-capacity: the line under a full column's heading (DqWerkbord \"Vol: een kaart hierheen slepen wordt geweigerd\"), host-translated."
+				},
+				"mergedNote": {
+					"type": "string",
+					"description": "board-column-capacity: the line under a column merged from several rows, with {count} for the rows (DqWerkbord \"Samengevoegd uit 2 zaaktypen: geen limiet\"), host-translated."
 				},
 				"columnLimit": {
 					"type": "integer",
@@ -2114,6 +2150,10 @@
 					"type": "integer",
 					"minimum": 1,
 					"description": "Row span (>= 1)."
+				},
+				"headerWrap": {
+					"type": "boolean",
+					"description": "Let the card's header actions drop under a title block that fills the row (DqZaaktypeOverzicht Rechten), instead of squeezing the title."
 				},
 				"headerLink": {
 					"type": "object",
@@ -3752,6 +3792,11 @@
 					"minLength": 1,
 					"description": "Nextcloud app id that must be installed and enabled for the guarded element to show. A PRECONDITION rather than a fourth mode: it is checked before anything else, and on its own it is the whole condition. Combined with endpoint/source/field it gates that mode too, so both must hold. It exists because the menu's `visibleIf` already spoke this word and `visibleWhen` did not, so the same manifest vocabulary meant two different things in two places. Use it on an action that writes into a sibling app, so an install without that app shows no button rather than a form that saves nowhere."
 				},
+				"readerGroups": {
+					"type": "array",
+					"items": { "type": "string", "minLength": 1 },
+					"description": "Nextcloud group ids; the reader must be in at least one of them (2.173.0, visible-when-reader-groups). A PRECONDITION like `appInstalled`: on its own it is the whole condition, next to endpoint/source/field both must hold. Administrators are the `admin` group, so list it to include them. While the reader's groups load, and when the lookup fails, it reads false, so the element stays hidden. It hides a control and is never an authorization decision: the endpoint behind the element keeps its own check."
+				},
 				"endpoint": {
 					"type": "string",
 					"description": "A same-origin URL returning JSON; `field` is a dot-path into the body."
@@ -4264,6 +4309,10 @@
 						"follow": {
 							"type": "boolean",
 							"description": "Detail pages: the one Follow control beside the title, with a notifications on/off switch while the user follows and the follower count for a user who may update the record. Omitted means automatic: it shows when the object carries @self.watching. false removes it, and the object read then no longer asks for @self.can."
+						},
+						"permissions": {
+							"type": "boolean",
+							"description": "Detail pages: read the record's rights. The object read asks for @self.can, also with follow: false. While can.update is false the Edit button, the header actions with role edit or update and the inline editors of the data and map widgets are off. A record without can keeps every control. Default false."
 						},
 						"showFollowColumn": {
 							"type": "boolean",
