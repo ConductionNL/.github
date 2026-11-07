@@ -36,6 +36,9 @@ for the value and both limits.
 - **Unit size, complexity and interfacing:** the share of unit code above the
   bound, for example the code in units longer than 15 lines.
 - **Duplication:** the share of redundant lines, in fragments of 6 lines or more.
+  In a Vue file we treat template, script and style as separate pieces, so a
+  fragment never crosses from one into the next. This is our assumption until a
+  real Sigrid scan confirms it.
 - **Module coupling:** the share of module code in files with more than 10, 20
   or 50 incoming dependencies.
 - **Component independence:** the share of code that no other component calls.

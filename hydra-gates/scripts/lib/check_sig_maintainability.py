@@ -49,6 +49,16 @@ same derived scale (STAR_BANDS): 5 to 2 stars, and 1 star for anything worse
 than 2. Component independence and entanglement have no band under 4 stars
 and read "<4" there.
 Chosen with --profile, or HYDRA_GATE_SIG_PROFILE when the flag is absent.
+
+RATING ESTIMATE (report mode)
+-----------------------------
+`rating` in the JSON, and a paragraph in the markdown: an estimate of SIG's
+continuous rating (0.5 to 5.5) per check, property, sub-characteristic and
+overall, and the levers that raise the overall rating most per 1,000 lines
+fixed. SIG publishes no power-mean exponent, so the overall rating is a range
+over p = 1 and p = -1. The method and its assumptions are listed above
+rating_estimate() and in research/sig-stars.md section 4. The profile does
+not change the estimate.
 The profile changes only the limits a report is compared with; the ratchet's
 unit bounds and the gate's advisory status do not change.
 
@@ -67,7 +77,10 @@ TOOLS, PINNED
 lizard 1.24.3 (units: NLOC, McCabe, parameters) and jscpd 4.0.5 (the
 ratchet's clones). The report's duplication follows SIG's line definition
 directly (windows of 6 code lines equal modulo whitespace) and shows jscpd's
-figure next to it as a cross-check.
+figure next to it as a cross-check. In a Vue file the windows stay inside one
+top-level block: template, script and style are separate pieces, and the tag
+lines belong to none. That is our assumption until a real Sigrid scan confirms
+it, and every report with Vue files says so. jscpd's figure does not apply it.
 A different version produces different numbers, so the pinned version is
 loaded or installed into the tool cache (HYDRA_GATE_TOOLS_DIR, default
 ~/.cache/hydra-gates/tools) and any other version is refused. Set
@@ -135,6 +148,8 @@ LANG_OF_EXT = {
 RATCHET = {"nloc": 60, "ccn": 10, "params": 4}
 RATCHET_LABEL = {"nloc": "NLOC > 60", "ccn": "McCabe > 10", "params": "5 or more parameters"}
 DUP_MIN_LINES = 6
+VUE_PIECES_ASSUMPTION = ("Vue duplication treats template, script and style as separate pieces, so no 6-line "
+                         "window crosses a block boundary. This is our assumption until a real Sigrid scan confirms it.")
 
 # Star bands, per language: for each level, the max share of unit LOC strictly
 # above each bound. 4 stars is the SIG/TUV NORD CERT Guidance for Producers
@@ -567,8 +582,9 @@ def profile(units, key, limits, kind):
     total = sum(u["nloc"] for u in units) or 1
     rows = []
     for i, (bound, cap) in enumerate(limits):
-        share = sum(u["nloc"] for u in units if u[key] > bound) / total
-        rows.append({"above": bound, "share": round(share, 4), "limit": cap, "ok": share <= cap,
+        loc = sum(u["nloc"] for u in units if u[key] > bound)
+        share = loc / total
+        rows.append({"above": bound, "share": round(share, 4), "loc": loc, "limit": cap, "ok": share <= cap,
                      "stars": stars_of(kind, round(share, 4), i)})
     return rows
 
@@ -576,6 +592,53 @@ def profile(units, key, limits, kind):
 def worst(units, key, n=8):
     ranked = sorted(units, key=lambda u: (-u[key], u["file"], u["start"]))[:n]
     return [f"{u['file']}:{u['start']} {u['name']} ({u[key]})" for u in ranked]
+
+
+SFC_OPEN = re.compile(r"^<([a-zA-Z][\w-]*)\b")
+
+
+def sfc_pieces(lines, code):
+    """The code lines of a Vue file as one sorted list per piece: the inside
+    of each top-level block (template, script, style, custom blocks) and each
+    run of lines between blocks. The block's own tag lines are in no piece.
+    A top-level tag starts in the first column, so an indented nested
+    `<template>` stays inside its block. Boundaries are read from `lines`, so
+    they hold when `code` leaves the tag lines out."""
+    pieces, current, block = [], [], None
+    for n, s in enumerate(lines, 1):
+        opened = SFC_OPEN.match(s) if block is None else None
+        if opened:
+            pieces.append(current)
+            current = []
+            name = opened.group(1)
+            if f"</{name}" not in s and not s.rstrip().endswith("/>"):
+                block = name
+        elif block is not None and re.match(rf"^</{re.escape(block)}\s*>", s):
+            pieces.append(current)
+            current, block = [], None
+        elif n in code:
+            current.append(n)
+    pieces.append(current)
+    return [p for p in pieces if p]
+
+
+def dup_windows(lines, code, lang=None):
+    """SIG's duplication windows of one file: (index, key, line numbers) for
+    every run of DUP_MIN_LINES consecutive code lines, keyed by the lines
+    without whitespace. `lines` is the file's text split into lines, `code`
+    the line numbers code_lines() returns. Windows made only of brackets are
+    skipped. In a Vue file no window crosses a block boundary (sfc_pieces),
+    which is VUE_PIECES_ASSUMPTION."""
+    pieces = sfc_pieces(lines, code) if lang == "vue" else [sorted(code)]
+    index = 0
+    for piece in pieces:
+        seq = [(n, "".join(lines[n - 1].split())) for n in piece]
+        for i in range(len(seq) - DUP_MIN_LINES + 1):
+            win = seq[i:i + DUP_MIN_LINES]
+            key = tuple(t for _n, t in win)
+            if not all(len(t) <= 2 for t in key):
+                yield index + i, key, [n for n, _t in win]
+        index += len(seq)
 
 
 def duplication_profile(app, clones, files_by_lang, limit=DUPLICATION_LIMIT):
@@ -598,14 +661,9 @@ def duplication_profile(app, clones, files_by_lang, limit=DUPLICATION_LIMIT):
     redundant = collections.defaultdict(set)
     for rel in sorted(files_by_lang):
         seen = windows[files_by_lang[rel]]
-        seq = [(n, "".join(lines_of[rel][n - 1].split())) for n in sorted(code[rel])]
-        for i in range(len(seq) - DUP_MIN_LINES + 1):
-            win = seq[i:i + DUP_MIN_LINES]
-            key = tuple(t for _n, t in win)
-            if all(len(t) <= 2 for t in key):
-                continue
+        for i, key, nums in dup_windows(lines_of[rel], code[rel], files_by_lang[rel]):
             if key in seen and seen[key] != (rel, i):
-                redundant[rel].update(n for n, _t in win)
+                redundant[rel].update(nums)
             else:
                 seen.setdefault(key, (rel, i))
     by_jscpd = collections.defaultdict(set)
@@ -853,8 +911,9 @@ def structure(app, files, deps, prof=PROFILES[DEFAULT_PROFILE]):
     total = sum(loc.values()) or 1
     coupling = []
     for i, (bound, cap) in enumerate(prof["limits"]["module_coupling"]):
-        share = sum(loc[m] for m in modules if len(incoming[m]) > bound) / total
-        coupling.append({"above": bound, "share": round(share, 4), "limit": cap, "ok": share <= cap,
+        above = sum(loc[m] for m in modules if len(incoming[m]) > bound)
+        share = above / total
+        coupling.append({"above": bound, "share": round(share, 4), "loc": above, "limit": cap, "ok": share <= cap,
                          "stars": stars_of("module_coupling", round(share, 4), i)})
     root, comp = component_of_factory(modules)
     hidden = sum(loc[m] for m in modules if all(comp(s) == comp(m) for s in incoming[m]))
@@ -878,7 +937,8 @@ def structure(app, files, deps, prof=PROFILES[DEFAULT_PROFILE]):
                            for m in sorted(modules, key=lambda m: (-len(incoming[m]), m))[:10]],
         "component_root": root or ".",
         "components": dict(comp_loc.most_common()),
-        "component_independence": {"hidden_share": round(independence, 4), "limit_min": prof["independence_min"],
+        "component_independence": {"hidden_share": round(independence, 4), "hidden_loc": hidden,
+                                   "limit_min": prof["independence_min"],
                                    "ok": independence >= prof["independence_min"],
                                    "stars": stars_of("component_independence", round(independence, 4))},
         "component_entanglement": {
@@ -924,6 +984,7 @@ def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE, reader=None):
         "limits": prof["source"],
         "files": len(files),
         "skipped_files": reader.skipped,
+        "assumptions": [VUE_PIECES_ASSUMPTION] if "vue" in files.values() else [],
         "languages": {},
     }
     for lang in sorted(set(files.values())):
@@ -948,6 +1009,7 @@ def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE, reader=None):
         report["structure"]["php"] = structure(app, php, php_dependencies(app, php), prof)
     if py:
         report["structure"]["python"] = structure(app, py, python_dependencies(app, py), prof)
+    report["rating"] = rating_estimate(report)
     return report
 
 
@@ -969,8 +1031,266 @@ def checks_of(report):
     return out
 
 
+# ---- rating estimate ---------------------------------------------------------
+#
+# An estimate of SIG's continuous maintainability rating (0.5 to 5.5), built
+# from the report. Sources and assumptions: research/sig-stars.md section 4.
+#   check         Alves, Correia, Visser 2011, eq. 1: linear interpolation
+#                 between the caps of the star level a share falls in; a
+#                 property is the minimum over its checks. Worse than 2 stars
+#                 falls linearly to 0.5 at 100% (assumed).
+#   language      a property's per-language ratings, weighted by the code that
+#                 property measures in each language (assumed).
+#   sub-char.     plain mean of the mapped properties (criteria v12.0 mapping,
+#                 volume and component balance dropped).
+#   overall       power mean of the sub-characteristics. SIG publishes no
+#                 exponent, so p = 1 and p = -1 are both reported.
+
+# Assumed caps on the exposed share (1 - hidden) and on the violation degree.
+# Only 4 stars is published; every level doubles the exposure of the one above.
+RATING_EXPOSED_CAPS = {
+    "component_independence": {5: .0275, 4: .055, 3: .11, 2: .22},
+    "component_entanglement": {5: .0375, 4: .075, 3: .15, 2: .30},
+}
+RATED_PROPERTIES = ("duplication", "unit_size", "unit_complexity", "unit_interfacing",
+                    "module_coupling", "component_independence", "component_entanglement")
+SUBCHARACTERISTICS = {
+    "analysability": ("duplication", "unit_size"),
+    "modifiability": ("duplication", "unit_complexity", "module_coupling"),
+    "testability": ("unit_complexity", "component_independence"),
+    "modularity": ("module_coupling", "component_independence", "component_entanglement"),
+    "reusability": ("unit_size", "unit_interfacing"),
+}
+EXPONENTS = (1, -1)
+LEVER_LOC = 1000
+SURE_TOP = 3
+
+
+def rating_caps(kind, index=None):
+    """{5: cap, 4: cap, 3: cap, 2: cap} of one check, as a maximum exposed share."""
+    if kind in RATING_EXPOSED_CAPS:
+        return RATING_EXPOSED_CAPS[kind]
+    bands = STAR_BANDS[kind]
+    return {lvl: bands[lvl] if index is None else bands[lvl][index] for lvl in (5, 4, 3, 2)}
+
+
+def interpolate(value, caps):
+    """Continuous rating of one exposed share: s0 + 0.5 - (v - t0) / (t1 - t0),
+    t0 and t1 the caps around v (0 below 5 stars, 100% past 2 stars)."""
+    lower = 0.0
+    for level in (5, 4, 3, 2):
+        if value <= caps[level]:
+            start, upper = level, caps[level]
+            break
+        lower = caps[level]
+    else:
+        start, upper = 1, 1.0
+    if upper <= lower:
+        return start + 0.5
+    return max(0.5, min(5.5, start + 0.5 - (value - lower) / (upper - lower)))
+
+
+def power_mean(values, p):
+    values = [v for v in values if v is not None]
+    if not values:
+        return None
+    if p == 0:
+        product = 1.0
+        for v in values:
+            product *= v
+        return product ** (1 / len(values))
+    return (sum(v ** p for v in values) / len(values)) ** (1 / p)
+
+
+def rating_inputs(report):
+    """{property: {language: {"loc": weight, "above": [exposed loc per check]}}}
+    from a gate-122 report. Entanglement carries "value" (the violation degree)
+    instead of exposed loc. Reports written before rows carried "loc" are
+    read from share x total."""
+    def above(rows, total):
+        return [r["loc"] if "loc" in r else round(r["share"] * total) for r in rows]
+    out = {prop: {} for prop in RATED_PROPERTIES}
+    for lang, d in report.get("languages", {}).items():
+        total = d.get("unit_loc") or 0
+        for prop in ("unit_size", "unit_complexity", "unit_interfacing"):
+            out[prop][lang] = {"loc": total, "above": above(d[prop], total)}
+        dup = d.get("duplication")
+        if dup:
+            out["duplication"][lang] = {"loc": dup["code_lines"], "above": [dup["redundant_lines"]]}
+    for lang, s in (report.get("structure") or {}).items():
+        if not s:
+            continue
+        total = s["module_loc"]
+        out["module_coupling"][lang] = {"loc": total, "above": above(s["module_coupling"], total)}
+        ci = s["component_independence"]
+        hidden = ci["hidden_loc"] if "hidden_loc" in ci else round(ci["hidden_share"] * total)
+        out["component_independence"][lang] = {"loc": total, "above": [total - hidden]}
+        out["component_entanglement"][lang] = {"loc": total, "value": s["component_entanglement"]["violation_degree"]}
+    return out
+
+
+def check_ratings(prop, entry):
+    """The continuous rating of each check of one property in one language."""
+    if "value" in entry:
+        return [interpolate(entry["value"], rating_caps(prop))]
+    single = len(entry["above"]) == 1
+    return [interpolate(a / entry["loc"], rating_caps(prop, None if single else i))
+            for i, a in enumerate(entry["above"])]
+
+
+def property_rating(prop, entry):
+    if not entry or not entry.get("loc"):
+        return None
+    return min(check_ratings(prop, entry))
+
+
+def rate_inputs(inputs):
+    """Property, sub-characteristic and overall ratings of rating_inputs()."""
+    props = {}
+    for prop in RATED_PROPERTIES:
+        langs = {lang: (property_rating(prop, e), e["loc"]) for lang, e in inputs.get(prop, {}).items()}
+        weighted = [(r, w) for r, w in langs.values() if r is not None and w]
+        rating = sum(r * w for r, w in weighted) / sum(w for _r, w in weighted) if weighted else None
+        props[prop] = {"rating": rating,
+                       "languages": {lg: {"rating": r, "loc": w} for lg, (r, w) in langs.items() if r is not None}}
+    subs = {}
+    for sub, members in SUBCHARACTERISTICS.items():
+        subs[sub] = power_mean([props[m]["rating"] for m in members], 1)
+    overall = {p: power_mean(list(subs.values()), p) for p in EXPONENTS}
+    return {"properties": props, "subcharacteristics": subs, "overall": overall}
+
+
+def fix_loc(prop, entry, n):
+    """`entry` with n exposed lines brought to low risk, worst band first: the
+    lines above the highest bound go before those above the next one down.
+    Fixed duplication is removed code, so it also leaves the total."""
+    above = list(entry["above"])
+    exclusive = [a - b for a, b in zip(above, above[1:] + [0])]
+    left = n
+    for i in reversed(range(len(exclusive))):
+        take = min(left, exclusive[i])
+        exclusive[i] -= take
+        left -= take
+    cumulative = [sum(exclusive[i:]) for i in range(len(exclusive))]
+    total = entry["loc"] - (n - left if prop == "duplication" else 0)
+    return {"loc": total, "above": cumulative}
+
+
+def with_entry(inputs, prop, lang, entry):
+    out = {p: dict(v) for p, v in inputs.items()}
+    out[prop][lang] = entry
+    return out
+
+
+def levers(inputs, base=None):
+    """For every property and language: how much the overall rating rises when
+    the next LEVER_LOC exposed lines (or all of them, when fewer) move to low
+    risk, worst band first (a finite difference, under each exponent), and the
+    lines needed to raise the property by 0.5. Ranked by that gain under each
+    exponent and listed by the sum of both ranks; "sure" when a lever is in the
+    top SURE_TOP under every exponent."""
+    base = base or rate_inputs(inputs)
+    if all(base["overall"][p] is None for p in EXPONENTS):
+        return []
+    out = []
+    for prop in RATED_PROPERTIES:
+        for lang, entry in sorted(inputs.get(prop, {}).items()):
+            if "value" in entry or not entry.get("loc") or entry["above"][0] <= 0:
+                continue
+            n = min(LEVER_LOC, entry["above"][0])
+            after = rate_inputs(with_entry(inputs, prop, lang, fix_loc(prop, entry, n)))
+            out.append({"property": prop, "language": lang, "fixable_loc": entry["above"][0], "fixed_loc": n,
+                        "gain_per_kloc": {p: after["overall"][p] - base["overall"][p] for p in EXPONENTS},
+                        "loc_for_half_star": loc_for_half_star(inputs, prop, lang,
+                                                               base["properties"][prop]["rating"])})
+    for p in EXPONENTS:
+        for rank, lever in enumerate(sorted(out, key=lambda lv: (-lv["gain_per_kloc"][p], lv["property"],
+                                                                 lv["language"])), 1):
+            lever.setdefault("rank", {})[p] = rank
+    for lever in out:
+        lever["sure"] = all(lever["rank"][p] <= SURE_TOP for p in EXPONENTS)
+    return sorted(out, key=lambda lv: (sum(lv["rank"].values()), lv["rank"][-1]))
+
+
+def loc_for_half_star(inputs, prop, lang, before):
+    """Fewest lines fixed in one language that raise the property's
+    cross-language rating by 0.5, or None when fixing all of them does not."""
+    entry = inputs[prop][lang]
+    target = min(before + 0.5, 5.5)
+
+    def reached(n):
+        after = rate_inputs(with_entry(inputs, prop, lang, fix_loc(prop, entry, n)))
+        return after["properties"][prop]["rating"] >= target - 1e-9
+    high = entry["above"][0]
+    if not reached(high):
+        return None
+    low = 0
+    while high - low > 1:
+        mid = (low + high) // 2
+        if reached(mid):
+            high = mid
+        else:
+            low = mid
+    return high
+
+
+def rating_estimate(report):
+    """The rating section of a report: every level, the range, the levers."""
+    inputs = rating_inputs(report)
+    rated = rate_inputs(inputs)
+    overall = [v for v in rated["overall"].values() if v is not None]
+
+    def r2(x):
+        return None if x is None else round(x, 2)
+    return {
+        "note": "Estimate of SIG's maintainability rating, 0.5 to 5.5. SIG publishes 4-star limits only and "
+                "no power-mean exponent, so the overall rating is a range over p = 1 and p = -1.",
+        "overall": {"p1": r2(rated["overall"][1]), "p-1": r2(rated["overall"][-1]),
+                    "range": [r2(min(overall)), r2(max(overall))] if overall else None},
+        "subcharacteristics": {k: r2(v) for k, v in rated["subcharacteristics"].items()},
+        "properties": {k: {"rating": r2(v["rating"]),
+                           "languages": {lg: {"rating": r2(x["rating"]), "loc": x["loc"]}
+                                         for lg, x in v["languages"].items()}}
+                       for k, v in rated["properties"].items()},
+        "levers": [{"property": lv["property"], "language": lv["language"],
+                    "fixable_loc": lv["fixable_loc"], "fixed_loc": lv["fixed_loc"],
+                    "gain_per_kloc": {"p1": round(lv["gain_per_kloc"][1], 4),
+                                      "p-1": round(lv["gain_per_kloc"][-1], 4)},
+                    "rank": {"p1": lv["rank"][1], "p-1": lv["rank"][-1]},
+                    "sure": lv["sure"], "loc_for_half_star": lv["loc_for_half_star"]}
+                   for lv in levers(inputs, rated)],
+    }
+
+
 def pct(x):
     return f"{x * 100:.1f}%"
+
+
+def rating_markdown(rating, top=5):
+    """The rating estimate as markdown lines: range, sub-characteristics, properties, levers."""
+    if not rating or not rating["overall"]["range"]:
+        return []
+
+    def r(x):
+        return "n/a" if x is None else f"{x:.2f}"
+    lo, hi = rating["overall"]["range"]
+    out = ["", f"Estimated SIG maintainability rating: {lo:.2f} to {hi:.2f} "
+               f"(power mean p = -1 {r(rating['overall']['p-1'])}, p = 1 {r(rating['overall']['p1'])}). "
+               "An estimate: SIG publishes only the 4-star limits and no exponent.", "",
+           "Sub-characteristics: " + ", ".join(f"{k} {r(v)}" for k, v in rating["subcharacteristics"].items()) + ".",
+           "Properties: " + ", ".join(f"{k.replace('_', ' ')} {r(v['rating'])}"
+                                      for k, v in rating["properties"].items()) + "."]
+    if rating["levers"]:
+        out += ["", f"Levers: the overall gain from fixing the next {LEVER_LOC:,} exposed lines (fewer when fewer "
+                    "exist), worst band first.", "",
+                "| lever | fixable lines | gain, p = 1 / p = -1 | lines for +0.5 | sure |", "|---|---|---|---|---|"]
+        for lv in rating["levers"][:top]:
+            half = (f"{lv['loc_for_half_star']:,}" if lv["loc_for_half_star"] is not None
+                    else f"not by {lv['language']} alone")
+            out.append(f"| {lv['property'].replace('_', ' ')} ({lv['language']}) | {lv['fixable_loc']:,} | "
+                       f"{lv['gain_per_kloc']['p1']:+.4f} / {lv['gain_per_kloc']['p-1']:+.4f} | {half} | "
+                       f"{'yes' if lv['sure'] else 'no'} |")
+    return out
 
 
 def markdown(report):
@@ -1002,6 +1322,9 @@ def markdown(report):
                 f"density {e['communication_density']}, violation degree {e['violation_degree']}."]
     checks = checks_of(report)
     out += ["", f"{sum(1 for _c, ok in checks if ok)} of {len(checks)} {report['stars']} checks met. ✗ marks a miss."]
+    out += rating_markdown(report.get("rating"))
+    for assumption in report.get("assumptions", []):
+        out += ["", f"Assumption: {assumption}"]
     if report["skipped_files"]:
         out += ["", f"{len(report['skipped_files'])} file(s) lizard could not read, NOT measured: "
                 + ", ".join(s["file"] for s in report["skipped_files"][:10])]

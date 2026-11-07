@@ -864,10 +864,13 @@ fi
 #                          openregister alone keeps 16.5% of its PHP in units
 #                          over 60 lines. Per-repo opt-in:
 #                          HYDRA_GATE_SIG_MAINTAINABILITY_BLOCKING=1.
+#   gate-123 sig-floor - only its Vue, JS and TS file findings warn, because
+#                          lizard misparses those languages until the fixed
+#                          release (terryyin/lizard#549). PHP findings block.
 #
 # All of them are worked down per app and flipped back individually; the
 # findings print on every run either way, so none is hidden.
-_ADVISORY_ALLOWED_GATES="7 19 46 112 113 114 115 116 122"
+_ADVISORY_ALLOWED_GATES="7 19 46 112 113 114 115 116 122 123"
 
 _runner_src="${GF_PKG_ROOT}/scripts/run-hydra-gates.sh"
 _warn_gates="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_runner_src}" \

@@ -30,6 +30,12 @@
      entanglement below 4 stars); HYDRA_GATE_SIG_PROFILE picks
      the profile, --profile overrides it, four-star is the default, and an
      unknown profile is exit 2.
+  7. RATING: the interpolation reproduces the worked example of Alves,
+     Correia and Visser 2011 (ArgoUML, 2.68); p = 1 is the plain mean of the
+     sub-characteristics and p = -1 is never higher; levers are ordered by
+     their gain on a fixture; a language with no code, a single language,
+     and a report without independence or entanglement are rated; a report
+     carries the estimate.
 
 Run: python3 scripts/lib/test_check_sig_maintainability.py
 """
@@ -518,6 +524,10 @@ class Profiles(unittest.TestCase):
         self.assertEqual(self.above_30(report)["stars"], 4)
         self.assertEqual(php["duplication"]["stars"], 5)
         self.assertIn(php["unit_size"][0]["stars"], (1, 2, 3, 4, 5))
+        self.assertEqual(php["unit_size"][1]["loc"], 44)
+        rating = report["rating"]
+        self.assertLessEqual(rating["overall"]["range"][0], rating["overall"]["range"][1])
+        self.assertIn("Estimated SIG maintainability rating", out)
         self.assertIn("4★", out)
 
     def test_default_is_four_star(self):
@@ -639,6 +649,231 @@ class Structure(unittest.TestCase):
             self.assertEqual(deps["src/api/routers/documents.py"], {"src/api/utils/crypto.py"})
         finally:
             repo.close()
+
+
+def rated_report(langs, structure=None):
+    """A report with the fields rating_inputs() reads. `langs` maps a language
+    to (unit_loc, size, complexity, interfacing, (code_lines, redundant)),
+    each property a triple of cumulative shares."""
+    out = {"languages": {}, "structure": {}}
+    for lang, (loc, size, ccn, params, dup) in langs.items():
+        out["languages"][lang] = {
+            "unit_loc": loc,
+            "unit_size": [{"share": x} for x in size],
+            "unit_complexity": [{"share": x} for x in ccn],
+            "unit_interfacing": [{"share": x} for x in params],
+            "duplication": {"code_lines": dup[0], "redundant_lines": dup[1]},
+        }
+    for lang, (loc, coupling, hidden, degree) in (structure or {}).items():
+        out["structure"][lang] = {"module_loc": loc, "module_coupling": [{"share": x} for x in coupling],
+                                  "component_independence": {"hidden_share": hidden},
+                                  "component_entanglement": {"violation_degree": degree}}
+    return out
+
+
+GOOD = (10000, (.30, .10, .02), (.10, .03, .0), (.10, .02, .0), (10000, 200))
+
+
+def crossing_sfc(name):
+    """A Vue file that shares with its twins only the lines around the
+    script/style boundary: 3 code lines before it, 3 after."""
+    return (f"<script>\nconst {name} = 1\nexport const {name}2 = {name}\n"
+            "shared.first()\nshared.second()\nshared.third()\n</script>\n\n"
+            "<style scoped>\n.same-one { color: red; }\n.same-two { color: red; }\n.same-three { color: red; }\n"
+            f".{name} {{ color: blue; }}\n</style>\n")
+
+
+class VuePieces(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="gate122-vue-")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def profile(self, texts):
+        for rel, text in texts.items():
+            with open(os.path.join(self.dir, rel), "w") as fh:
+                fh.write(text)
+        return sig.duplication_profile(self.dir, [], {rel: "vue" for rel in texts})["vue"][0]
+
+    def pieces(self, text):
+        lines = text.splitlines()
+        return [[lines[n - 1].strip() for n in piece]
+                for piece in sig.sfc_pieces(lines, sig.code_lines(text, "vue"))]
+
+    def test_a_window_does_not_span_script_and_style(self):
+        row = self.profile({"A.vue": crossing_sfc("a"), "B.vue": crossing_sfc("b")})
+        self.assertEqual(row["redundant_lines"], 0)
+
+    def test_the_same_lines_are_a_clone_when_no_block_boundary_separates_them(self):
+        # Control: the shared lines of crossing_sfc() in one block, so the fixture bites.
+        shared = ("shared.first()\nshared.second()\nshared.third()\n"
+                  ".same-one { color: red; }\n.same-two { color: red; }\n.same-three { color: red; }\n")
+        row = self.profile({"A.vue": f"<script>\nconst a = 1\n{shared}</script>\n",
+                            "B.vue": f"<script>\nconst b = 2\n{shared}</script>\n"})
+        self.assertEqual(row["redundant_lines"], 6)
+
+    def test_a_clone_inside_one_block_still_counts(self):
+        body = "".join(f"  step{i}()\n" for i in range(6))
+        row = self.profile({"A.vue": f"<script>\nconst a = 1\n{body}</script>\n",
+                            "B.vue": f"<script>\nconst b = 2\n{body}</script>\n"})
+        self.assertEqual(row["redundant_lines"], 6)
+
+    def test_a_window_does_not_span_template_and_script(self):
+        tail = "".join(f"  <p>{i}</p>\n" for i in range(3))
+        head = "".join(f"step{i}()\n" for i in range(3))
+        row = self.profile({"A.vue": f"<template>\n  <a />\n{tail}</template>\n<script>\n{head}a()\n</script>\n",
+                            "B.vue": f"<template>\n  <b />\n{tail}</template>\n<script>\n{head}b()\n</script>\n"})
+        self.assertEqual(row["redundant_lines"], 0)
+
+    def test_blocks_are_pieces_and_their_tags_belong_to_none(self):
+        text = ("<template>\n  <div>\n    <template #x>\n      <a />\n    </template>\n  </div>\n</template>\n"
+                "<script setup>\nconst a = 1\n</script>\n<style src=\"./a.css\"></style>\n"
+                "<style lang=\"scss\" scoped>\n.a { top: 0; }\n</style>\n")
+        self.assertEqual(self.pieces(text), [
+            ["<div>", "<template #x>", "<a />", "</template>", "</div>"], ["const a = 1"], [".a { top: 0; }"]])
+
+    def test_boundaries_hold_when_the_code_lines_leave_the_tags_out(self):
+        lines = ["<script>", "a()", "</script>", "<style>", ".a { top: 0; }", "</style>"]
+        self.assertEqual(sig.sfc_pieces(lines, {2, 5}), [[2], [5]])
+
+    def test_other_languages_keep_one_piece(self):
+        lines = [f"$a{i} = {i};" for i in range(8)]
+        self.assertEqual(len(list(sig.dup_windows(lines, set(range(1, 9)), "php"))), 3)
+
+    def test_the_denominator_keeps_every_code_line(self):
+        row = self.profile({"A.vue": crossing_sfc("a")})
+        self.assertEqual(row["code_lines"], len(sig.code_lines(crossing_sfc("a"), "vue")))
+
+
+class VueAssumption(unittest.TestCase):
+    def report(self, rel, text):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        repo.write(rel, text)
+        repo.commit("app")
+        return sig.build_report(repo.dir, LIZARD, None)
+
+    def test_a_report_with_vue_states_the_assumption(self):
+        report = self.report("src/A.vue", crossing_sfc("a"))
+        self.assertEqual(report["assumptions"], [sig.VUE_PIECES_ASSUMPTION])
+        self.assertIn(f"Assumption: {sig.VUE_PIECES_ASSUMPTION}", sig.markdown(report))
+        self.assertIn("until a real Sigrid scan confirms it", sig.VUE_PIECES_ASSUMPTION)
+
+    def test_a_report_without_vue_states_none(self):
+        report = self.report("lib/A.php", php_class("A", [php_method("a")]))
+        self.assertEqual(report["assumptions"], [])
+        self.assertNotIn("Assumption:", sig.markdown(report))
+
+
+class Rating(unittest.TestCase):
+    def test_interpolation_reproduces_alves_2011_argouml(self):
+        # Table III (b), McCabe: cumulative caps for moderate / high / very high.
+        table = {5: (.179, .099, .033), 4: (.234, .169, .067), 3: (.313, .238, .106), 2: (.391, .298, .167)}
+        profile = (.258, .187, .099)
+        ratings = [sig.interpolate(v, {lvl: table[lvl][i] for lvl in table}) for i, v in enumerate(profile)]
+        self.assertAlmostEqual(min(ratings), 2.68, places=2)
+        self.assertEqual(ratings.index(min(ratings)), 2)
+
+    def test_interpolation_edges(self):
+        caps = sig.rating_caps("duplication")
+        self.assertEqual(sig.interpolate(0, caps), 5.5)
+        self.assertAlmostEqual(sig.interpolate(caps[4], caps), 3.5)
+        self.assertAlmostEqual(sig.interpolate(caps[2], caps), 1.5)
+        self.assertAlmostEqual(sig.interpolate(1.0, caps), 0.5)
+        self.assertAlmostEqual(sig.interpolate((caps[2] + 1) / 2, caps), 1.0)
+        values = [sig.interpolate(x / 1000, caps) for x in range(1001)]
+        self.assertEqual(values, sorted(values, reverse=True))
+
+    def test_p1_is_the_plain_mean_and_harmonic_is_never_higher(self):
+        self.assertAlmostEqual(sig.power_mean([1.0, 2.0, 4.5], 1), 2.5)
+        self.assertAlmostEqual(sig.power_mean([1.0, 2.0, 4.0], -1), 3 / (1 + .5 + .25))
+        report = rated_report({"php": GOOD, "vue": (2000, (.6, .4, .2), (.3, .2, .05), (.3, .1, .03), (3000, 900))},
+                              {"php": (8000, (.05, .02, .01), .80, .10)})
+        rated = sig.rate_inputs(sig.rating_inputs(report))
+        subs = list(rated["subcharacteristics"].values())
+        self.assertAlmostEqual(rated["overall"][1], sum(subs) / len(subs))
+        self.assertLessEqual(rated["overall"][-1], rated["overall"][1])
+        modifiability = [rated["properties"][p]["rating"] for p in ("duplication", "unit_complexity", "module_coupling")]
+        self.assertAlmostEqual(rated["subcharacteristics"]["modifiability"], sum(modifiability) / 3)
+
+    def test_languages_are_weighted_by_their_code(self):
+        report = rated_report({"php": GOOD, "vue": (2000, (.6, .4, .2), (.3, .2, .05), (.3, .1, .03), (3000, 900))})
+        prop = sig.rate_inputs(sig.rating_inputs(report))["properties"]["unit_size"]
+        php, vue = prop["languages"]["php"]["rating"], prop["languages"]["vue"]["rating"]
+        self.assertAlmostEqual(prop["rating"], (php * 10000 + vue * 2000) / 12000)
+
+    def test_a_language_without_code_carries_no_weight(self):
+        alone = sig.rate_inputs(sig.rating_inputs(rated_report({"php": GOOD})))
+        empty = (0, (0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0))
+        both = sig.rate_inputs(sig.rating_inputs(rated_report({"php": GOOD, "typescript": empty})))
+        self.assertEqual(alone["overall"], both["overall"])
+        self.assertNotIn("typescript", both["properties"]["unit_size"]["languages"])
+
+    def test_a_single_language_is_its_own_property_rating(self):
+        rated = sig.rate_inputs(sig.rating_inputs(rated_report({"php": GOOD})))
+        for prop in ("unit_size", "unit_complexity", "unit_interfacing", "duplication"):
+            self.assertEqual(rated["properties"][prop]["rating"], rated["properties"][prop]["languages"]["php"]["rating"])
+
+    def test_no_structure_leaves_independence_and_entanglement_out(self):
+        rated = sig.rate_inputs(sig.rating_inputs(rated_report({"php": GOOD})))
+        for prop in ("module_coupling", "component_independence", "component_entanglement"):
+            self.assertIsNone(rated["properties"][prop]["rating"])
+        self.assertIsNone(rated["subcharacteristics"]["modularity"])
+        self.assertEqual(rated["subcharacteristics"]["testability"], rated["properties"]["unit_complexity"]["rating"])
+        self.assertIsNotNone(rated["overall"][-1])
+
+    def test_independence_and_entanglement_are_rated_below_four(self):
+        report = rated_report({"php": GOOD}, {"php": (10000, (0, 0, 0), .50, .20)})
+        self.assertEqual(sig.stars_of("component_independence", .50), "<4")
+        props = sig.rate_inputs(sig.rating_inputs(report))["properties"]
+        self.assertLess(props["component_independence"]["rating"], 1.5)
+        self.assertGreater(props["component_independence"]["rating"], 0.5)
+        self.assertLess(props["component_entanglement"]["rating"], 2.5)
+        self.assertGreater(props["component_entanglement"]["rating"], 1.5)
+
+    def test_levers_are_ordered_by_their_gain(self):
+        # php duplication is the worst property (30% redundant, 1 star), but on
+        # the flat 1-star slope 1,000 lines move it little; vue unit size and
+        # php unit complexity sit on steeper slopes and lead under both exponents.
+        bad_dup = (10000, (.30, .10, .02), (.10, .03, .0), (.10, .02, .0), (10000, 3000))
+        report = rated_report({"php": bad_dup, "vue": (1500, (.6, .4, .2), (.1, .03, 0), (.1, .02, 0), (1500, 0))},
+                              {"php": (10000, (0, 0, 0), 1.0, .05)})
+        inputs = sig.rating_inputs(report)
+        self.assertLess(sig.rate_inputs(inputs)["properties"]["duplication"]["rating"], 2)
+        levers = sig.levers(inputs)
+        order = [(lv["property"], lv["language"]) for lv in levers]
+        self.assertEqual(set(order[:2]), {("unit_size", "vue"), ("unit_complexity", "php")})
+        self.assertEqual(order[4], ("duplication", "php"))
+        self.assertTrue(levers[0]["sure"] and levers[1]["sure"])
+        self.assertFalse(levers[4]["sure"])
+        for p in sig.EXPONENTS:
+            gains = [lv["gain_per_kloc"][p] for lv in sorted(levers, key=lambda lv: lv["rank"][p])]
+            self.assertEqual(gains, sorted(gains, reverse=True))
+            self.assertTrue(all(g > 0 for g in gains))
+        for lv in levers:
+            self.assertEqual(lv["sure"], max(lv["rank"].values()) <= sig.SURE_TOP)
+        vue = next(lv for lv in levers if order[levers.index(lv)] == ("unit_size", "vue"))
+        self.assertEqual(vue["fixed_loc"], 900)
+        self.assertNotIn("component_entanglement", {p for p, _l in order})
+
+    def test_loc_for_half_star_is_the_fewest_lines(self):
+        report = rated_report({"php": (10000, (.30, .10, .02), (.10, .03, .0), (.10, .02, .0), (10000, 1500))})
+        inputs = sig.rating_inputs(report)
+        before = sig.rate_inputs(inputs)["properties"]["duplication"]["rating"]
+        n = sig.loc_for_half_star(inputs, "duplication", "php", before)
+        self.assertIsNotNone(n)
+
+        def after(k):
+            fixed = sig.with_entry(inputs, "duplication", "php", sig.fix_loc("duplication", inputs["duplication"]["php"], k))
+            return sig.rate_inputs(fixed)["properties"]["duplication"]["rating"]
+        self.assertGreaterEqual(after(n), before + 0.5 - 1e-9)
+        self.assertLess(after(n - 1), before + 0.5 - 1e-9)
+
+    def test_fixing_takes_the_worst_band_first(self):
+        entry = {"loc": 1000, "above": [500, 300, 100]}
+        self.assertEqual(sig.fix_loc("unit_size", entry, 150), {"loc": 1000, "above": [350, 150, 0]})
+        self.assertEqual(sig.fix_loc("duplication", {"loc": 1000, "above": [100]}, 40), {"loc": 960, "above": [60]})
 
 
 if __name__ == "__main__":
