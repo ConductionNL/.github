@@ -1,19 +1,18 @@
 ---
-title: SIG scores
-sidebar_label: SIG scores
-description: Our own estimate, per app and per check, of the maintainability stars Sigrid will give the fleet.
+title: Quality matrix
+sidebar_label: Quality matrix
+description: One matrix per app with our estimate of the SIG stars, our own banded measures and every gate.
 ---
 
-import SigMatrix, {SigFloors} from '@site/src/components/SigMatrix';
+import SigMatrix, {SigBeyond, SigFloors, SigLevers} from '@site/src/components/SigMatrix';
 import matrix from '@site/src/data/sig-matrix.json';
 
-# SIG scores
+# Quality matrix
 
-This page is our own measurement, not Sigrid. We run gate 122
-(`check_sig_maintainability.py --profile five-star`) on each app's
-`development` branch. The result estimates what the Software Improvement Group
-(SIG) will say in Sigrid. Sigrid uses its own parsers and scoping, so its
-numbers can differ.
+This page is our own measurement, not Sigrid. We measure each app's
+`development` branch with our gates and tools. The SIG rows estimate what the
+Software Improvement Group (SIG) will say in Sigrid. Sigrid uses its own
+parsers and scoping, so its numbers can differ.
 
 **Measured on {matrix.measured}.** The commit under each app name is the head
 that was measured.
@@ -29,9 +28,21 @@ rise from 1 November.
 
 ## How to read the matrix
 
-Each column is an app. Each row is one SIG check for one language. A cell shows
-the star level the check earns, with the measured share under it. Hover a cell
-for the value and both limits.
+Each column is an app. The rows come in five sections.
+
+1. **Estimated SIG rating.** Our estimate of the rating Sigrid would give,
+   from 0.5 to 5.5. The overall row is a range. Below it are the five
+   sub-characteristics and the seven properties. All of it is an estimate.
+2. **SIG maintainability.** Every check of gate 122, per language, rated from
+   1 to 5 stars.
+3. **SIG's other models.** Open Source Health and Architecture Quality, where
+   we can measure them. SIG publishes only the 4-star value, so a cell says
+   met (4★) or missed (&lt;4).
+4. **Our own measures.** Tests, debt, security, and accessibility and UI. We
+   define these bands ourselves. The table below the matrix gives each band's
+   basis.
+5. **Gates per category.** Each row shows the gates that pass out of the gates
+   that apply, and the findings of all of them. Open a row to see its gates.
 
 - **Unit size, complexity and interfacing:** the share of unit code above the
   bound, for example the code in units longer than 15 lines.
@@ -44,67 +55,194 @@ for the value and both limits.
 - **Component independence:** the share of code that no other component calls.
   Higher is better here. For every other check, lower is better.
 
-The 4-star limits come from the SIG/TUV NORD CERT Guidance for Producers v17.0.
-SIG publishes no 5-star limits, so our 5-star yardstick is half of each 4-star
-limit. The guidance also gives no limits for 3, 2 or 1 stars. A check that
-misses 4 stars is therefore shown as `<4`, not as an estimated lower star.
+A cell shows the stars and the measured value. Hover a cell for the details.
+An empty cell (`·`) means the app has no such code or the gate does not apply.
 
-The totals at the top count the checks per app. An app is only measured on the
-languages it contains, so the totals differ between apps. The percentages and
-the average above the matrix are our own figures, not SIG scores.
+### SIG maintainability bands
 
-The matrix scrolls in both directions. Use the search box to show only the apps
-you want to compare.
+The 4-star limits come from the SIG/TÜV NORD CERT Guidance for Producers
+v18.1, dated 31 March 2026. It is the 2026 model. Volume no longer counts.
 
-A cell with a ring and a lock is floored. Gate 123 holds that check: the app
-met it when its floor was recorded, and a change that loses it fails. The
-"floored checks" row counts them and shows the commit the floor was recorded
-at. Floors come from each app's `.github/sig-floor.json` on `development`, read
-on {matrix.floors.read}. They can be newer than the measurement, so a floored
-cell can still show `<4` until the next measurement.
+SIG publishes no other level. We derive the 5, 3 and 2-star limits ourselves.
+The only public table of all levels is Alves, Correia and Visser (2011). We
+take its distance between each band and the 4-star band. We apply that ratio
+to the v18.1 limits. Duplication uses the band ratios of Heitlager, Kuipers
+and Visser (2007). Anything worse than 2 stars is 1 star.
+
+| Check | 5★ | 4★ (v18.1) | 3★ | 2★ |
+|---|---|---|---|---|
+| Unit size, code in units over 15 / 30 / 60 lines | 36.0 / 17.0 / 5.5% | 48.0 / 24.2 / 9.1% | 63.0 / 34.7 / 15.4% | 84.7 / 49.0 / 25.3% |
+| Unit complexity, McCabe over 5 / 10 / 25 | 15.8 / 4.4 / 0.5% | 20.7 / 7.5 / 1.1% | 27.7 / 10.6 / 1.7% | 34.6 / 13.2 / 2.7% |
+| Unit interfacing, 3+ / 5+ / 7+ parameters | 12.5 / 2.5 / 0.6% | 15.4 / 3.4 / 0.9% | 18.3 / 4.8 / 1.4% | 26.0 / 7.2 / 2.1% |
+| Module coupling, fan-in over 10 / 20 / 50 | 7.4 / 3.3 / 1.2% | 9.7 / 5.3 / 1.8% | 10.7 / 5.9 / 2.3% | 13.0 / 8.0 / 3.8% |
+| Duplication | 3.5% | 5.8% | 11.6% | 23% |
+| Component independence | at least 97.3% | at least 94.5% | no band | no band |
+| Component entanglement | at most 0.0375 | at most 0.075 | no band | no band |
+
+The 2011 table was calibrated on a 20/20/20/20/20 spread. SIG now uses
+5/30/30/30/5. So the real 5-star limits are probably stricter, and the real
+2-star limits looser.
+
+For independence and entanglement no public source gives other levels. We set
+5 stars at half the 4-star exposure. A value below 4 stars shows as `<4`.
+Entanglement is our estimate from the violation degree, because SIG
+normalises it against benchmark figures it does not publish. It is shown, but
+gate 123 does not floor it.
+
+### How we estimate the SIG rating
+
+SIG rates each app from 0.5 to 5.5 stars. Our estimate follows SIG's own
+steps, from the checks up to one number. Where SIG publishes nothing, we
+made a choice. Each choice is listed under assumptions.
+
+1. **Check.** A share of code between two star limits gets a rating between
+   them, on a straight line. A share at the 4-star limit rates 3.5. This is
+   equation 1 of Alves, Correia and Visser (2011). We test it on the paper's
+   own example, which rates 2.68.
+2. **Property.** A property with three checks takes its worst check. Same
+   paper.
+3. **Languages.** Each language gets its own property rating. We weight them
+   by the code each property measures in that language.
+4. **Sub-characteristic.** The plain mean of its properties. Analysability:
+   duplication and unit size. Modifiability: duplication, unit complexity and
+   module coupling. Testability: unit complexity and component independence.
+   Modularity: module coupling, component independence and component
+   entanglement. Reusability: unit size and unit interfacing.
+5. **Overall.** The power mean of the five sub-characteristics. SIG switched
+   to a power mean in 2026 but does not publish the exponent. We show two:
+   p = 1, the plain mean, and p = -1, the harmonic mean. The harmonic mean
+   pulls harder towards the weakest sub-characteristic. The real rating
+   probably sits between them.
+
+Rounding to stars follows SIG: half up, and 5.5 is still 5 stars. A rating
+row is coloured by its stars and shows the value. The overall row is coloured
+by the lower end of its range.
+
+#### Sources
+
+- SIG, [Key changes in the 2026 SIG quality models](https://docs.sigrid-says.com/reference/quality-model-documents/2026-model-changes.html):
+  volume is removed, and the overall rating is now a power mean.
+- SIG/TÜV NORD CERT, [Guidance for Producers v18.1](https://www.softwareimprovementgroup.com/wp-content/uploads/SIG-TUViT-Evaluation-Criteria-Trusted-Product-Maintainability.pdf),
+  31 March 2026: the 4-star limits, per language.
+- SIG/TÜViT, [Evaluation Criteria Trusted Product Maintainability v12.0](http://web.archive.org/web/20220302065632/https://www.softwareimprovementgroup.com/wp-content/uploads/2020-SIG-TUViT-Evaluation-Criteria-Trusted-Product-Maintainability.pdf),
+  2020: which properties feed which sub-characteristic, and the order of the steps.
+- Alves, Correia and Visser, [Benchmark-based aggregation of metrics to ratings](http://web.archive.org/web/2020/http://wiki.di.uminho.pt/twiki/pub/Personal/Tiago/Publications/mensura11-alves.pdf),
+  IWSM/Mensura 2011: the interpolation and the minimum over checks.
+- Baggen, Correia, Schill and Visser, Standardized code quality benchmarking
+  for improving software maintainability, Software Quality Journal 2012: a
+  sub-characteristic is the mean of its properties, and the overall rating
+  the mean of the sub-characteristics.
+- SIG's own example in the 2026 changes page fits this: its overall 3.2 is the
+  mean of the sub-characteristics, not of the properties.
+
+#### Assumptions
+
+- **Exponent.** SIG does not publish it. We show p = 1 and p = -1 as a range.
+- **Weights.** Every property counts equally in its sub-characteristic, and
+  every sub-characteristic in the overall rating. SIG's criteria say a panel
+  of experts sets the weights, and SIG does not publish them. SIG's example
+  fits equal weights.
+- **Mapping in 2026.** The 2020 mapping, minus volume and component balance,
+  which the 2026 model no longer rates. Nothing is added.
+- **Power mean at the last step only.** The sub-characteristics stay a plain
+  mean. SIG's text does not say at which step the power mean applies.
+- **Languages.** Weighted by code. SIG says most results are weighted by code
+  volume, but not how languages combine.
+- **1 star.** Below the 2-star limit the rating falls on a straight line to
+  0.5 when all code is in the band. The paper does not give this end.
+- **Limits other than 4 stars.** Our derived 5, 3 and 2-star limits from the
+  table above.
+- **Independence and entanglement below 4 stars.** SIG rates them below 4
+  stars but publishes only the 4-star limit. For the estimate, each star level
+  doubles the allowed exposure. Independence: at least 97.25, 94.5, 89 and
+  78% hidden code for 5, 4, 3 and 2 stars. Entanglement: at most 0.0375,
+  0.075, 0.15 and 0.30. The check rows keep showing `<4`.
+- **Entanglement value.** We rate the violation degree. SIG combines it with
+  the communication density against benchmark maxima it does not publish.
+- **Missing structure.** Module coupling, independence and entanglement are
+  measured for PHP under `lib/` and for Python only. JavaScript, TypeScript
+  and Vue count for the unit checks and duplication.
+
+### Floors
+
+A cell with a ring and a lock is floored. Gate 123 holds that check. The app
+met it when its floor was recorded, and a change that loses it fails.
+Re-recording a floor never lowers it. A floored check that the v18.1 limits
+miss stays in the floor and shows `<4` until development meets it again.
 
 <SigMatrix />
+
+## Levers per app
+
+A lever is one property in one language. For each lever we move the next
+1,000 lines above a bound to low risk, worst band first, and rate the app
+again. The gain is how far the overall rating rises, under both exponents.
+When fewer than 1,000 lines are left, the gain is for the lines that are
+left.
+
+Lines for +0.5 is the fewest lines to fix in that language to raise the
+property by half a star. "Not by vue alone" means fixing every vue line is
+not enough, because the other languages hold the rating down.
+
+A lever is sure when it ranks in the top 3 under both exponents. The panel
+shows the top 5 of each app, ordered by their two ranks together. Start with
+a sure lever.
+
+<SigLevers />
+
+## What we add beyond SIG
+
+SIG rates maintainability, security, open source health and architecture. It
+does not rate tests, debt hidden in baselines, or accessibility. These are our
+own measures, with the reason we add each one and the basis of its bands.
+
+<SigBeyond />
+
+Spec coverage counts the methods gate 16 holds in scope, with and without an
+`@spec` tag. E2e coverage is gate 19's report over the scenarios that are not
+excluded. PHP coverage is the floor coverage-guard records on `development`.
+The gate rows come from a full-scope run of every gate on `development`.
 
 ## Floors and ratchets per app
 
 Besides the SIG floor, each app keeps its own floors and baselines on
 `development`. A baseline lists debt that may stay, so a lower count is
 better. A coverage floor is a minimum, so a higher value is better. A `·`
-means the app has no such file. Hover a cell for the file it came from. The
-commit under each app name is the `development` head that was read on
-{matrix.floors.read}.
+means the app has no such file. Hover a cell for the file it came from.
 
 <SigFloors />
 
 ## Refresh the data
 
-The matrix reads `website/src/data/sig-matrix.json`. A script writes that file
-from gate 122 reports.
+The matrix reads `website/src/data/sig-matrix.json`. One script writes it.
 
-1. Clone each app's `development` branch and run gate 122 on it in report mode.
-   Write one `<app>.json` per app into one directory:
-
-   ```bash
-   python3 hydra-gates/scripts/lib/check_sig_maintainability.py report <app-dir> \
-     --profile five-star --json <report-dir>/<app>.json
-   ```
-
-   The file name sets the column name, so name it after the app.
-2. Run the generator from the repository root:
+1. Clone each app's `development` branch into one directory, named after the
+   app.
+2. Run gate 122 in report mode on each clone:
 
    ```bash
-   python3 website/scripts/build-sig-matrix.py <report-dir> --date YYYY-MM-DD
+   python3 hydra-gates/scripts/lib/check_sig_maintainability.py report <clones>/<app> \
+     --json <report-dir>/<app>.json
    ```
 
-   Leave out `--date` to use the date of the newest report. The generator then
-   reads each app's floors and baselines from `development` through `gh api`,
-   so it needs a logged-in GitHub CLI. Add `--clones DIR` to read them from
-   local clones in `DIR/<app>` instead, or `--no-floors` to keep the floors
-   already in the file.
-3. Commit the new `sig-matrix.json`.
+3. Run all gates at full scope on each clone. The runner writes `gates.json`
+   into its log directory:
 
-The generator takes the limits from gate 122 itself, so the matrix follows any
-change to the profiles. It stops when its five-star count for an app differs
-from the count in the gate's own report.
+   ```bash
+   HYDRA_GATE_LOG_DIR=<gates-dir>/<app> bash hydra-gates/scripts/run-hydra-gates.sh --full <clones>/<app>
+   ```
+
+4. Run the generator from the repository root. It runs `composer audit` and
+   `npm audit` on the lockfiles, so it needs the network:
+
+   ```bash
+   python3 website/scripts/build-sig-matrix.py <report-dir> --clones <clones> --gates <gates-dir> --date YYYY-MM-DD
+   ```
+
+5. Commit the new `sig-matrix.json`.
+
+The generator takes the rating estimate and the star bands from gate 122 and the own bands from
+`website/scripts/quality_measures.py`. A change to either shows up in the
+matrix on the next refresh.
 
 Back to [app health](./app-health.md).

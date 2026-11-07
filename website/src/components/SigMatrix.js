@@ -2,12 +2,13 @@ import React, {useEffect, useRef, useState} from 'react';
 import matrix from '@site/src/data/sig-matrix.json';
 import styles from './SigMatrix.module.css';
 
-const pct = (share) => `${(share * 100).toFixed(1)}%`;
-
-const STAR_TEXT = {5: '5', 4: '4', below: '<4'};
-const STAR_CLASS = {5: styles.s5, 4: styles.s4, below: styles.below};
+const STAR_CLASS = {5: styles.s5, 4: styles.s4, 3: styles.s3, 2: styles.s2, 1: styles.s1, '<4': styles.below};
+const STATE_CLASS = {pass: styles.s4, fail: styles.below, warn: styles.s2, skip: styles.empty};
+const STATE_TEXT = {pass: 'passes', fail: 'fails', warn: 'warns', skip: 'did not run'};
 
 const wholePct = (part, total) => `${Math.round((part / total) * 100)}%`;
+const starText = (stars) => (stars === '<4' ? '<4' : `${stars}★`);
+const starLabel = (stars) => (stars === '<4' ? 'below 4 stars' : `${stars} star${stars === 1 ? '' : 's'}`);
 
 function useAppFilter() {
   const [query, setQuery] = useState('');
@@ -38,8 +39,8 @@ function FleetAverage() {
   const checks = apps.reduce((sum, app) => sum + app.checks, 0);
   return (
     <p className={styles.average}>
-      All {apps.length} apps: {four} of {checks} checks at 4 stars or better ({wholePct(four, checks)}).
-      This average is our own figure, not a SIG score.
+      All {apps.length} apps: {four} of {checks} SIG maintainability checks at 4 stars or better
+      ({wholePct(four, checks)}). This average is our own figure, not a SIG score.
     </p>
   );
 }
@@ -77,11 +78,6 @@ function Scroller({label, children}) {
   );
 }
 
-function limitText(row) {
-  const op = row.minimum ? 'at least' : 'at most';
-  return `4-star ${op} ${pct(row.four)}, 5-star ${op} ${pct(row.five)}`;
-}
-
 function Lock({label}) {
   return (
     <>
@@ -94,28 +90,42 @@ function Lock({label}) {
   );
 }
 
-function Cell({app, language, row}) {
-  const cell = row.cells[app];
-  const floored = (matrix.apps[app].floor?.checks || []).includes(row.id);
-  if (!cell) {
-    return (
-      <td className={styles.empty} title={`${app} has no ${language} code`}>
-        <span aria-hidden="true">·</span>
-        <span className={styles.srOnly}>no {language} code</span>
-      </td>
-    );
-  }
-  const floorText = floored ? ', floored by gate 123' : '';
-  const title = `${app}, ${language} ${row.label}: ${pct(cell.share)} (${limitText(row)})${floorText}`;
+function Empty({app, what}) {
   return (
-    <td
-      className={`${styles.cell} ${STAR_CLASS[cell.stars]} ${floored ? styles.floored : ''}`}
-      title={title}>
+    <td className={styles.empty} title={`${app}: ${what}`}>
+      <span aria-hidden="true">·</span>
+      <span className={styles.srOnly}>{what}</span>
+    </td>
+  );
+}
+
+function StarCell({app, row}) {
+  const cell = row.cells[app];
+  if (!cell) return <Empty app={app} what="not measured for this app" />;
+  const floored = (matrix.apps[app].floor?.checks || []).includes(row.id);
+  if (cell.stars === null || cell.stars === undefined) {
+    return <td title={`${app}, ${row.label}: ${cell.title || cell.text}`}><span className={styles.value}>{cell.text}</span></td>;
+  }
+  const title = `${app}, ${row.label}: ${cell.text}, ${starLabel(cell.stars)}`
+    + `${cell.title ? ` (${cell.title})` : ''}${floored ? ', floored by gate 123' : ''}`;
+  return (
+    <td className={`${styles.cell} ${STAR_CLASS[cell.stars]} ${floored ? styles.floored : ''}`} title={title}>
       <span className={styles.star}>
-        {STAR_TEXT[cell.stars]}
+        {starText(cell.stars)}
         {floored && <Lock label="floored" />}
       </span>
-      <span className={styles.value}>{pct(cell.share)}</span>
+      <span className={styles.value}>{cell.text}</span>
+    </td>
+  );
+}
+
+function StateCell({app, cell, what}) {
+  if (!cell) return <Empty app={app} what={what} />;
+  return (
+    <td className={`${styles.cell} ${STATE_CLASS[cell.state]}`} title={`${app}: ${cell.title}`}>
+      <span className={styles.star}>{cell.text}</span>
+      {cell.sub && <span className={styles.value}>{cell.sub}</span>}
+      {!cell.sub && <span className={styles.srOnly}>{STATE_TEXT[cell.state]}</span>}
     </td>
   );
 }
@@ -123,12 +133,65 @@ function Cell({app, language, row}) {
 function Legend() {
   return (
     <ul className={styles.legend}>
-      <li><span className={`${styles.swatch} ${styles.s5}`}>5</span> meets our 5-star yardstick, half of each 4-star limit</li>
-      <li><span className={`${styles.swatch} ${styles.s4}`}>4</span> meets the 4-star limit of the guidance</li>
-      <li><span className={`${styles.swatch} ${styles.below}`}>&lt;4</span> misses the 4-star limit; the guidance gives no limits for 3, 2 or 1 stars</li>
-      <li><span className={`${styles.swatch} ${styles.s4} ${styles.floored}`}>4<Lock /></span> floored: gate 123 refuses a change that loses this check</li>
-      <li><span className={`${styles.swatch} ${styles.empty}`}>·</span> the app has no code in this language</li>
+      {[5, 4, 3, 2, 1].map((s) => (
+        <li key={s}><span className={`${styles.swatch} ${STAR_CLASS[s]}`}>{s}★</span> {starLabel(s)}</li>
+      ))}
+      <li><span className={`${styles.swatch} ${styles.s3}`}>3★</span> in the estimated rating rows: a rating from 0.5 to 5.5, rounded to stars, value below</li>
+      <li><span className={`${styles.swatch} ${styles.below}`}>&lt;4</span> misses 4 stars where no lower band is published or estimated</li>
+      <li><span className={`${styles.swatch} ${styles.s4} ${styles.floored}`}>4★<Lock /></span> floored: gate 123 refuses a change that loses this check</li>
+      <li><span className={`${styles.swatch} ${styles.empty}`}>·</span> not measured for this app</li>
     </ul>
+  );
+}
+
+function SectionRow({title, span}) {
+  return (
+    <tr className={styles.section}>
+      <th scope="rowgroup" className={styles.sticky}>{title}</th>
+      <td colSpan={span} />
+    </tr>
+  );
+}
+
+function GroupRow({title, span}) {
+  return (
+    <tr className={styles.group}>
+      <th scope="rowgroup" className={styles.sticky}>{title}</th>
+      <td colSpan={span} />
+    </tr>
+  );
+}
+
+function CategoryRows({category, apps}) {
+  const [open, setOpen] = useState(false);
+  const id = `sig-${category.id.replace('.', '-')}`;
+  return (
+    <>
+      <tr>
+        <th scope="row" className={styles.sticky}>
+          <button
+            type="button"
+            className={styles.toggle}
+            aria-expanded={open}
+            aria-controls={id}
+            onClick={() => setOpen(!open)}>
+            <span aria-hidden="true">{open ? '▾' : '▸'}</span> {category.title}
+          </button>
+          <span className={styles.value}>gates passing of applicable, and findings</span>
+        </th>
+        {apps.map((app) => (
+          <StateCell key={app} app={app} cell={category.cells[app]} what="no applicable gate in this category" />
+        ))}
+      </tr>
+      {open && category.gates.map((gate, index) => (
+        <tr key={gate.id} id={index === 0 ? id : undefined} className={styles.child}>
+          <th scope="row" className={styles.sticky}>{gate.label}</th>
+          {apps.map((app) => (
+            <StateCell key={app} app={app} cell={gate.cells[app]} what="not applicable" />
+          ))}
+        </tr>
+      ))}
+    </>
   );
 }
 
@@ -141,11 +204,11 @@ export default function SigMatrix() {
       <Legend />
       <FleetAverage />
       <AppFilter filter={filter} />
-      <Scroller label={`SIG checks per app, measured ${matrix.measured}`}>
+      <Scroller label={`Quality matrix per app, measured ${matrix.measured}`}>
         <table className={styles.table}>
           <thead className={styles.head}>
             <tr>
-              <th scope="col" className={styles.sticky}>check</th>
+              <th scope="col" className={styles.sticky}>measure</th>
               {apps.map((app) => (
                 <th scope="col" key={app} className={styles.app}>
                   <a href={`https://github.com/ConductionNL/${app}/tree/${matrix.apps[app].head}`}>{app}</a>
@@ -157,7 +220,7 @@ export default function SigMatrix() {
           <tbody>
             <tr className={styles.total}>
               <th scope="row" className={styles.sticky}>
-                checks at 4 stars or better
+                SIG checks at 4 stars or better
                 <span className={styles.value}>and the share of the app's checks</span>
               </th>
               {apps.map((app) => (
@@ -168,7 +231,7 @@ export default function SigMatrix() {
               ))}
             </tr>
             <tr className={styles.total}>
-              <th scope="row" className={styles.sticky}>checks at 5 stars</th>
+              <th scope="row" className={styles.sticky}>SIG checks at 5 stars</th>
               {apps.map((app) => (
                 <td key={app}>{matrix.apps[app].five}/{matrix.apps[app].checks}</td>
               ))}
@@ -188,29 +251,125 @@ export default function SigMatrix() {
                 );
               })}
             </tr>
-            {matrix.groups.map((group) => (
-              <React.Fragment key={group.language}>
-                <tr className={styles.group}>
-                  <th scope="rowgroup" className={styles.sticky}>{group.language}</th>
-                  <td colSpan={span} />
-                </tr>
-                {group.rows.map((row) => (
-                  <tr key={row.id}>
-                    <th scope="row" className={styles.sticky}>
-                      {row.label}
-                      <span className={styles.value}>{limitText(row)}</span>
-                    </th>
-                    {apps.map((app) => (
-                      <Cell key={app} app={app} language={group.language} row={row} />
+            {matrix.sections.map((section) => (
+              <React.Fragment key={section.id}>
+                <SectionRow title={section.title} span={span} />
+                {section.groups.map((group) => (
+                  <React.Fragment key={`${section.id}-${group.title}`}>
+                    <GroupRow title={group.title} span={span} />
+                    {group.rows.map((row) => (
+                      <tr key={row.id}>
+                        <th scope="row" className={styles.sticky}>
+                          {row.label}
+                          <span className={styles.value}>{row.limits}</span>
+                        </th>
+                        {apps.map((app) => <StarCell key={app} app={app} row={row} />)}
+                      </tr>
                     ))}
-                  </tr>
+                  </React.Fragment>
                 ))}
               </React.Fragment>
+            ))}
+            <SectionRow title="Gates per category" span={span} />
+            {matrix.gateCategories.map((category) => (
+              <CategoryRows key={category.id} category={category} apps={apps} />
             ))}
           </tbody>
         </table>
       </Scroller>
     </div>
+  );
+}
+
+const leverName = (lever) => `${lever.property.replace(/_/g, ' ')} in ${lever.language}`;
+const gain = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(3)}`;
+
+function LeverTable({app}) {
+  const levers = matrix.levers[app] || [];
+  const range = matrix.apps[app].rating;
+  const id = `sig-levers-${app}`;
+  return (
+    <section className={styles.leverCard} aria-labelledby={id}>
+      <h3 id={id} className={styles.leverTitle}>
+        {app}
+        <span className={styles.value}>
+          {range ? `estimated rating ${range[0].toFixed(2)} to ${range[1].toFixed(2)}` : 'no rating estimate'}
+        </span>
+      </h3>
+      {levers.length === 0 ? <p>No lever: no measured code sits above a bound.</p> : (
+        <table className={styles.leverTable}>
+          <thead>
+            <tr>
+              <th scope="col">lever</th>
+              <th scope="col">gain from the next 1,000 lines, p = 1 / p = -1</th>
+              <th scope="col">lines for +0.5</th>
+              <th scope="col">sure</th>
+            </tr>
+          </thead>
+          <tbody>
+            {levers.map((lever) => (
+              <tr key={`${lever.property}-${lever.language}`}>
+                <th scope="row">
+                  {leverName(lever)}
+                  <span className={styles.value}>{lever.fixable_loc.toLocaleString('en')} lines above a bound</span>
+                </th>
+                <td>
+                  {gain(lever.gain_per_kloc.p1)} / {gain(lever.gain_per_kloc['p-1'])}
+                  {lever.fixed_loc < 1000 && (
+                    <span className={styles.value}>only {lever.fixed_loc.toLocaleString('en')} lines left</span>
+                  )}
+                </td>
+                <td>
+                  {lever.loc_for_half_star === null
+                    ? `not by ${lever.language} alone`
+                    : lever.loc_for_half_star.toLocaleString('en')}
+                </td>
+                <td>
+                  {lever.sure
+                    ? <span className={styles.sure}>✓ sure</span>
+                    : <span>no<span className={styles.srOnly}>, not in the top 3 under both exponents</span></span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+export function SigLevers() {
+  const filter = useAppFilter();
+  return (
+    <div className={styles.matrix}>
+      <AppFilter filter={filter} />
+      <div className={styles.levers}>
+        {filter.apps.map((app) => <LeverTable key={app} app={app} />)}
+      </div>
+    </div>
+  );
+}
+
+export function SigBeyond() {
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">measure</th>
+          <th scope="col">why we add it</th>
+          <th scope="col">basis of the bands</th>
+        </tr>
+      </thead>
+      <tbody>
+        {matrix.beyond.map((row) => (
+          <tr key={row.label}>
+            <th scope="row">{row.label}</th>
+            <td>{row.why}</td>
+            <td>{row.basis}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -244,17 +403,8 @@ export function SigFloors() {
                 </th>
                 {apps.map((app) => {
                   const cell = row.cells[app];
-                  if (!cell) {
-                    return (
-                      <td key={app} className={styles.empty} title={`${app} has no ${row.label}`}>
-                        <span aria-hidden="true">·</span>
-                        <span className={styles.srOnly}>none</span>
-                      </td>
-                    );
-                  }
-                  return (
-                    <td key={app} title={`${app}: ${cell.detail}`}>{String(cell.value)}</td>
-                  );
+                  if (!cell) return <Empty key={app} app={app} what="none" />;
+                  return <td key={app} title={`${app}: ${cell.detail}`}>{String(cell.value)}</td>;
                 })}
               </tr>
             ))}
