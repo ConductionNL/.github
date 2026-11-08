@@ -213,6 +213,9 @@ export default function SigMatrix() {
                 <th scope="col" key={app} className={styles.app}>
                   <a href={`https://github.com/ConductionNL/${app}/tree/${matrix.apps[app].head}`}>{app}</a>
                   <span className={styles.value}>{matrix.apps[app].head.slice(0, 8)}</span>
+                  {matrix.apps[app].measured && matrix.apps[app].measured !== matrix.measured && (
+                    <span className={styles.value}>measured {matrix.apps[app].measured}</span>
+                  )}
                 </th>
               ))}
             </tr>

@@ -269,7 +269,7 @@ def build(report_dir, clones, gates_dir, date):
                  for c in [row["cells"].get(a)] if c]
         apps[a] = {"head": r["head"], "checks": len(rated), "four": sum(1 for s in rated if s in (4, 5)),
                    "five": sum(1 for s in rated if s == 5), "gates_measured": a in gates,
-                   "rating": ratings[a]["overall"]["range"]}
+                   "rating": ratings[a]["overall"]["range"], "measured": date}
     beyond = [{"label": label, "why": why, "basis": basis}
               for _mid, (_s, label, _u, _h, _c, basis, why) in qm.BANDS.items()]
     return {
