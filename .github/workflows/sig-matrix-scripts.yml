@@ -1,0 +1,26 @@
+name: SIG matrix scripts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/scripts/**'
+      - 'hydra-gates/scripts/lib/check_sig_maintainability.py'
+      - '.github/workflows/sig-matrix-scripts.yml'
+  pull_request:
+    paths:
+      - 'website/scripts/**'
+      - 'hydra-gates/scripts/lib/check_sig_maintainability.py'
+      - '.github/workflows/sig-matrix-scripts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test the measures the SIG matrix publishes
+        run: python3 website/scripts/test_quality_measures.py

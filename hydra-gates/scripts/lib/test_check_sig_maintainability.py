@@ -575,6 +575,17 @@ class Profiles(unittest.TestCase):
 
 
 class Structure(unittest.TestCase):
+    def test_connected_pairs_counts_a_two_way_pair_once(self):
+        with tempfile.TemporaryDirectory() as app:
+            names = ("lib/A/a.php", "lib/B/b.php", "lib/C/c.php")
+            for name in names:
+                os.makedirs(os.path.dirname(os.path.join(app, name)), exist_ok=True)
+                with open(os.path.join(app, name), "w") as fh:
+                    fh.write("<?php\nclass X {}\n")
+            deps = {names[0]: {names[1]}, names[1]: {names[0]}, names[2]: {names[1]}}
+            e = sig.structure(app, {n: "php" for n in names}, deps)["component_entanglement"]
+        self.assertEqual((e["communication_lines"], e["connected_pairs"], e["connected_components"]), (3, 2, 3))
+
     def test_violation_degree_direct_cycle_takes_the_lighter_line(self):
         degree, kinds, _ex = sig.violation_degree({("A", "B"): 1, ("B", "A"): 10})
         self.assertEqual(kinds, {"cyclic": 1})
