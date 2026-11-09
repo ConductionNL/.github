@@ -14,7 +14,12 @@
     "",
     "`deprecated` apps are listed but NOT swept: their CI is not maintained, so",
     "a red is not a defect anyone intends to fix. They stay in the file so that",
-    "the decision is visible rather than the name simply being absent."
+    "the decision is visible rather than the name simply being absent.",
+    "",
+    "`main-branch` apps develop on `main` and release from `stableX.Y` branches",
+    "(ADR-122). Their `development` and `beta` are locked. The back-merge, Friday",
+    "merge and CVE release workflows leave them out: fixes reach their stable",
+    "branches through backport.yml, never by merging downward or upward."
   ],
   "swept": [
     "buildiq",
@@ -38,6 +43,9 @@
     "stackiq",
     "thematiq",
     "versioniq"
+  ],
+  "main-branch": [
+    "openregister"
   ],
   "deprecated": [
     "zaakafhandelapp"

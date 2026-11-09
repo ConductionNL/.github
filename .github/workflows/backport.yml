@@ -1,0 +1,199 @@
+name: Backport
+
+# Copies a merged fix from main onto a stableX.Y branch (ADR-122), the way
+# nextcloud/backportbot does:
+#
+#   /backport to stable2.1    on a PR: runs once the PR is merged
+#   /backport! to stable2.1   on a PR: runs now, from the PR's own commits
+#   label "backport stable2.1" on a PR: runs when it is merged, or at once
+#                              when the PR is already merged
+#
+# Each target gets a branch backport/<pr>/<target> with the commits
+# cherry-picked (`-x`) and a pull request into the target. When the pick
+# conflicts, the pull request is opened as a draft on the untouched target,
+# with the conflicting files and the commands to finish it by hand.
+#
+# Only someone with write access to the repository can request a backport.
+# Nothing from the pull request is executed: its commits are only
+# cherry-picked.
+#
+# Caller (.github/workflows/backport.yml in the app):
+#
+#   on:
+#     issue_comment:
+#       types: [created]
+#     pull_request_target:
+#       types: [closed, labeled]
+#   jobs:
+#     backport:
+#       permissions:
+#         contents: write
+#         pull-requests: write
+#         issues: write
+#       uses: ConductionNL/.github/.github/workflows/backport.yml@main
+#       secrets: inherit
+
+on:
+  workflow_call:
+    secrets:
+      FLEET_DISPATCH_TOKEN:
+        required: false
+
+jobs:
+  backport:
+    if: >-
+      (github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && startsWith(github.event.comment.body, '/backport'))
+      || (github.event_name == 'pull_request_target'
+        && github.event.pull_request.merged == true
+        && (github.event.action == 'closed'
+          || startsWith(github.event.label.name, 'backport ')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: backport-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Backport
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # The org PAT makes the backport PR's own checks run; a PR opened with
+          # GITHUB_TOKEN triggers no workflows.
+          PUSH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN || github.token }}
+          FALLBACK_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          ADDED_LABEL: ${{ github.event.label.name }}
+          ACTION: ${{ github.event.action }}
+        run: |
+          set -euo pipefail
+
+          say() {
+            gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$1" >/dev/null \
+              || echo "::warning::Could not comment on #${PR_NUMBER}."
+          }
+
+          PR_JSON="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}")"
+          MERGED="$(jq -r '.merged' <<<"${PR_JSON}")"
+          TITLE="$(jq -r '.title' <<<"${PR_JSON}")"
+          PR_BASE="$(jq -r '.base.ref' <<<"${PR_JSON}")"
+          MERGE_SHA="$(jq -r '.merge_commit_sha // ""' <<<"${PR_JSON}")"
+          COMMITS="$(jq -r '.commits' <<<"${PR_JSON}")"
+
+          TARGETS=""
+          if [ "${EVENT}" = "issue_comment" ]; then
+            PERM="$(gh api "repos/${REPO}/collaborators/${COMMENTER}/permission" --jq .permission 2>/dev/null || echo none)"
+            case "${PERM}" in
+              admin|maintain|write) ;;
+              *) echo "${COMMENTER} has '${PERM}' access; a backport needs write access."; exit 0 ;;
+            esac
+            REQ="$(printf '%s\n' "${COMMENT_BODY}" | tr -d '\r' \
+              | sed -n -E 's#^/backport(!?) to (stable[0-9]+\.[0-9]+)[[:space:]]*$#\1 \2#p')"
+            [ -n "${REQ}" ] || { echo "No '/backport to stableX.Y' line in the comment."; exit 0; }
+            while read -r BANG T; do
+              [ -z "${BANG}" ] && [ -z "${T}" ] && continue
+              if [ -z "${T}" ]; then T="${BANG}"; BANG=""; fi
+              if [ "${MERGED}" = "true" ] || [ "${BANG}" = "!" ]; then
+                TARGETS="${TARGETS} ${T}"
+              else
+                gh api -X POST "repos/${REPO}/labels" -f name="backport ${T}" -f color="c5def5" >/dev/null 2>&1 || true
+                gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/labels" -f "labels[]=backport ${T}" >/dev/null
+                say "Backport to \`${T}\` queued; it runs when this pull request is merged."
+              fi
+            done <<<"${REQ}"
+          elif [ "${ACTION}" = "labeled" ]; then
+            TARGETS="$(sed -n -E 's#^backport (stable[0-9]+\.[0-9]+)$#\1#p' <<<"${ADDED_LABEL}")"
+          else
+            TARGETS="$(jq -r '.labels[].name' <<<"${PR_JSON}" | sed -n -E 's#^backport (stable[0-9]+\.[0-9]+)$#\1#p' | tr '\n' ' ')"
+          fi
+
+          TARGETS="$(tr ' ' '\n' <<<"${TARGETS}" | grep -v '^$' | sort -u | tr '\n' ' ')"
+          [ -n "${TARGETS// /}" ] || { echo "Nothing to backport."; exit 0; }
+          echo "Targets: ${TARGETS}"
+
+          # Which commits to pick. A merge commit is picked against its first
+          # parent, a squash commit as itself, a rebase merge as its N commits.
+          # `/backport!` on an open PR picks the PR's own commits.
+          if [ "${MERGED}" = "true" ]; then
+            git fetch --quiet --no-tags origin "${MERGE_SHA}"
+            PARENTS=$(( $(git rev-list --parents -n 1 "${MERGE_SHA}" | wc -w) - 1 ))
+            if [ "${PARENTS}" -gt 1 ]; then
+              PICK_ARGS=(-m 1 "${MERGE_SHA}")
+            elif git log -1 --format=%s "${MERGE_SHA}" | grep -qE "\(#${PR_NUMBER}\)$"; then
+              PICK_ARGS=("${MERGE_SHA}")
+            else
+              mapfile -t PICK_ARGS < <(git rev-list --reverse "${MERGE_SHA}~${COMMITS}..${MERGE_SHA}")
+            fi
+          else
+            git fetch --quiet --no-tags origin "pull/${PR_NUMBER}/head" "refs/heads/${PR_BASE}"
+            HEAD_SHA="$(git rev-parse FETCH_HEAD)"
+            BASE_SHA="$(git merge-base "${HEAD_SHA}" "origin/${PR_BASE}")"
+            mapfile -t PICK_ARGS < <(git rev-list --reverse --no-merges "${BASE_SHA}..${HEAD_SHA}")
+          fi
+          echo "Picking: ${PICK_ARGS[*]}"
+
+          if [ "${PUSH_TOKEN}" != "${FALLBACK_TOKEN}" ] \
+            && ! GH_TOKEN="${PUSH_TOKEN}" gh api "repos/${REPO}" --jq .full_name >/dev/null 2>&1; then
+            echo "::error::FLEET_DISPATCH_TOKEN does not authenticate; it has most likely expired. Falling back to GITHUB_TOKEN, so the backport PR's checks will not run."
+            PUSH_TOKEN="${FALLBACK_TOKEN}"
+          fi
+          AUTH="AUTHORIZATION: basic $(printf 'x-access-token:%s' "${PUSH_TOKEN}" | base64 -w0)"
+          echo "::add-mask::$(printf 'x-access-token:%s' "${PUSH_TOKEN}" | base64 -w0)"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for T in ${TARGETS}; do
+            BR="backport/${PR_NUMBER}/${T}"
+            if ! git fetch --quiet --no-tags origin "refs/heads/${T}:refs/remotes/origin/${T}"; then
+              say "Backport to \`${T}\` skipped: that branch does not exist."
+              continue
+            fi
+            if git ls-remote --exit-code --heads origin "${BR}" >/dev/null 2>&1; then
+              say "Backport to \`${T}\` skipped: \`${BR}\` already exists."
+              continue
+            fi
+
+            git checkout -q -B "${BR}" "origin/${T}"
+            DRAFT=()
+            NOTE="Cherry-picked cleanly."
+            if ! git cherry-pick -x "${PICK_ARGS[@]}" >/dev/null 2>&1; then
+              CONFLICTS="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
+              git cherry-pick --abort || true
+              git checkout -q -B "${BR}" "origin/${T}"
+              git commit -q --allow-empty -m "chore(backport): #${PR_NUMBER} to ${T} needs a manual cherry-pick"
+              DRAFT=(--draft)
+              NOTE="The cherry-pick conflicts, so this branch holds only an empty marker commit. Conflicting files:
+          ${CONFLICTS:-"(none reported; the pick failed for another reason, see the workflow log)"}
+
+          Finish it by hand:
+
+          \`\`\`
+          git fetch origin ${BR} && git checkout ${BR}
+          git cherry-pick -x ${PICK_ARGS[*]}
+          # resolve, git cherry-pick --continue, then push and mark ready
+          \`\`\`"
+            fi
+
+            git -c http.extraheader="${AUTH}" push --quiet origin "HEAD:refs/heads/${BR}"
+
+            BODY="Backport of #${PR_NUMBER} to \`${T}\`, requested through backport.yml.
+
+          ${NOTE}"
+            if URL="$(GH_TOKEN="${PUSH_TOKEN}" gh pr create --repo "${REPO}" --base "${T}" --head "${BR}" \
+                  --title "[${T}] ${TITLE}" --body "${BODY}" "${DRAFT[@]}")"; then
+              say "Backport to \`${T}\`: ${URL}${DRAFT:+ (draft: the cherry-pick conflicts)}"
+            else
+              say "Backport to \`${T}\`: pushed \`${BR}\` but could not open the pull request."
+            fi
+          done
