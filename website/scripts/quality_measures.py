@@ -200,6 +200,36 @@ def ci_coverage(app):
                    f"at {run['head_sha'][:8]}, {artifact['created_at'][:10]}")
 
 
+def stale_floor(clone):
+    """(floor, date) of the committed coverage-guard floor, or (None, None) without one."""
+    path = os.path.join(clone, ".coverage-baseline")
+    if not os.path.isfile(path):
+        return None, None
+    try:
+        floor = float(open(path).read().strip())
+    except ValueError:
+        return None, None
+    date = subprocess.run(["git", "-C", clone, "log", "-1", "--format=%cs", "--", ".coverage-baseline"],
+                          capture_output=True, text=True).stdout.strip()
+    return floor, date or "unknown date"
+
+
+def php_coverage(app, clone):
+    """The CI clover cell; without a readable report, the committed floor marked stale with its date."""
+    value, detail = ci_coverage(app)
+    if value is not None:
+        return cell("php_coverage", value, detail)
+    floor, date = stale_floor(clone)
+    if floor is None:
+        return cell("php_coverage", None, detail)
+    print(f"WARNING {app}: {detail}; php_coverage falls back to the stale floor {floor} of {date}",
+          file=sys.stderr)
+    out = cell("php_coverage", floor, f"STALE: {detail}. Shows the coverage-guard floor in "
+                                      f".coverage-baseline, last changed {date}, not a measurement")
+    out["stale"] = date
+    return out
+
+
 def audits(clone):
     high, crit, notes = 0, 0, []
     if os.path.isfile(os.path.join(clone, "composer.lock")):
@@ -258,7 +288,7 @@ def measure(app, clone, report, gates):
                   if lang == "php" and d.get("duplication"))
     all_loc = sum(d["duplication"]["code_lines"] for d in report["languages"].values() if d.get("duplication"))
     out = {}
-    out["php_coverage"] = cell("php_coverage", *ci_coverage(app))
+    out["php_coverage"] = php_coverage(app, clone)
     out["spec_coverage"] = cell("spec_coverage", *spec_coverage(clone))
     out["e2e_coverage"] = cell("e2e_coverage", *e2e_coverage(clone))
     out["test_ratio"] = cell("test_ratio", *test_ratio(clone, files, report))

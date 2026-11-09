@@ -188,7 +188,8 @@ def own_measures(measures):
         for app, m in measures.items():
             c = m.get(mid)
             if c and c["value"] is not None:
-                cells[app] = {"stars": c["stars"], "text": fmt(c["value"], unit), "title": c["detail"]}
+                text = fmt(c["value"], unit) + (f" stale {c['stale']}" if c.get("stale") else "")
+                cells[app] = {"stars": c["stars"], "text": text, "title": c["detail"]}
         op = "≥" if higher else "≤"
         limits = ", ".join(f"{lvl}★ {op}{cut}{unit}" for lvl, cut in zip(qm.LEVELS, cuts)) + ", worse 1★"
         groups.setdefault(section, []).append({"id": f"own.{mid}", "label": label, "limits": limits, "cells": cells})

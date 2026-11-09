@@ -205,7 +205,9 @@ Spec coverage counts the methods gate 16 holds in scope, with and without an
 excluded. PHP coverage is the statement coverage in the newest clover report
 CI kept for the app: from `development` if there is one, otherwise from the
 newest run on another branch. The tooltip names the branch, commit and date. CI
-keeps these reports 14 days, so an app without a recent run shows no value. The
+keeps these reports 14 days. Without a readable report the cell falls back to the
+coverage-guard floor in `.coverage-baseline`, says `stale` with the date that
+floor last changed, and the run prints a warning. The
 vulnerable dependency count treats a Composer advisory without a severity as
 high, because nothing shows it is lower.
 The gate rows come from a full-scope run of every gate on `development`.

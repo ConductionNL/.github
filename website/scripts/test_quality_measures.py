@@ -87,23 +87,41 @@ class PhpCoverage(unittest.TestCase):
         self.assertEqual(cell["value"], 79.65)
         self.assertIn("feature/x", cell["detail"])
 
+    def assertStaleFloor(self, cell):
+        today = REAL_RUN(["date", "+%Y-%m-%d"], capture_output=True, text=True).stdout.strip()
+        self.assertEqual(cell["value"], 58.88)
+        self.assertEqual(cell["stale"], today)
+        self.assertTrue(cell["detail"].startswith("STALE: "))
+        self.assertIn(f".coverage-baseline, last changed {today}", cell["detail"])
+
     def test_expired_and_fork_reports_are_skipped(self):
         cell = self.measure([artifact(1, "development", expired=True), artifact(2, "development", head_repo=9)])
-        self.assertIsNone(cell["value"])
-        self.assertIsNone(cell["stars"])
+        self.assertStaleFloor(cell)
 
-    def test_no_report_shows_nothing_rather_than_the_floor(self):
+    def test_no_report_falls_back_to_the_floor_marked_stale(self):
         cell = self.measure([])
-        self.assertIsNone(cell["value"])
-        self.assertEqual(cell["detail"], "no coverage report kept by CI")
+        self.assertStaleFloor(cell)
+        self.assertIn("no coverage report kept by CI", cell["detail"])
 
-    def test_unreadable_reports_show_nothing(self):
+    def test_a_fresh_report_carries_no_stale_mark(self):
+        self.assertNotIn("stale", self.measure([artifact(7, "development")]))
+
+    def test_no_report_and_no_floor_shows_nothing(self):
+        with tempfile.TemporaryDirectory() as clone, \
+                mock.patch("subprocess.run", fake_gh([])):
+            cell = qm.php_coverage("openregister", clone)
+        self.assertIsNone(cell["value"])
+        self.assertNotIn("stale", cell)
+
+    def test_unreadable_reports_fall_back_to_the_stale_floor(self):
         for label, kwargs in (("gh failure", {"fail": True}),
                               ("bad xml", {"archives": {1: bundle("not xml")}}),
                               ("no clover", {"archives": {1: bundle(name="other.xml")}}),
                               ("no metrics", {"archives": {1: bundle("<coverage><project/></coverage>")}})):
             with self.subTest(label):
-                self.assertIsNone(self.measure([artifact(1, "development")], **kwargs)["value"])
+                cell = self.measure([artifact(1, "development")], **kwargs)
+                self.assertStaleFloor(cell)
+                self.assertIn("CI coverage report unreadable", cell["detail"])
 
     def test_clover_without_statements_has_no_percentage(self):
         xml = '<coverage><project><metrics statements="0" coveredstatements="0"/></project></coverage>'
@@ -120,6 +138,21 @@ class PhpCoverage(unittest.TestCase):
 
         with mock.patch("subprocess.run", run):
             self.assertIn("development", qm.ci_coverage("openregister")[1])
+
+
+class StaleCellText(unittest.TestCase):
+    def test_the_matrix_cell_says_stale_and_when(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_sig_matrix", os.path.join(HERE, "build-sig-matrix.py"))
+        build = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build)
+        fresh = {"value": 79.64, "stars": 3, "detail": "ci"}
+        stale = {"value": 58.88, "stars": 2, "detail": "STALE: x", "stale": "2026-08-07"}
+        rows = {r["id"]: r for g in build.own_measures({"a": {"php_coverage": fresh}, "b": {"php_coverage": stale}})
+                for r in g["rows"]}
+        cells = rows["own.php_coverage"]["cells"]
+        self.assertNotIn("stale", cells["a"]["text"])
+        self.assertTrue(cells["b"]["text"].endswith(" stale 2026-08-07"))
 
 
 class ComposerSeverity(unittest.TestCase):
