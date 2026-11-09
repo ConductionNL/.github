@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       release-type:
-        description: "Release type: unstable, beta, or stable"
+        description: "Release type: unstable, beta, or stable (and rc with branch-model main)"
         required: true
         type: string
       app-name:
@@ -52,6 +52,18 @@ on:
         required: false
         type: string
         default: ""
+      branch-model:
+        # `development`: the dev -> beta -> main promotion flow.
+        # `main`: ADR-122. Work lands on main, which carries the next line in
+        # info.xml as X.Y.0-dev. A push to main is an `unstable` GitHub
+        # prerelease X.Y.0-dev.<ts> with no bump commit and no App Store upload.
+        # `beta` X.Y.Z-beta.N comes from main or stableX.Y; `rc` and `stable`
+        # come from stableX.Y only. A stable release ships exactly the version
+        # committed in that branch's info.xml.
+        description: "Branch model: development (dev/beta/main promotion) or main (main + stableX.Y, ADR-122)"
+        required: false
+        type: string
+        default: "development"
 
 jobs:
   release:
@@ -142,8 +154,14 @@ jobs:
 
       - name: Validate release type
         run: |
-          if [[ "${{ inputs.release-type }}" != "unstable" && "${{ inputs.release-type }}" != "beta" && "${{ inputs.release-type }}" != "stable" ]]; then
-            echo "::error::Invalid release-type '${{ inputs.release-type }}'. Must be: unstable, beta, or stable"
+          if [[ "${{ inputs.branch-model }}" != "development" && "${{ inputs.branch-model }}" != "main" ]]; then
+            echo "::error::Invalid branch-model '${{ inputs.branch-model }}'. Must be: development or main"
+            exit 1
+          fi
+          if [[ "${{ inputs.release-type }}" == "rc" && "${{ inputs.branch-model }}" == "main" ]]; then
+            :
+          elif [[ "${{ inputs.release-type }}" != "unstable" && "${{ inputs.release-type }}" != "beta" && "${{ inputs.release-type }}" != "stable" ]]; then
+            echo "::error::Invalid release-type '${{ inputs.release-type }}'. Must be: unstable, beta, or stable (rc with branch-model main)"
             exit 1
           fi
           echo "Release type: ${{ inputs.release-type }}"
@@ -264,6 +282,14 @@ jobs:
 
           print("registered=%s" % ("true" if app_id in by_id else "false"))
           print("max=%s" % (this_max or ""))
+
+          def max_final(app_id):
+              app = by_id.get(app_id)
+              finals = [r["version"] for r in (app or {}).get("releases", [])
+                        if parse(r["version"]) is not None and parse(r["version"])[3] == (1,)]
+              return max(finals, key=parse) if finals else None
+
+          print("max_stable=%s" % (max_final(app_id) or ""))
           print("previous_max=%s" % (prev_max or ""))
 
           cores = [core(v) for v in (this_max, prev_max) if v]
@@ -345,7 +371,7 @@ jobs:
           echo "Baseline: $VERSION"
 
       - name: Calculate unstable version
-        if: inputs.release-type == 'unstable'
+        if: inputs.release-type == 'unstable' && inputs.branch-model != 'main'
         run: |
           STABLE="${{ steps.stable_version.outputs.version }}"
           IFS='.' read -ra PARTS <<< "$STABLE"
@@ -377,7 +403,7 @@ jobs:
           echo "Unstable version: $UNSTABLE_VERSION (stable baseline: $STABLE)"
 
       - name: Calculate beta version
-        if: inputs.release-type == 'beta'
+        if: inputs.release-type == 'beta' && inputs.branch-model != 'main'
         run: |
           STABLE="${{ steps.stable_version.outputs.version }}"
           IFS='.' read -ra PARTS <<< "$STABLE"
@@ -393,7 +419,7 @@ jobs:
           echo "Beta version: $BETA_VERSION (stable baseline: $STABLE)"
 
       - name: Get merged PR labels
-        if: inputs.release-type == 'stable'
+        if: inputs.release-type == 'stable' && inputs.branch-model != 'main'
         id: pr_label
         env:
           GH_TOKEN: ${{ github.token }}
@@ -425,7 +451,7 @@ jobs:
           echo "Bump level: $BUMP"
 
       - name: Calculate stable version
-        if: inputs.release-type == 'stable'
+        if: inputs.release-type == 'stable' && inputs.branch-model != 'main'
         id: next_version
         uses: actions-ecosystem/action-bump-semver@v1
         with:
@@ -433,7 +459,7 @@ jobs:
           level: ${{ steps.pr_label.outputs.bump }}
 
       - name: Set stable version env
-        if: inputs.release-type == 'stable'
+        if: inputs.release-type == 'stable' && inputs.branch-model != 'main'
         run: |
           VERSION="${{ steps.next_version.outputs.new_version }}"
           echo "NEW_VERSION=$VERSION" >> $GITHUB_ENV
@@ -449,6 +475,68 @@ jobs:
       # below `1.0.10` and `0.4.0-beta.2` above `0.4.0-beta.1`. Re-checking the
       # real thing under real semver is what catches an off-by-one in the core
       # arithmetic -- comparing cores to cores again would just agree with it.
+      # Branch model `main` (ADR-122): the version comes from the branch's own
+      # appinfo/info.xml, never from labels or the newest tag.
+      - name: Calculate version (main + stableX.Y)
+        if: inputs.branch-model == 'main'
+        env:
+          RELEASE_TYPE: ${{ inputs.release-type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          INFO=$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1)
+          CORE="${INFO%%-*}"
+          [[ "$CORE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::appinfo/info.xml version '$INFO' is not X.Y.Z[-suffix]."; exit 1; }
+
+          LINE=""
+          if [[ "$REF_NAME" =~ ^stable([0-9]+\.[0-9]+)$ ]]; then
+            LINE="${BASH_REMATCH[1]}"
+            if [ "${CORE%.*}" != "$LINE" ]; then
+              echo "::error::$REF_NAME carries info.xml $INFO, which is not on the $LINE line."
+              exit 1
+            fi
+          elif [ "$REF_NAME" != "main" ]; then
+            echo "::error::Branch model main releases from main or stableX.Y only, not from $REF_NAME."
+            exit 1
+          fi
+
+          TS=$(date -u +"%Y%m%d%H%M%S")
+          case "$RELEASE_TYPE" in
+            unstable)
+              [ "$REF_NAME" = "main" ] || { echo "::error::unstable releases come from main only."; exit 1; }
+              NEW_VERSION="${CORE}-dev.${TS}"
+              ;;
+            beta|rc)
+              if [ "$RELEASE_TYPE" = "rc" ] && [ -z "$LINE" ]; then
+                echo "::error::Release candidates come from stableX.Y, not from main. Cut stable${CORE%.*} first."
+                exit 1
+              fi
+              if git rev-parse -q --verify "refs/tags/v${CORE}" >/dev/null; then
+                echo "::error::v${CORE} is already released. Raise info.xml on $REF_NAME to the next version before a new $RELEASE_TYPE."
+                exit 1
+              fi
+              LAST=$(git tag -l "v${CORE}-${RELEASE_TYPE}.*" \
+                | sed -n "s/^v${CORE//./\\.}-${RELEASE_TYPE}\.\([0-9][0-9]*\)$/\1/p" | sort -n | tail -1)
+              NEW_VERSION="${CORE}-${RELEASE_TYPE}.$(( ${LAST:-0} + 1 ))"
+              ;;
+            stable)
+              [ -n "$LINE" ] || { echo "::error::Stable releases come from stableX.Y only, not from main."; exit 1; }
+              if [ "$INFO" != "$CORE" ]; then
+                echo "::error::info.xml on $REF_NAME says $INFO. Merge a release/v${CORE} pull request that sets <version>${CORE}</version> first; the tag must match info.xml."
+                exit 1
+              fi
+              if git rev-parse -q --verify "refs/tags/v${CORE}" >/dev/null; then
+                echo "::error::v${CORE} already exists. Raise info.xml on $REF_NAME to the next patch first."
+                exit 1
+              fi
+              NEW_VERSION="$CORE"
+              ;;
+          esac
+
+          echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_ENV"
+          echo "APP_NAME=${{ inputs.app-name }}" >> "$GITHUB_ENV"
+          echo "Release $RELEASE_TYPE $NEW_VERSION from $REF_NAME (info.xml $INFO)"
+
       - name: The release must outrank the App Store, and must not invent a major
         env:
           NEW_VERSION: ${{ env.NEW_VERSION }}
@@ -458,6 +546,8 @@ jobs:
           PREV_APP_ID: ${{ inputs.previous-app-id }}
           BUMP_LEVEL: ${{ steps.pr_label.outputs.bump }}
           RELEASE_TYPE: ${{ inputs.release-type }}
+          BRANCH_MODEL: ${{ inputs.branch-model }}
+          STORE_MAX_STABLE: ${{ steps.store.outputs.max_stable }}
         run: |
           python3 - <<'PY'
           import os, sys
@@ -472,8 +562,15 @@ jobs:
 
           failures = []
 
+          # Branch model main: a stable patch on an older stableX.Y line only has
+          # to outrank the store's final releases; servers on the stable channel
+          # never see the prereleases of a newer line.
+          own_max = os.environ.get("STORE_MAX", "")
+          if os.environ.get("BRANCH_MODEL") == "main" and os.environ.get("RELEASE_TYPE") == "stable":
+              own_max = os.environ.get("STORE_MAX_STABLE", "")
+
           for label, other in (
-              ("the App Store entry for this app", os.environ.get("STORE_MAX", "")),
+              ("the App Store entry for this app", own_max),
               (
                   "the App Store entry for %s (previous-app-id)"
                   % os.environ.get("PREV_APP_ID", ""),
@@ -494,7 +591,9 @@ jobs:
           baseline = os.environ.get("BASELINE", "").strip()
           if baseline:
               base_major = parse(baseline)[0]
-              deliberate = (
+              # Under branch model main the major is whatever info.xml commits,
+              # which went through a reviewed pull request.
+              deliberate = os.environ.get("BRANCH_MODEL") == "main" or (
                   os.environ.get("RELEASE_TYPE") == "stable"
                   and os.environ.get("BUMP_LEVEL") == "major"
               )
@@ -793,6 +892,7 @@ jobs:
 
       - name: Commit the version bump
         id: bump
+        if: inputs.branch-model != 'main' || inputs.release-type != 'unstable'
         run: |
           set -euo pipefail
           CURRENT=$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1)
@@ -1213,7 +1313,7 @@ jobs:
       # Only from the long-lived release branches: `development` releases have
       # nowhere to sync back to.
       - name: Sync the release branch back into development
-        if: ${{ github.ref_name == 'beta' || github.ref_name == 'main' }}
+        if: ${{ inputs.branch-model != 'main' && (github.ref_name == 'beta' || github.ref_name == 'main') }}
         env:
           # Same reasoning as the version-bump pull request above: opened with the
           # org PAT so the sync PR's checks run, with a loud fallback rather than a
@@ -1664,7 +1764,7 @@ jobs:
           # sha when no bump was needed (a re-run of an already-released
           # version), which is the same tree by definition.
           commit: ${{ steps.bump.outputs.bump_sha || github.sha }}
-          name: "${{ inputs.release-type == 'stable' && 'Release' || (inputs.release-type == 'beta' && 'Beta' || 'Unstable') }} ${{ env.NEW_VERSION }}"
+          name: "${{ inputs.release-type == 'stable' && 'Release' || (inputs.release-type == 'beta' && 'Beta' || (inputs.release-type == 'rc' && 'Release candidate' || 'Unstable')) }} ${{ env.NEW_VERSION }}"
           draft: false
           prerelease: ${{ inputs.release-type != 'stable' }}
           bodyFile: ${{ runner.temp }}/release-notes.md
@@ -1726,6 +1826,33 @@ jobs:
             fi
           fi
 
+      # The App Store and Nextcloud's own publish workflows require the tag to
+      # equal appinfo/info.xml. Checked on the tagged tree and on the package.
+      # Exempt: unstable under branch model main, which is a GitHub prerelease
+      # of an untouched main commit and never reaches the App Store.
+      - name: The tag must match appinfo/info.xml
+        env:
+          EXEMPT: ${{ inputs.branch-model == 'main' && inputs.release-type == 'unstable' }}
+        run: |
+          set -euo pipefail
+          TAG="v${NEW_VERSION}"
+          PKG=$(tar -xOf nextcloud-release.tar.gz "${{ inputs.app-name }}/appinfo/info.xml" | grep -oP '(?<=<version>)[^<]+' | head -1)
+          if [ "v${PKG}" != "${TAG}" ]; then
+            echo "::error::The package's info.xml says ${PKG}, the tag is ${TAG}."
+            exit 1
+          fi
+          if [ "${EXEMPT}" = "true" ]; then
+            echo "Package matches ${TAG}; the tagged main commit is exempt (unstable, GitHub prerelease only)."
+            exit 0
+          fi
+          git fetch --quiet --no-tags origin "refs/tags/${TAG}"
+          TREE=$(git show "FETCH_HEAD:appinfo/info.xml" | grep -oP '(?<=<version>)[^<]+' | head -1)
+          if [ "v${TREE}" != "${TAG}" ]; then
+            echo "::error::${TAG} names a commit whose appinfo/info.xml says ${TREE}."
+            exit 1
+          fi
+          echo "OK: ${TAG}, the tagged info.xml and the package agree."
+
       - name: Attach tarball to release
         uses: svenstaro/upload-release-action@v2
         with:
@@ -1753,7 +1880,10 @@ jobs:
         if: inputs.release-type != 'unstable'
         run: |
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.NEW_VERSION }}/${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz"
-          NIGHTLY="${{ inputs.release-type == 'beta' && 'true' || 'false' }}"
+          # Never nightly. The store classes X.Y.Z-beta.N and -rc.N as prereleases
+          # by their suffix; its docs warn that prereleases published as nightly
+          # stop installations from updating.
+          NIGHTLY="false"
 
           # Registration used to run on EVERY release, described as "idempotent".
           # It is not. POST /api/v1/apps is the certificate-update endpoint, it
@@ -1856,7 +1986,7 @@ jobs:
           echo "Prerelease: ${{ inputs.release-type != 'stable' }}"
           echo "App Store: ${{ inputs.release-type != 'unstable' }}"
           if [ "${{ inputs.release-type }}" != "unstable" ]; then
-            echo "Nightly: ${{ inputs.release-type == 'beta' }}"
+            echo "Nightly: false"
           fi
           echo ""
           echo "info.xml in tarball:"
