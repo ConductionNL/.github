@@ -47,8 +47,9 @@ jobs:
         && startsWith(github.event.comment.body, '/backport'))
       || (github.event_name == 'pull_request_target'
         && github.event.pull_request.merged == true
-        && (github.event.action == 'closed'
-          || startsWith(github.event.label.name, 'backport ')))
+        && ((github.event.action == 'closed'
+            && contains(join(github.event.pull_request.labels.*.name, ','), 'backport stable'))
+          || startsWith(github.event.label.name, 'backport stable')))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
