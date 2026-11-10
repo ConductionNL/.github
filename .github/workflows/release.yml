@@ -1376,14 +1376,21 @@ jobs:
           # of development here shipped development's code under the release
           # branch's tag whenever the merge conflicted or succeeded (#904).
           # A fresh directory per run: a fixed path could be planted in advance.
-          WT="$(mktemp -d "${RUNNER_TEMP}/sync-to-development.XXXXXX")/worktree"
+          # Guarded, because under `bash -e` a failing mktemp would fail the job.
+          WT_DIR="$(mktemp -d "${RUNNER_TEMP}/sync-to-development.XXXXXX")" || {
+            echo "::warning::Could not create a temporary directory for ${BR}; skipping the sync."
+            exit 0
+          }
+          WT="${WT_DIR}/worktree"
+          # A run killed before its trap leaves a registered worktree behind.
+          git worktree prune || true
           git worktree add -q -B "$BR" "$WT" origin/development || {
             echo "::warning::Could not create a worktree for ${BR}; skipping the sync."
             exit 0
           }
           # Clean-up only: under `bash -e` a failing trap would turn the step's
           # `exit 0` into a failure, and this step must never fail the job.
-          trap 'cd "${GITHUB_WORKSPACE}" && git worktree remove --force "$WT" || echo "::warning::Could not remove the sync worktree $WT."' EXIT
+          trap 'cd "${GITHUB_WORKSPACE}" && git worktree remove --force "$WT" && rmdir "$WT_DIR" || echo "::warning::Could not remove the sync worktree $WT."' EXIT
           cd "$WT"
 
           # The ONLY conflict this may legitimately resolve is the version,
