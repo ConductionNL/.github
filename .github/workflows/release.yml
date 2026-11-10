@@ -1296,6 +1296,14 @@ jobs:
             --auto \
             || echo "::warning::Could not set auto-merge on the version-bump PR for $BR — it stays open and ${{ github.ref_name }} remains one version behind the tag. Check that allow_auto_merge and allow_merge_commit are enabled on this repository, then merge it with a MERGE COMMIT, not a squash."
 
+      # What gets packaged is the working tree of this checkout, so it is
+      # recorded here, after the version bump, and checked again right before
+      # the copy (#904).
+      - name: Record the release checkout
+        run: |
+          echo "RELEASE_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "RELEASE_REF=$(git symbolic-ref -q --short HEAD || echo detached)" >> "$GITHUB_ENV"
+
       # ── SYNC THE RELEASE BRANCH BACK INTO `development` ────────────────
       #
       # A release COMMITS a version bump onto the branch it ran from. Nothing
@@ -1312,14 +1320,6 @@ jobs:
       #
       # Only from the long-lived release branches: `development` releases have
       # nowhere to sync back to.
-      #
-      # What gets packaged is the working tree of this checkout, so it is
-      # recorded here and checked again right before the copy (#904).
-      - name: Record the release checkout
-        run: |
-          echo "RELEASE_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-          echo "RELEASE_REF=$(git symbolic-ref -q --short HEAD || echo detached)" >> "$GITHUB_ENV"
-
       - name: Sync the release branch back into development
         if: ${{ inputs.branch-model != 'main' && (github.ref_name == 'beta' || github.ref_name == 'main') }}
         env:
