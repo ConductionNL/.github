@@ -1381,7 +1381,9 @@ jobs:
             echo "::warning::Could not create a worktree for ${BR}; skipping the sync."
             exit 0
           }
-          trap 'cd "${GITHUB_WORKSPACE}" && git worktree remove --force "$WT" >/dev/null 2>&1' EXIT
+          # Clean-up only: under `bash -e` a failing trap would turn the step's
+          # `exit 0` into a failure, and this step must never fail the job.
+          trap 'cd "${GITHUB_WORKSPACE}" && git worktree remove --force "$WT" || echo "::warning::Could not remove the sync worktree $WT."' EXIT
           cd "$WT"
 
           # The ONLY conflict this may legitimately resolve is the version,
