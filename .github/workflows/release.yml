@@ -1375,8 +1375,8 @@ jobs:
           # packaging steps below rsync the CURRENT working tree, so a checkout
           # of development here shipped development's code under the release
           # branch's tag whenever the merge conflicted or succeeded (#904).
-          WT="${RUNNER_TEMP}/sync-to-development"
-          git worktree remove --force "$WT" >/dev/null 2>&1 || true
+          # A fresh directory per run: a fixed path could be planted in advance.
+          WT="$(mktemp -d "${RUNNER_TEMP}/sync-to-development.XXXXXX")/worktree"
           git worktree add -q -B "$BR" "$WT" origin/development || {
             echo "::warning::Could not create a worktree for ${BR}; skipping the sync."
             exit 0
