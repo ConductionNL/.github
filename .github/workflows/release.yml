@@ -1459,7 +1459,10 @@ jobs:
 
       # A step between the version bump and here that moves the checkout (the
       # sync above did, until #904) makes the tarball contain another branch's
-      # code under this release's tag. Refuse instead of shipping it.
+      # code under this release's tag. Refuse instead of shipping it. This
+      # compares HEAD and branch, not the working tree: it catches a moved
+      # checkout, it is not a guard against files changed by the build itself
+      # (the frontend and composer steps run the repository's own code).
       - name: The package is built from the release checkout
         run: |
           HEAD_NOW="$(git rev-parse HEAD)"
