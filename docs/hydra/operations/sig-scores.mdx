@@ -202,7 +202,14 @@ own measures, with the reason we add each one and the basis of its bands.
 
 Spec coverage counts the methods gate 16 holds in scope, with and without an
 `@spec` tag. E2e coverage is gate 19's report over the scenarios that are not
-excluded. PHP coverage is the floor coverage-guard records on `development`.
+excluded. PHP coverage is the statement coverage in the newest clover report
+CI kept for the app: from `development` if there is one, otherwise from the
+newest run on another branch. The tooltip names the branch, commit and date. CI
+keeps these reports 14 days. Without a readable report the cell falls back to the
+coverage-guard floor in `.coverage-baseline`, says `stale` with the date that
+floor last changed, and the run prints a warning. The
+vulnerable dependency count treats a Composer advisory without a severity as
+high, because nothing shows it is lower.
 The gate rows come from a full-scope run of every gate on `development`.
 
 ## Floors and ratchets per app
@@ -235,7 +242,8 @@ The matrix reads `website/src/data/sig-matrix.json`. One script writes it.
    ```
 
 4. Run the generator from the repository root. It runs `composer audit` and
-   `npm audit` on the lockfiles, so it needs the network:
+   `npm audit` on the lockfiles and reads the CI coverage reports with `gh api`,
+   so it needs the network and a logged-in `gh`:
 
    ```bash
    python3 website/scripts/build-sig-matrix.py <report-dir> --clones <clones> --gates <gates-dir> --date YYYY-MM-DD

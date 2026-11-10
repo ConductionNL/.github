@@ -6,13 +6,16 @@ Each measure is a value plus a star level from bands defined here. BANDS holds
 every band and its basis; the docs page prints the same table. Inputs per app:
 a checkout of `development`, gate 122's report (`<app>.json`) and the runner's
 gates.json. Network is used for `composer audit` and `npm audit`
-(lockfile only, nothing is installed).
+(lockfile only, nothing is installed) and for the CI coverage report (`gh api`).
 """
+import io
 import json
 import os
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ElementTree
+import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LIB = os.path.join(ROOT, "hydra-gates", "scripts", "lib")
@@ -66,6 +69,7 @@ SECURITY_GATES = {5, 6, 7, 8, 9, 11, 30, 48, 50, 82, 97, 121}
 SUPPRESS = re.compile(r"@psalm-suppress|@phpstan-ignore|@SuppressWarnings|phpcs:ignore|phpcs:disable|"
                       r"eslint-disable|@ts-ignore|@ts-expect-error")
 UNMANAGED = re.compile(r"(^|/)(vendor|third[-_]party|3rdparty)/|\.min\.(js|css)$")
+COVERAGE_ARTIFACT = "coverage-report"
 
 
 def stars(measure_id, value):
@@ -148,6 +152,84 @@ def e2e_coverage(clone):
     return d.get("coverage_pct"), f"{t.get('covered')} of {need} scenarios (excluded {t.get('excluded')})"
 
 
+def clover_coverage(xml):
+    """(percentage, covered, statements) from the project metrics of a clover report."""
+    metrics = ElementTree.fromstring(xml).find("project").find("metrics")
+    statements, covered = int(metrics.get("statements")), int(metrics.get("coveredstatements"))
+    return (100 * covered / statements if statements else None), covered, statements
+
+
+def gh_api(path):
+    return subprocess.run(["gh", "api", path], check=True, capture_output=True).stdout
+
+
+def latest_coverage_artifact(app):
+    """The newest CI coverage report of the app's own repository: from `development` if one
+    is kept, otherwise from any branch. CI keeps these 14 days, which bounds their age."""
+    fallback = None
+    page = 1
+    while True:
+        listing = json.loads(gh_api(f"repos/{sig_floors.ORG}/{app}/actions/artifacts"
+                                    f"?name={COVERAGE_ARTIFACT}&per_page=100&page={page}"))
+        for artifact in listing["artifacts"]:
+            run = artifact.get("workflow_run") or {}
+            if artifact["expired"] or run.get("head_repository_id") != run.get("repository_id"):
+                continue
+            if run.get("head_branch") == "development":
+                return artifact
+            fallback = fallback or artifact
+        if len(listing["artifacts"]) < 100:
+            return fallback
+        page += 1
+
+
+def ci_coverage(app):
+    """PHP statement coverage from the newest CI clover report, with where it came from."""
+    try:
+        artifact = latest_coverage_artifact(app)
+        if artifact is None:
+            return None, "no coverage report kept by CI"
+        archive = gh_api(f"repos/{sig_floors.ORG}/{app}/actions/artifacts/{artifact['id']}/zip")
+        with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+            value, covered, statements = clover_coverage(bundle.read("clover.xml"))
+    except (subprocess.CalledProcessError, ValueError, KeyError, AttributeError, TypeError,
+            zipfile.BadZipFile, ElementTree.ParseError):
+        return None, "CI coverage report unreadable"
+    run = artifact["workflow_run"]
+    return value, (f"{covered} of {statements} statements, CI clover from {run['head_branch']} "
+                   f"at {run['head_sha'][:8]}, {artifact['created_at'][:10]}")
+
+
+def stale_floor(clone):
+    """(floor, date) of the committed coverage-guard floor, or (None, None) without one."""
+    path = os.path.join(clone, ".coverage-baseline")
+    if not os.path.isfile(path):
+        return None, None
+    try:
+        floor = float(open(path).read().strip())
+    except ValueError:
+        return None, None
+    date = subprocess.run(["git", "-C", clone, "log", "-1", "--format=%cs", "--", ".coverage-baseline"],
+                          capture_output=True, text=True).stdout.strip()
+    return floor, date or "unknown date"
+
+
+def php_coverage(app, clone):
+    """The CI clover cell; without a readable report, the committed floor marked stale with its date."""
+    value, detail = ci_coverage(app)
+    if value is not None:
+        return cell("php_coverage", value, detail)
+    floor, date = stale_floor(clone)
+    if floor is None:
+        return cell("php_coverage", None, detail)
+    print(f"WARNING {app}: {detail}; php_coverage falls back to the stale floor {floor} of {date}",
+          file=sys.stderr)
+    out = cell("php_coverage", floor, f"STALE: {detail}. Shows the coverage-guard floor in "
+                                      f".coverage-baseline, last changed {date}, not a measurement")
+    out["stale"] = date
+    return out
+
+
 def audits(clone):
     high, crit, notes = 0, 0, []
     if os.path.isfile(os.path.join(clone, "composer.lock")):
@@ -155,12 +237,15 @@ def audits(clone):
                            cwd=clone, capture_output=True, text=True, timeout=600)
         try:
             adv = json.loads(p.stdout).get("advisories") or {}
-            pk = {k: {(a.get("severity") or "").lower() for a in (v.values() if isinstance(v, dict) else v)}
+            pk = {k: {(a.get("severity") or "").strip().lower() for a in (v.values() if isinstance(v, dict) else v)}
                   for k, v in adv.items()}
-            h = sum(1 for s in pk.values() if "high" in s and "critical" not in s)
+            # Composer leaves severity empty for advisories without a rating; those cannot be shown to be below high.
+            h = sum(1 for s in pk.values() if s & {"high", ""} and "critical" not in s)
             c = sum(1 for s in pk.values() if "critical" in s)
+            unrated = sum(1 for s in pk.values() if "" in s and not s & {"high", "critical"})
             high, crit = high + h, crit + c
-            notes.append(f"composer {h} high, {c} critical")
+            notes.append(f"composer {h} high, {c} critical"
+                         + (f" ({unrated} without a severity, counted as high)" if unrated else ""))
         except ValueError:
             notes.append("composer audit unreadable")
     if os.path.isfile(os.path.join(clone, "package-lock.json")):
@@ -203,9 +288,7 @@ def measure(app, clone, report, gates):
                   if lang == "php" and d.get("duplication"))
     all_loc = sum(d["duplication"]["code_lines"] for d in report["languages"].values() if d.get("duplication"))
     out = {}
-    cov = os.path.join(clone, ".coverage-baseline")
-    out["php_coverage"] = cell("php_coverage", float(open(cov).read().strip()) if os.path.isfile(cov) else None,
-                               ".coverage-baseline, the coverage-guard floor recorded on development")
+    out["php_coverage"] = php_coverage(app, clone)
     out["spec_coverage"] = cell("spec_coverage", *spec_coverage(clone))
     out["e2e_coverage"] = cell("e2e_coverage", *e2e_coverage(clone))
     out["test_ratio"] = cell("test_ratio", *test_ratio(clone, files, report))
@@ -288,10 +371,13 @@ def sig_other(clone, report, measures):
     out["osh_licence"] = {"value": risky + lic["low"], "stars": 4 if risky == 0 and lic["low"] <= 3 else "<4",
                           "detail": ", ".join(f"{k} {n}" for k, n in lic.items())}
     s = (report.get("structure") or {}).get("php")
-    if s:
+    # Each connected pair gives both of its components one neighbour. communication_lines
+    # counts the two directions separately, so a report without connected_pairs gives no cell.
+    pairs = s["component_entanglement"].get("connected_pairs") if s else None
+    if pairs is not None:
         e = s["component_entanglement"]
-        adj = 2 * e["communication_lines"] / max(e["connected_components"], 1)
+        adj = 2 * pairs / max(e["connected_components"], 1)
         out["arch_adjacency"] = {"value": round(adj, 1), "stars": 4 if adj <= 6 else "<4",
-                                 "detail": f"{e['communication_lines']} dependency lines between "
+                                 "detail": f"{pairs} connected pairs between "
                                            f"{e['connected_components']} components (estimate)"}
     return out

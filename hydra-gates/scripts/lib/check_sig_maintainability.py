@@ -943,6 +943,7 @@ def structure(app, files, deps, prof=PROFILES[DEFAULT_PROFILE]):
                                    "stars": stars_of("component_independence", round(independence, 4))},
         "component_entanglement": {
             "communication_lines": len(lines),
+            "connected_pairs": len({frozenset(pair) for pair in lines}),
             "connected_components": len(connected),
             "communication_density": round(density, 2),
             "violation_degree": round(degree, 4),
