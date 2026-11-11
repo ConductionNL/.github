@@ -48,6 +48,7 @@ USAGE
 from __future__ import annotations
 
 import argparse
+import copy
 import glob
 import json
 import os
@@ -972,7 +973,8 @@ def _register_schema_map(
     return registers, resolved, definitions
 
 
-def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> dict:
+def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None,
+          carry_schemas: bool = False) -> dict:
     keep: dict[tuple[str, str], list] = {}
     if existing:
         for obj in existing.get("components", {}).get("objects", []) or []:
@@ -999,8 +1001,13 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
             "version": reg.get("version", "1.0.0"),
             "description": "Demo data for "
                            f"{reg.get('title', reg_slug)}. Generated from the register's own "
-                           "schemas — see hydra-gates/scripts/lib/generate_mock_register.py.",
+                           "schemas: see hydra-gates/scripts/lib/generate_mock_register.py.",
         }
+        # The register's own access rules travel with it. A demo import is a
+        # forced import, so a register entry without them would replace the
+        # real register's default with none.
+        if isinstance(reg.get("authorization"), dict):
+            registers[reg_slug]["authorization"] = copy.deepcopy(reg["authorization"])
 
         for sch_name in carried_names:
             # A catalogue's rows are the app's own curated list; see
@@ -1025,7 +1032,7 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
         "openapi": "3.0.0",
         "info": {
             "title": f"{app_id} demo data",
-            "version": "1.0.0",
+            "version": _kept_version(existing),
             "description": (
                 "Demo data covering every schema this app supplies, offered as the first "
                 "step of the app's setup walkthrough. Generated from the schemas "
@@ -1036,13 +1043,14 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
             "type": "mock",
             "app": app_id,
             "description": (
-                f"Demo data for {app_id}. NOT installed automatically — a mock register is "
+                f"Demo data for {app_id}. NOT installed automatically: a mock register is "
                 "imported on demand, from the setup walkthrough or "
                 f"`occ openregister:descriptors:list --app={app_id} --import=<slug>`."
             ),
         },
         "paths": {},
-        # 🔴 NO `schemas` BLOCK. The mock declares its REGISTER (the descriptor
+        # 🔴 NO `schemas` BLOCK, unless the app's mock already carries one (see
+        # `_components`). The mock declares its REGISTER (the descriptor
         # lookup keys on that, and the importer needs somewhere to put the
         # objects) and its OBJECTS, and nothing else.
         #
@@ -1059,8 +1067,44 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
         # Repair step at install). `--check` reads definitions from the app's
         # REAL descriptors too — `_component_files` skips `type: mock` — so
         # validation is unaffected.
-        "components": {"registers": registers, "objects": objects},
+        "components": _components(registers, schemas, objects, carry_schemas),
     }
+
+
+def _components(registers: dict, schemas: dict, objects: list, carry_schemas: bool) -> dict:
+    """The mock's components: a `schemas` block only for an app whose mock
+    already carries one.
+
+    🔴 SUCH A BLOCK IS REBUILT FROM THE REAL DEFINITIONS, `authorization`
+    INCLUDED. The demo import is forced, so every schema it carries replaces
+    the real one. humaniq's mock kept 71 definitions from an older register
+    without their access rules, and loading demo data put every HR-only
+    schema back to the register default. A definition copied from the real
+    descriptor imports the same rules the app ships.
+    """
+    components: dict[str, Any] = {"registers": registers}
+    if carry_schemas:
+        components["schemas"] = schemas
+    components["objects"] = objects
+    return components
+
+
+def _kept_version(existing: dict | None) -> str:
+    """The `info.version` of the mock kept with `--keep`, else 1.0.0."""
+    info = existing.get("info") if isinstance(existing, dict) else None
+    version = info.get("version") if isinstance(info, dict) else None
+    return version if isinstance(version, str) and version else "1.0.0"
+
+
+def _carries_schemas(path: str) -> bool:
+    """Whether the mock already written at `path` carries a `schemas` block."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return False
+    block = data.get("components", {}).get("schemas") if isinstance(data, dict) else None
+    return isinstance(block, dict) and bool(block)
 
 
 # The seven types JSON Schema itself defines. OpenRegister's vocabulary is a
@@ -1513,7 +1557,7 @@ def main(argv: list[str]) -> int:
         except (OSError, ValueError):
             existing = None
 
-    built = build(app_dir, app_id, args.objects, existing)
+    built = build(app_dir, app_id, args.objects, existing, carry_schemas=_carries_schemas(out))
     objects = len(built["components"]["objects"])
     # Counted from the OBJECTS, not from a schemas block — the descriptor no
     # longer carries one (it duplicated the app's own definitions and broke
