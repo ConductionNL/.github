@@ -615,6 +615,17 @@ class Structure(unittest.TestCase):
         self.assertEqual(comp("lib/Service/X1.php"), "Service")
         self.assertEqual(comp("lib/AppInfo.php"), "(root)")
 
+    def test_components_from_scope_reads_top_level_directories(self):
+        with tempfile.TemporaryDirectory() as app:
+            with open(os.path.join(app, "sigrid.yaml"), "w") as fh:
+                fh.write('component_base_dirs: [""]\n')
+            self.assertTrue(sig.sigrid_yaml_top_level_components(app))
+            with open(os.path.join(app, "sigrid.yaml"), "w") as fh:
+                fh.write("component_base_dirs: [lib]\n")
+            self.assertFalse(sig.sigrid_yaml_top_level_components(app))
+        self.assertEqual(sig.top_level_component_of("lib/Service/A.php"), "lib")
+        self.assertEqual(sig.top_level_component_of("index.php"), "Root files")
+
     def test_component_root_in_a_python_service_and_modules_outside_it(self):
         files = ["src/__init__.py", "src/api/main.py", "src/api/routers/a.py", "src/api/routers/b.py",
                  "src/api/utils/c.py", "src/api/utils/d.py", "src/api/utils/e.py", "src/api/utils/f.py",
