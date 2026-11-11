@@ -225,11 +225,11 @@ exit 0
 
 ##### SBOM: nothing to set up per repo
 
-The SBOM never had this problem and needs no hook: the `sbom` job generates the CycloneDX SBOM in CI, hard-fails on validation (Grype CVE scan, composer/npm audit), and publishes it as a run artifact + release asset. It is **intentionally never committed to the repo** (SBOMs embed timestamps/serial numbers, so a committed copy would be perpetually "stale" and pollute every diff). Its failures block merges through the same Quality Report gate. PR-time dependency gating is covered separately by the `Security (composer)`/`Security (npm)` legs, which run on every PR.
+The `sbom` job generates the CycloneDX SBOM in CI, hard-fails on validation (Grype CVE scan, composer/npm audit), and publishes it as a run artifact + release asset. Each app also commits a root `sbom.cdx.json` snapshot of its lockfiles. It is regenerated with hydra `scripts/regen-sbom.sh`, which strips the serial number and timestamp and pins composer's root version, so the file only changes when a lockfile does. hydra `diff-check.sh` and the opt-in `enable-sbom-freshness` job fail a change that moves `composer.lock` or `package-lock.json` without regenerating it. Its failures block merges through the same Quality Report gate. PR-time dependency gating is covered separately by the `Security (composer)`/`Security (npm)` legs, which run on every PR.
 
 ## SBOM (Software Bill of Materials)
 
-Each app's SBOM is published exclusively as a **release asset** via the central Quality workflow's SBOM job. Per-app `sbom.yml` workflows are not allowed — they were removed in [`ConductionNL/.github#34`](https://github.com/ConductionNL/.github/pull/34).
+Each app's CVE-validated SBOM is published as a **release asset** via the central Quality workflow's SBOM job. The committed root `sbom.cdx.json` is a snapshot of the lockfiles for readers of the repository, not a substitute for the release asset. Per-app `sbom.yml` workflows are not allowed — they were removed in [`ConductionNL/.github#34`](https://github.com/ConductionNL/.github/pull/34).
 
 See [SECURITY.md](./SECURITY.md#software-bill-of-materials-sbom) for the consumer contract (stable URLs, format, verification gates).
 
