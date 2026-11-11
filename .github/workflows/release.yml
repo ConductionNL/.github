@@ -1440,6 +1440,9 @@ jobs:
           mkdir -p package/${{ inputs.app-name }}
           # src/ stays out except src/manifest.json: OpenRegister reads it on
           # the server (deep links, health, schedules, public pages, store).
+          # openapi.json ships: apps serve it at /api/openapi.json (NL API
+          # Design Rules, /core/publish-openapi), so a package without it
+          # answers that endpoint with an error.
           # Without it a released app registered no deep links, so its
           # notifications opened a dashboard (cloud check, 9 October 2026).
           rsync -a --progress \
@@ -1495,7 +1498,6 @@ jobs:
             --exclude='/.coverage-baseline' \
             --exclude='/signing-key.key' \
             --exclude='/signing-cert.crt' \
-            --exclude='/openapi.json' \
             --exclude='/.phpqa.yml' \
             --exclude='/.grype.yaml' \
             --exclude='/sbom.cdx.json' \
