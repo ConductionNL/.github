@@ -625,6 +625,11 @@ on:
         required: false
         type: boolean
         default: false
+      enable-maintainability-floor:
+        description: "Enforce the app's maintainability floor (.maintainability-floor.json, hydra-gates scripts/lib/floor_check.py). On a PULL REQUEST the merge base and the head are both measured and no rating (overall or any property) may drop more than 0.01; the committed floor file may be raised, never lowered or deleted. On a PUSH the tree must measure at or above the committed floor. OPT-IN, default false. Requires a hydra-gates-ref that ships floor_check.py; the step fails loudly when it does not."
+        required: false
+        type: boolean
+        default: false
       hydra-gates-e2e-anchor-blocking:
         # THE OPT-IN GATE-46 ALREADY INVITES AND NOTHING COULD ACCEPT.
         #
@@ -8681,6 +8686,40 @@ jobs:
           fi
           echo "::error::${RC} Hydra gate(s) failed. The exit code is the failure COUNT — see the named [gate-N] FAIL lines above."
           exit 1
+
+      # The maintainability floor: the same model as the coverage ratchet. A
+      # pull request is measured against its merge base; a push is held to the
+      # committed floor file. Exit 4 (no floor file, no measured source) is
+      # not applicable, not a failure.
+      - name: Maintainability floor
+        if: ${{ !cancelled() && inputs.enable-maintainability-floor }}
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ steps.base.outputs.base }}
+          GATES_REF: ${{ inputs.hydra-gates-ref }}
+          HYDRA_GATE_TOOLS_DIR: ${{ runner.temp }}/hydra-sig-cache/tools
+          HYDRA_GATE_FLOOR_CACHE: ${{ runner.temp }}/hydra-sig-cache/floor
+        run: |
+          set -u
+          FLOOR="${GITHUB_WORKSPACE}/gates/hydra-gates/scripts/lib/floor_check.py"
+          if [ ! -f "${FLOOR}" ]; then
+            echo "::error::enable-maintainability-floor is on, but hydra-gates-ref='${GATES_REF}' ships no scripts/lib/floor_check.py. Bump the ref or turn the input off."
+            exit 1
+          fi
+          OUT="${RUNNER_TEMP}/maintainability-floor.txt"
+          if { [ "${EVENT}" = "pull_request" ] || [ "${EVENT}" = "pull_request_target" ]; } && [ -n "${BASE}" ]; then
+            python3 "${FLOOR}" compare "${GITHUB_WORKSPACE}/app" --base-ref "${BASE}" > "${OUT}" 2>&1 && RC=0 || RC=$?
+          else
+            python3 "${FLOOR}" against-floor "${GITHUB_WORKSPACE}/app" > "${OUT}" 2>&1 && RC=0 || RC=$?
+          fi
+          cat "${OUT}"
+          { echo "### Maintainability floor"; echo; echo '```'; cat "${OUT}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${RC}" -eq 4 ]; then
+            echo "::notice::No maintainability floor applies to this repository (no .maintainability-floor.json, or no measured source)."
+            exit 0
+          fi
+          [ "${RC}" -eq 0 ] || echo "::error::The maintainability floor failed (exit ${RC}). See the [maintainability-floor] line above."
+          exit "${RC}"
 
       - name: Publish the SIG maintainability profile
         # Full-scope runs only: that is the daily drift sweep's dispatch, the

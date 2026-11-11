@@ -238,6 +238,25 @@ FILE_TIMEOUT = int(os.environ.get("HYDRA_GATE_SIG_FILE_TIMEOUT", "30"))
 # scope
 # --------------------------------------------------------------------------
 
+def sigrid_yaml_top_level_components(app):
+    """True when sigrid.yaml / sigrid.yml declares `component_base_dirs: [""]`."""
+    for name in ("sigrid.yaml", "sigrid.yml"):
+        path = os.path.join(app, name)
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                return any(re.match(r"""^component_base_dirs:\s*\[\s*(""|'')\s*\]\s*(#.*)?$""", line)
+                           for line in fh)
+    return False
+
+
+def top_level_component_of(rel):
+    """Components are the repository's top-level directories; root files form one component."""
+    return rel.split("/")[0] if "/" in rel else "Root files"
+
+
+COMPONENTS_FROM_SCOPE = False
+
+
 def sigrid_yaml_excludes(app):
     """Top-level `exclude:` regexes of sigrid.yaml / sigrid.yml, if present."""
     for name in ("sigrid.yaml", "sigrid.yml"):
@@ -915,7 +934,10 @@ def structure(app, files, deps, prof=PROFILES[DEFAULT_PROFILE]):
         share = above / total
         coupling.append({"above": bound, "share": round(share, 4), "loc": above, "limit": cap, "ok": share <= cap,
                          "stars": stars_of("module_coupling", round(share, 4), i)})
-    root, comp = component_of_factory(modules)
+    if COMPONENTS_FROM_SCOPE and sigrid_yaml_top_level_components(app):
+        root, comp = "", top_level_component_of
+    else:
+        root, comp = component_of_factory(modules)
     hidden = sum(loc[m] for m in modules if all(comp(s) == comp(m) for s in incoming[m]))
     lines = collections.Counter()
     for t, srcs in incoming.items():
@@ -1497,7 +1519,11 @@ def main(argv):
     p.add_argument("--profile", default=os.environ.get("HYDRA_GATE_SIG_PROFILE") or DEFAULT_PROFILE,
                    help="limits to report against: " + ", ".join(PROFILES)
                         + " (default: HYDRA_GATE_SIG_PROFILE, else " + DEFAULT_PROFILE + ")")
+    p.add_argument("--components-from-scope", action="store_true",
+                   help='use top-level directories as components when sigrid.yaml declares component_base_dirs: [""]')
     args = ap.parse_args(argv)
+    global COMPONENTS_FROM_SCOPE
+    COMPONENTS_FROM_SCOPE = getattr(args, "components_from_scope", False)
     args.app = os.path.abspath(args.app)
     if args.mode == "report" and args.profile not in PROFILES:
         print(f"{GATE}: unknown profile '{args.profile}'; choose one of {', '.join(PROFILES)}")
