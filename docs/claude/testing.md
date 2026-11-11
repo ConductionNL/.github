@@ -1,6 +1,8 @@
 # Testing Reference
 
-This document describes all testing commands and skills available in this workspace — when to use each, how they compare, and recommended testing workflows for common situations.
+This page covers the agent-driven test skills: when to use each, how they compare, and which to run in common situations.
+
+The automated tests that run on every change are a different layer. PHPUnit, Jest or Vitest, Newman, Playwright, the static analysers and the Hydra gates, with the PHP, Nextcloud and database versions they run on, are listed once on [Development pipeline](../WayOfWork/development-pipeline.md). The skills below come on top of that: they test the running app the way a person would.
 
 ---
 
@@ -144,7 +146,7 @@ This is the only testing-adjacent command that runs _before_ implementation. It 
 
 **Cap impact:** Very high — 9 parallel agents. Open a fresh Claude window before running. See [parallel-agents.md](parallel-agents.md).
 
-**See:** [.claude/skills/test-counsel/SKILL.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/test-counsel/SKILL.md)
+**Source:** `.claude/skills/test-counsel/SKILL.md` in Hydra.
 
 ---
 
@@ -160,7 +162,7 @@ This is the only testing-adjacent command that runs _before_ implementation. It 
 
 **Cap impact:** Low (Quick) to Very high (Full). See [parallel-agents.md](parallel-agents.md).
 
-**See:** [.claude/skills/test-app/SKILL.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/test-app/SKILL.md)
+**Source:** `.claude/skills/test-app/SKILL.md` in Hydra.
 
 ---
 
@@ -198,9 +200,9 @@ REST API testing. Checks endpoints, authentication, pagination, and error respon
 
 ### `/test-accessibility`
 
-**WCAG 2.2 AA** compliance using axe-core (current legal floor is WCAG 2.1 AA via EN 301 549 v3.2.1; v4.1.1 publishes ~Oct 2026 with 2.2 AA — target 2.2 in new work). Injects axe-core 4.10+, runs automated checks against the `wcag2a`/`wcag2aa`/`wcag21aa`/`wcag22aa` rulesets, reports violations. Adds manual verification for keyboard navigation and focus management. When invoked from the Hydra pipeline, the report lands at `tests/axe/report.json` and is consumed by the `hydra-gate-axe` mechanical gate; see [`openspec/architecture/wcag-coverage.md`](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/wcag-coverage.md) in hydra for the per-SC enforcement matrix.
+**WCAG 2.2 AA** compliance using axe-core (current legal floor is WCAG 2.1 AA via EN 301 549 v3.2.1; v4.1.1 publishes ~Oct 2026 with 2.2 AA; target 2.2 in new work). Injects axe-core 4.10+, runs automated checks against the `wcag2a`/`wcag2aa`/`wcag21aa`/`wcag22aa` rulesets, reports violations. Adds manual verification for keyboard navigation and focus management. When invoked from the Hydra pipeline, the report lands at `tests/axe/report.json` and is consumed by the `hydra-gate-axe` mechanical gate; Hydra's `scripts/generate-wcag-coverage.sh` produces the per-criterion enforcement matrix.
 
-**Toegankelijkheidsverklaring**: after running, generate the Dutch government accessibility declaration with [`scripts/generate-toegankelijkheidsverklaring.sh`](https://github.com/ConductionNL/hydra/blob/main/scripts/generate-toegankelijkheidsverklaring.sh) `--app <appname>`. Computes Status A/B/C from gate results; output goes to `<app>/docs/toegankelijkheidsverklaring.md`. Add `--en` for the English variant.
+**Toegankelijkheidsverklaring**: after running, generate the Dutch government accessibility declaration with Hydra's `scripts/generate-toegankelijkheidsverklaring.sh --app <appname>`. Computes Status A/B/C from gate results; output goes to `<app>/docs/toegankelijkheidsverklaring.md`. Add `--en` for the English variant.
 
 **Deeper screen-reader audit**: pair with [`/test-persona-jasper`](#test-persona-) for an NVDA-primary user perspective (keyboard-only nav, screen-reader announcement, focus management, live regions, semantic-HTML).
 

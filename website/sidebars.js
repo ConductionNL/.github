@@ -10,6 +10,7 @@ const sidebars = {
       collapsed: false,
       items: [
         'strategy/users-are-the-moat',
+        'strategy/one-core-many-registers',
       ],
     },
     {
@@ -29,6 +30,7 @@ const sidebars = {
       collapsed: false,
       items: [
         'WayOfWork/spec-driven-development',
+        'WayOfWork/architecture-decisions',
         'WayOfWork/development-pipeline',
         'WayOfWork/way-of-working',
         'WayOfWork/contributing',

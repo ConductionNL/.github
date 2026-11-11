@@ -19,8 +19,8 @@ them. Where a difference exists today it is a defect, not a dialect, and this pa
 is where each one is tracked.
 
 Two companion pages stay authoritative for what they cover:
-[Development Pipeline](development-pipeline.md) for the branch flow and
-[Release Process](release-process.md) for versioning.
+[Development pipeline](development-pipeline.md) for the test steps and the test
+matrix, and [Release process](release-process.md) for branches and versioning.
 
 ## One pipeline, eighteen thin callers
 
@@ -40,18 +40,8 @@ Consumed at `@main`, deliberately. A pinned ref is a silent expiry date: 22 repo
 once sat on gate package `v1.0.1` while 16 gates were dead fleet-wide and every
 one of them reported PASS.
 
-`quality.yml` emits up to **18 job groups**, not the four the older docs describe:
-
-| Group | Jobs |
-| --- | --- |
-| PHP Quality | `lint`, `phpcs`, `phpmd`, `psalm`, `phpstan`, `phpmetrics` (matrix) |
-| Vue Quality | `eslint`, `stylelint` (matrix) |
-| Frontend | `Frontend Build`, `Frontend Tests (unit)`, `Frontend Check (…)` per declared npm script |
-| Tests | `PHPUnit` (PHP × Nextcloud matrix), `Integration Tests (Newman)`, `E2E Tests (Playwright)` |
-| Accessibility | `axe-core` (opt-in) |
-| Supply chain | `Security (composer)`, `Security (npm)`, `License (composer)`, `License (npm)`, `SBOM` |
-| Governance | `Hydra Gates`, `Coverage Baseline Protection`, `Features Extract`, `Journeydoc Capture` |
-| Rollup | `Quality Report` |
+What that workflow runs, on which versions and databases, is listed once, on
+[Development pipeline](development-pipeline.md#the-test-matrix).
 
 ### Nextcloud's equivalent
 
@@ -656,13 +646,8 @@ is worse than a loose one.**
 ## Corrections to older pages
 
 - "**Code style — PHPCS (PSR-12)**", in
-  [development-pipeline.md](development-pipeline.md) and
   [contributing.md](contributing.md), is wrong. The ruleset is PEAR-derived. Four
   PSR-2/PSR-12 sniffs are pulled in individually; the standard as a whole is not.
-- "**four parallel quality gates**" understates the pipeline by an order of
-  magnitude — see the table at the top of this page.
-- "**Hydra … coming soon**" is stale: `enable-hydra-gates: true` is set in all 18
-  core apps today.
 - "**There are no development builds**", in
   [release-process.md](release-process.md), is contradicted by
   `release-development.yml`, which exists in 14 of 18 apps and calls the shared
@@ -670,9 +655,9 @@ is worse than a loose one.**
 
 ## Further reading
 
-- [Development Pipeline](development-pipeline.md) — branch flow and release triggers
+- [Development pipeline](development-pipeline.md): test steps and the test matrix
 - [Contributing](contributing.md) — PR checklist and commit conventions
-- **ADR-083** and **ADR-084** in [`ConductionNL/hydra`](https://github.com/ConductionNL/hydra/tree/development/openspec/architecture) — how an app depends on OpenRegister, and the contract it type-hints
+- **ADR-083** and **ADR-084** on [Architecture decisions](architecture-decisions.md): how an app depends on OpenRegister, and the contract it type-hints
 - [`quality-config/` README](https://github.com/ConductionNL/.github/tree/main/quality-config) — the mechanism, and the phpcs behaviour it was built on
 - [nextcloud/.github workflow templates](https://github.com/nextcloud/.github/tree/master/workflow-templates)
 - [nextcloud/coding-standard](https://github.com/nextcloud/coding-standard)
