@@ -4,6 +4,10 @@ Hydra is a stateless, label-driven pipeline that builds code from OpenSpec speci
 
 Since `openspec/changes/no-loop-review-pipeline`, the pipeline is **single-shot**: no review re-runs, no fix-iteration loop. Every outcome is terminal — merge or `needs-input`.
 
+## Where this fits
+
+This page describes the agent pipeline: how a spec becomes a reviewed pull request. The tests that pull request then passes are the same for every change, whether an agent or a person wrote it. They are listed once, with the test matrix, on [Development pipeline](../WayOfWork/development-pipeline.md).
+
 ## State Machine
 
 The pipeline is driven entirely by GitHub issue labels. The supervisor polls every cycle and decides what to do:

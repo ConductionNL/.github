@@ -690,7 +690,9 @@ _What._ Ensure externally provided processes/products/services conform to requir
 
 _What._ Ensure externally provided processes remain within control of the QMS; define controls; consider impact on ability to meet requirements; take account of effectiveness of external provider's own controls; determine verification.
 
-**Our implementation.** Type-of-control is tiered: runtime libraries (Composer/npm) → automated audit + license gate; hosting (Cyso) → contractual ISAE 3402; shared upstream (Nextcloud) → version-pinning + PHPUnit matrix testing across supported NC versions.
+**Our implementation.** Type-of-control is tiered: runtime libraries (Composer/npm) → automated audit + license gate; hosting (Cyso) → contractual ISAE 3402; shared upstream (Nextcloud) → PHPUnit matrix testing across every Nextcloud version the app declares in `info.xml` (see [Development pipeline](../WayOfWork/development-pipeline.md#the-test-matrix)).
+
+Nextcloud is also the provider we rely on most for security. We build on its authentication, sessions, CSRF protection, users, groups, sharing, encryption and brute-force protection rather than writing our own, and our own controls build on Nextcloud identities. The principle and the list are on [Security policy](security.md#we-build-on-nextclouds-security).
 
 **Coverage.** _Full._
 

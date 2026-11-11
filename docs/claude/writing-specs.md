@@ -40,7 +40,7 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 ## Non-Functional Requirements
 
 - **Performance:** <measurable performance requirement>
-- **Accessibility:** Target **WCAG 2.2 AA** (legal floor today is 2.1 AA via EN 301 549 v3.2.1; v4.1.1 → 2.2 expected Oct 2026). For UI-bearing specs, enumerate the touched SCs per the format used in [`openspec/changes/clickable-kpi-widgets/proposal.md`](https://github.com/ConductionNL/hydra/blob/main/openspec/changes/clickable-kpi-widgets/proposal.md) — each SC reference names the Hydra gate that catches it. Cross-reference [`openspec/architecture/wcag-coverage.md`](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/wcag-coverage.md) for the per-SC enforcement matrix. The 6 NEW-in-2.2 SCs (2.4.11 Focus Not Obscured, 2.5.7 Dragging Movements, 2.5.8 Target Size, 3.2.6 Consistent Help, 3.3.7 Redundant Entry, 3.3.8 Accessible Authentication) MUST be addressed explicitly in any UI spec, even if only to mark them n/a with a reason.
+- **Accessibility:** Target **WCAG 2.2 AA** (legal floor today is 2.1 AA via EN 301 549 v3.2.1; v4.1.1 → 2.2 expected Oct 2026). For UI-bearing specs, enumerate the touched success criteria, each naming the Hydra gate that catches it. Hydra's `openspec/changes/clickable-kpi-widgets/proposal.md` is the worked example, and `scripts/generate-wcag-coverage.sh` produces the per-criterion enforcement matrix. The 6 NEW-in-2.2 SCs (2.4.11 Focus Not Obscured, 2.5.7 Dragging Movements, 2.5.8 Target Size, 3.2.6 Consistent Help, 3.3.7 Redundant Entry, 3.3.8 Accessible Authentication) MUST be addressed explicitly in any UI spec, even if only to mark them n/a with a reason.
 - **Internationalization:** Dutch and English MUST be supported (ADR-007)
 
 ## Acceptance Criteria
@@ -54,7 +54,7 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 
 ### Requirement headings (ADR-038)
 
-Every requirement heading has one form — Form A of [ADR-038](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-038-canonical-req-id-format.md):
+Every requirement heading has one form: Form A of [ADR-038](../WayOfWork/architecture-decisions.md#engineering-process):
 
 ```markdown
 ### Requirement: <Concise Title> (REQ-XX-NNN)
@@ -283,7 +283,7 @@ See shared spec: `api-patterns/spec.md#requirement-url-structure` for URL conven
 See shared spec: `api-patterns/spec.md#requirement-cors-support` for CORS requirements.
 ```
 
-Shared specs live in `hydra/openspec/specs/` (company-wide, maintained by Conduction). Check that directory for currently available shared specs — the list evolves as new cross-app specs are added. Company-wide architectural decisions (NL Design System, API conventions, security, i18n) are captured in ADRs under `hydra/openspec/architecture/`.
+Shared specs live in `hydra/openspec/specs/` (company-wide, maintained by Conduction). Check that directory for the shared specs that exist today; the list grows as cross-app specs are added. Company-wide architectural decisions (NL Design System, API conventions, security, i18n) are ADRs under `hydra/openspec/architecture/`, listed publicly on [Architecture decisions](../WayOfWork/architecture-decisions.md). How the company-wide and per-app layers relate is on [Spec-driven development](../WayOfWork/spec-driven-development.md#where-specs-and-decisions-live).
 
 ## Cross-Referencing Requirements
 

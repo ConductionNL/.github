@@ -19,7 +19,7 @@ In practice:
 - **Our handbook is public.** You're reading it. The source lives in [Conduction/.github](https://github.com/ConductionNL/.github/tree/main/docs).
 - **Our roadmap is public.** Our [GitHub Projects board](https://github.com/orgs/ConductionNL/projects/4) shows what's next, what's in flight, and what's shipped.
 - **Our specs and decisions are public.** Every change starts as an OpenSpec proposal and lands as a reviewed pull request. The reasoning lives in the issue and the PR, not in private channels.
-- **Our pipeline is public.** [Hydra](/hydra/), the agentic CI/CD that builds our apps, is itself open source.
+- **Our pipeline is public.** How [Hydra](/hydra/), our agentic build pipeline, works is documented here, and the quality gates it runs are open source in [`conduction/hydra-gates`](https://github.com/ConductionNL/.github/tree/main/hydra-gates).
 - **Our identity is public.** Brand, voice, and visual identity live on [identity.conduction.nl](https://identity.conduction.nl/).
 
 If you can't find something, that's a documentation gap, not a privacy boundary. Ask, and we'll publish.

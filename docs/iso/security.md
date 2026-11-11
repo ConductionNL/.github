@@ -10,6 +10,28 @@ description: How to report vulnerabilities, our response timeline, and safe harb
 
 This security policy applies to all repositories under the [ConductionNL](https://github.com/ConductionNL) organization on GitHub, where all Conduction source code lives.
 
+## We build on Nextcloud's security
+
+We trust Nextcloud's security capabilities more than our own, and we build on them explicitly. Nextcloud's security is reviewed and attacked by a far larger community than ours. Every control we write ourselves is one more control to get wrong.
+
+So our apps take these from Nextcloud and do not reimplement them:
+
+| Concern | What our apps use |
+| --- | --- |
+| Authentication and sessions | Nextcloud login and sessions, including SSO, LDAP and two-factor authentication. No app has its own login, session, token or password storage (ADR-002, ADR-005). |
+| CSRF and endpoint access | Nextcloud's CSRF protection and controller attributes: `#[NoAdminRequired]`, `#[PublicPage]`, `#[NoCSRFRequired]`, `#[AuthorizedAdminSetting]`. A gate fails any route that declares no access attribute. |
+| Users, groups and sharing | Nextcloud users, groups (`IGroupManager`) and the share manager. Admin checks run on the backend. |
+| Secrets and encryption | `ICrypto` for encryption and `ICredentialsManager` for stored credentials. |
+| Brute-force protection | Nextcloud's brute-force protection and rate-limit attributes. Every public endpoint is throttled (ADR-082). |
+
+What we add builds on Nextcloud identities, never on a parallel user store:
+
+- **Register- and schema-level authorization.** OpenRegister decides per register, schema and object who may read or write, based on Nextcloud users and groups (ADR-023).
+- **Organisation multitenancy.** An organisation's members are Nextcloud users and groups, and object queries are scoped to the user's organisation.
+- **The audit trail.** Changes to objects are recorded with the Nextcloud user who made them, in a hash-chained trail. It is on by default.
+
+The architecture reasoning behind this is on [One core, many registers](../strategy/one-core-many-registers.md).
+
 ## Reporting a Vulnerability
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
@@ -100,7 +122,7 @@ Conduction does not currently operate a paid bug bounty program. Valid reports r
 
 ## Internal Incident Reporting
 
-Conduction employees: see the [Incident Reporting](incident-reporting) procedure for reporting security incidents and quality deviations.
+Conduction employees: see the [Incident Reporting](incident-reporting.md) procedure for reporting security incidents and quality deviations.
 
 ## Employee Security Practices
 

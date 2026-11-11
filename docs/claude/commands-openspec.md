@@ -1,6 +1,8 @@
 # OpenSpec Command Reference
 
-These commands are installed per-project when you run `openspec init`. They're available inside each project directory.
+These commands drive the [OpenSpec flow](../WayOfWork/spec-driven-development.md#the-openspec-flow). They are Claude Code skills, maintained in Hydra's `.claude/skills/` and shared with every app workspace. The `openspec` CLI, listed at the bottom of this page, is the separate terminal tool underneath them.
+
+Where the change folders, specs and ADRs live is on [Spec-driven development](../WayOfWork/spec-driven-development.md#where-specs-and-decisions-live).
 
 ---
 
@@ -121,6 +123,22 @@ Think through ideas and investigate the codebase before starting a formal change
 Use `/opsx-explore` to think through _what to build_. Use `/app-explore` to document _how an app is designed and configured_.
 
 **Model:** Checked at run time — stops on Haiku. Asks which model to use and explains how to switch if the choice differs from the active model. **Sonnet** for most exploration sessions. **Opus** recommended — complex analysis, architecture decisions, and strategic thinking benefit from stronger reasoning.
+
+---
+
+### `/opsx-plan-to-issues`
+
+**Phase:** Spec Building
+
+Turns a change's `tasks.md` into a `plan.json` and creates a tracking issue with one checkbox per task, on GitHub or GitLab.
+
+**Usage:**
+
+```
+/opsx-plan-to-issues
+```
+
+**When to use:** After the tasks are written and before `/opsx-apply`, when you want the progress visible on the board.
 
 ---
 
@@ -339,7 +357,7 @@ Get an overview of the current project's OpenSpec setup and active changes.
 
 ## Retrofit Commands
 
-Used to bring legacy apps under the `@spec` annotation convention defined in [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md). Apps built spec-first via `/opsx-apply` already carry the tags — retrofit is the one-time pass for apps that predate the convention. Run the three skills in order: scan → annotate → reverse-spec. See the [Retrofit Playbook](retrofit.md) for prerequisites, bucket definitions, and roll-out order.
+Used to bring legacy apps under the `@spec` annotation convention defined in ADR-003, section Spec traceability (see [Architecture decisions](../WayOfWork/architecture-decisions.md)). Apps built spec-first via `/opsx-apply` already carry the tags. Retrofit is the one-time pass for apps that predate the convention. Run the three skills in order: scan → annotate → reverse-spec. See the [Retrofit Playbook](retrofit.md) for prerequisites, bucket definitions, and roll-out order.
 
 ---
 

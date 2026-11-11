@@ -41,6 +41,16 @@ hotfix/*  ─┘        │              │        │
 
 These rules are enforced by the centralized **branch-protection** workflow. PRs from disallowed branches are blocked automatically.
 
+### The Nextcloud branch model
+
+Apps are moving to the branch model Nextcloud uses for its own apps, one app at a time. OpenRegister moved first. An app on this model sets `branch-model: main` in its release caller.
+
+- Work lands on `main`. A push to `main` makes a GitHub prerelease, with no App Store upload.
+- Each minor line gets a `stableX.Y` branch. Release candidates, finals and patches come from that branch only.
+- Fixes land on `main` first and are backported to `stableX.Y` with the backport workflow. Nothing is merged upward.
+
+Check the app's own workflows to see which model it uses. The three-tier model above applies until an app has moved.
+
 ### Hotfixes
 
 Hotfix branches (`hotfix/*`) can target both `beta` and `main` directly, bypassing the normal development flow. Use these only for critical production fixes that cannot wait for the regular development cycle.
