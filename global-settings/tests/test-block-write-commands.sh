@@ -656,6 +656,16 @@ add_deny  "date: after a pipe"                           "echo x | date -s x"
 add_deny  "date: after a harmless date"                  "date -u; date -s x"
 add_deny  "date: after curl -s"                          "curl -s x; date -s x"
 add_deny  "date: -s behind a quoted ;"                   "date -d 'a;b' -s now"
+# A redirection, an escape or an open quote does not end the inspected segment.
+add_allow "date: redirection then ; then curl -s"        "date -u 2>/dev/null; curl -s x"
+add_allow "date: 2>&1 piped into sort -s"                "date -u 2>&1 | sort -s"
+add_deny  "date: -s behind 2>&1"                         "date -u 2>&1 -s 2020-01-01"
+add_deny  "date: -s behind &>"                           "date -u &>/dev/null -s 2020-01-01"
+add_deny  "date: -s behind >|"                           'date >|/tmp/x -s 2020-01-01'
+add_deny  "date: -s behind an escaped ;"                 'date +a\;b -s 2020-01-01'
+add_deny  "date: -s behind an escaped \""                'date +\" -s 2020-01-01'
+add_deny  "date: -s behind an escaped '"                 "date +\\' -s 2020-01-01"
+add_deny  "date: -s inside an unclosed quote"            'date -d "a -s now'
 
 # ── v2.7.3 git push: `push` must end the word ─────────────────────────────────
 add_allow "push v2.7.3: git push-notes is another command" "git push-notes"

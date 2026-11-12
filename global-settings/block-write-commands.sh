@@ -584,12 +584,17 @@ if echo "$cmd" | grep -qE '(^|[;&|]\s*)env\b'; then
 fi
 
 # ── date (HARD BLOCK: modifying system time — no legitimate use case) ─────────
-# Only the arguments of a `date` invocation are inspected (up to the next
-# `;`, `&`, `|` or newline; a quoted string never ends it), so another
-# command's `-s` (as in `curl -s x; date -u`) is not mistaken for `date -s`.
+# Only the arguments of a `date` invocation are inspected, so another command's
+# `-s` (as in `curl -s x; date -u`) is not mistaken for `date -s`. The segment
+# ends at a real separator only: `;`, `&&`, `||`, `|`, `|&`, a lone `&` or a
+# newline. It does NOT end at a quoted string, an escaped character (`\;`, `\"`),
+# or a redirection operator (`2>&1`, `&>`, `>|`, `<&`); a quote that is never
+# closed runs to the end of the line (fail closed). The two sed steps below
+# blank out escapes and redirections so the segment grep only sees real separators.
 if echo "$cmd" | grep -qE '(^|[;&|]\s*)date\b'; then
     _q="'"; _dq='"'
-    _date_segments=$(echo "$cmd" | grep -oE "(^|[;&|][[:space:]]*)date\b([^;&|${_dq}${_q}]|${_dq}[^${_dq}]*${_dq}|${_q}[^${_q}]*${_q})*")
+    _norm=$(echo "$cmd" | sed -E -e 's/\\./xx/g' -e 's/[0-9]*(>&|<&|&>>|&>|>\|)/RR/g')
+    _date_segments=$(echo "$_norm" | grep -oE "(^|[;&|][[:space:]]*)date\b([^;&|${_dq}${_q}]|${_dq}[^${_dq}]*${_dq}|${_q}[^${_q}]*${_q}|${_dq}[^${_dq}]*\$|${_q}[^${_q}]*\$)*")
     if echo "$_date_segments" | grep -qE '(^|\s)(-s\s|--set[[:space:]=])'; then
         hard_deny "Blocked: date -s / --set modifies the system clock. This is never allowed."
     fi
