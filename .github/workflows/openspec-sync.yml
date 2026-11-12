@@ -34,6 +34,16 @@ on:
           required, so existing callers keep validating.
         required: false
 
+# Syncs issues from the tree at the newest commit, so an older run that is
+# still waiting is replaced by the newer one. A run that has started
+# finishes: it creates and edits issues one by one and is not cut off with
+# half of them updated. The `reusable-` prefix keeps this group distinct from
+# any the caller declares (an identical group in caller and callee
+# deadlocks).
+concurrency:
+  group: reusable-openspec-sync-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   sync:
     name: Sync OpenSpec to GitHub Issues
