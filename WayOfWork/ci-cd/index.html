@@ -5,8 +5,8 @@
 <meta name="generator" content="Docusaurus v3.10.1">
 <title data-rh="true">CI/CD and Code Standards | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" property="og:image" content="https://docs.conduction.nl/img/og-conduction.png"><meta data-rh="true" name="twitter:image" content="https://docs.conduction.nl/img/og-conduction.png"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/WayOfWork/ci-cd/"><meta data-rh="true" property="og:locale" content="en_GB"><meta data-rh="true" property="og:locale:alternate" content="nl_NL"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="twitter:site" content="@ConductionNL"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:type" content="website"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="CI/CD and Code Standards | Conduction Docs"><meta data-rh="true" name="description" content="What our pipeline runs, where the configuration lives, and how we stay strictly compatible with Nextcloud&#x27;s own app CI/CD"><meta data-rh="true" property="og:description" content="What our pipeline runs, where the configuration lives, and how we stay strictly compatible with Nextcloud&#x27;s own app CI/CD"><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/WayOfWork/ci-cd/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/WayOfWork/ci-cd/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/WayOfWork/ci-cd/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/WayOfWork/ci-cd/" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","@id":"https://docs.conduction.nl/WayOfWork/ci-cd#article","mainEntityOfPage":"https://docs.conduction.nl/WayOfWork/ci-cd","headline":"CI/CD and Code Standards","inLanguage":"en","publisher":{"@id":"https://www.conduction.nl/#org"},"description":"What our pipeline runs, where the configuration lives, and how we stay strictly compatible with Nextcloud's own app CI/CD","author":{"@type":"Organization","name":"Conduction","@id":"https://www.conduction.nl/#org"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://www.conduction.nl/#org","name":"Conduction B.V.","alternateName":"Conduction","url":"https://www.conduction.nl/","logo":"https://www.conduction.nl/img/brand/avatar-conduction-gold-on-white.svg","foundingDate":"2019","description":"Dutch open-source software company building EUPL-1.2 apps for the Nextcloud workspace.","address":{"@type":"PostalAddress","streetAddress":"Lauriergracht 14h","postalCode":"1016 RR","addressLocality":"Amsterdam","addressCountry":"NL"},"email":"info@conduction.nl","telephone":"+31-85-303-6840","taxID":"NL860784241B01","vatID":"NL860784241B01","identifier":{"@type":"PropertyValue","propertyID":"KvK","value":"76741850"},"sameAs":["https://github.com/ConductionNL","https://www.linkedin.com/company/conduction/"]}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://docs.conduction.nl/#website","url":"https://docs.conduction.nl/","name":"Conduction Docs","publisher":{"@id":"https://www.conduction.nl/#org"},"inLanguage":["en","nl"]}</script><link rel="stylesheet" href="/assets/css/styles.a216bebe.css">
-<script src="/assets/js/runtime~main.b58596e8.js" defer="defer"></script>
-<script src="/assets/js/main.363a1272.js" defer="defer"></script>
+<script src="/assets/js/runtime~main.83892489.js" defer="defer"></script>
+<script src="/assets/js/main.2482c1c6.js" defer="defer"></script>
 </head>
 <body>
 <svg style="display: none;"><defs>
@@ -23,8 +23,8 @@ one of their rules a different value — code that satisfies us must still satis
 them. Where a difference exists today it is a defect, not a dialect, and this page
 is where each one is tracked.</p>
 <p>Two companion pages stay authoritative for what they cover:
-<a class="" href="/WayOfWork/development-pipeline/">Development Pipeline</a> for the branch flow and
-<a class="" href="/WayOfWork/release-process/">Release Process</a> for versioning.</p>
+<a class="" href="/WayOfWork/development-pipeline/">Development pipeline</a> for the test steps and the test
+matrix, and <a class="" href="/WayOfWork/release-process/">Release process</a> for branches and versioning.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="one-pipeline-eighteen-thin-callers">One pipeline, eighteen thin callers<a href="#one-pipeline-eighteen-thin-callers" class="hash-link" aria-label="Direct link to One pipeline, eighteen thin callers" title="Direct link to One pipeline, eighteen thin callers" translate="no">​</a></h2>
 <p>Every core app&#x27;s <code>.github/workflows/code-quality.yml</code> is a caller. The pipeline
 itself is one reusable workflow:</p>
@@ -32,49 +32,8 @@ itself is one reusable workflow:</p>
 <p>Consumed at <code>@main</code>, deliberately. A pinned ref is a silent expiry date: 22 repos
 once sat on gate package <code>v1.0.1</code> while 16 gates were dead fleet-wide and every
 one of them reported PASS.</p>
-<p><code>quality.yml</code> emits up to <strong>18 job groups</strong>, not the four the older docs describe:</p>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<table><thead><tr><th>Group</th><th>Jobs</th></tr></thead><tbody><tr><td>PHP Quality</td><td><code>lint</code>, <code>phpcs</code>, <code>phpmd</code>, <code>psalm</code>, <code>phpstan</code>, <code>phpmetrics</code> (matrix)</td></tr><tr><td>Vue Quality</td><td><code>eslint</code>, <code>stylelint</code> (matrix)</td></tr><tr><td>Frontend</td><td><code>Frontend Build</code>, <code>Frontend Tests (unit)</code>, <code>Frontend Check (…)</code> per declared npm script</td></tr><tr><td>Tests</td><td><code>PHPUnit</code> (PHP × Nextcloud matrix), <code>Integration Tests (Newman)</code>, <code>E2E Tests (Playwright)</code></td></tr><tr><td>Accessibility</td><td><code>axe-core</code> (opt-in)</td></tr><tr><td>Supply chain</td><td><code>Security (composer)</code>, <code>Security (npm)</code>, <code>License (composer)</code>, <code>License (npm)</code>, <code>SBOM</code></td></tr><tr><td>Governance</td><td><code>Hydra Gates</code>, <code>Coverage Baseline Protection</code>, <code>Features Extract</code>, <code>Journeydoc Capture</code></td></tr><tr><td>Rollup</td><td><code>Quality Report</code></td></tr></tbody></table>
+<p>What that workflow runs, on which versions and databases, is listed once, on
+<a class="" href="/WayOfWork/development-pipeline/#the-test-matrix">Development pipeline</a>.</p>
 <h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="nextclouds-equivalent">Nextcloud&#x27;s equivalent<a href="#nextclouds-equivalent" class="hash-link" aria-label="Direct link to Nextcloud&#x27;s equivalent" title="Direct link to Nextcloud&#x27;s equivalent" translate="no">​</a></h3>
 <p>Nextcloud ships <strong>workflow templates</strong>, not a reusable workflow: an app copies
 <code>lint-php-cs.yml</code>, <code>psalm.yml</code>, <code>lint-eslint.yml</code>, <code>node-test.yml</code>,
@@ -726,13 +685,8 @@ is worse than a loose one.</strong></p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="corrections-to-older-pages">Corrections to older pages<a href="#corrections-to-older-pages" class="hash-link" aria-label="Direct link to Corrections to older pages" title="Direct link to Corrections to older pages" translate="no">​</a></h2>
 <ul>
 <li class="">&quot;<strong>Code style — PHPCS (PSR-12)</strong>&quot;, in
-<a class="" href="/WayOfWork/development-pipeline/">development-pipeline.md</a> and
 <a class="" href="/WayOfWork/contributing/">contributing.md</a>, is wrong. The ruleset is PEAR-derived. Four
 PSR-2/PSR-12 sniffs are pulled in individually; the standard as a whole is not.</li>
-<li class="">&quot;<strong>four parallel quality gates</strong>&quot; understates the pipeline by an order of
-magnitude — see the table at the top of this page.</li>
-<li class="">&quot;<strong>Hydra … coming soon</strong>&quot; is stale: <code>enable-hydra-gates: true</code> is set in all 18
-core apps today.</li>
 <li class="">&quot;<strong>There are no development builds</strong>&quot;, in
 <a class="" href="/WayOfWork/release-process/">release-process.md</a>, is contradicted by
 <code>release-development.yml</code>, which exists in 14 of 18 apps and calls the shared
@@ -740,9 +694,9 @@ beta release workflow with <code>channel: dev</code>.</li>
 </ul>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="further-reading">Further reading<a href="#further-reading" class="hash-link" aria-label="Direct link to Further reading" title="Direct link to Further reading" translate="no">​</a></h2>
 <ul>
-<li class=""><a class="" href="/WayOfWork/development-pipeline/">Development Pipeline</a> — branch flow and release triggers</li>
+<li class=""><a class="" href="/WayOfWork/development-pipeline/">Development pipeline</a>: test steps and the test matrix</li>
 <li class=""><a class="" href="/WayOfWork/contributing/">Contributing</a> — PR checklist and commit conventions</li>
-<li class=""><strong>ADR-083</strong> and <strong>ADR-084</strong> in <a href="https://github.com/ConductionNL/hydra/tree/development/openspec/architecture" target="_blank" rel="noopener noreferrer" class=""><code>ConductionNL/hydra</code></a> — how an app depends on OpenRegister, and the contract it type-hints</li>
+<li class=""><strong>ADR-083</strong> and <strong>ADR-084</strong> on <a class="" href="/WayOfWork/architecture-decisions/">Architecture decisions</a>: how an app depends on OpenRegister, and the contract it type-hints</li>
 <li class=""><a href="https://github.com/ConductionNL/.github/tree/main/quality-config" target="_blank" rel="noopener noreferrer" class=""><code>quality-config/</code> README</a> — the mechanism, and the phpcs behaviour it was built on</li>
 <li class=""><a href="https://github.com/nextcloud/.github/tree/master/workflow-templates" target="_blank" rel="noopener noreferrer" class="">nextcloud/.github workflow templates</a></li>
 <li class=""><a href="https://github.com/nextcloud/coding-standard" target="_blank" rel="noopener noreferrer" class="">nextcloud/coding-standard</a></li>
