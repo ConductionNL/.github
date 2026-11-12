@@ -13,6 +13,16 @@ on:
         type: string
         default: "development"
 
+# A check on the pull request's CURRENT target: once the PR has moved on, an
+# older run has nothing left to say, so it is cancelled even mid-run (it is
+# a single bash comparison). Measured 2026-11-12: 246 superseded Branch
+# Protection runs sat queued across the fleet. The `reusable-` prefix keeps
+# this group distinct from any the caller declares (an identical group in
+# caller and callee deadlocks).
+concurrency:
+  group: reusable-branch-protection-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check-branch:
     runs-on: ubuntu-latest

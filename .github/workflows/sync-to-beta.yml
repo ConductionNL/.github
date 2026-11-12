@@ -3,6 +3,16 @@ name: Sync Development to Beta
 on:
   workflow_call:
 
+# Only the newest `development` head needs syncing to beta. An older run that
+# is still waiting is replaced by the newer one; a run that has started
+# finishes, because it pushes and opens or edits a PR and must not stop
+# halfway. Measured 2026-11-12: 320 superseded Sync to Beta runs sat queued
+# across the fleet. The `reusable-` prefix keeps this group distinct from
+# any the caller declares (an identical group in caller and callee deadlocks).
+concurrency:
+  group: reusable-sync-to-beta-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   create-pr:
     runs-on: ubuntu-latest

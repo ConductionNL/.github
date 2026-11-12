@@ -125,6 +125,26 @@ on:
           CF_API_TOKEN; wrangler cannot resolve the target account without it.
         required: false
 
+# ONE RUN PER CALLER WORKFLOW AND REF. A newer run replaces an older one that
+# is still waiting for a runner, so a burst of pushes builds the docs once,
+# not once per push. Measured 2026-11-12: 360 superseded Documentation runs
+# sat queued across the fleet, every one of them a future runner slot spent
+# on a build nobody would look at.
+#
+# Pull requests also cancel a run in progress: only the head commit's check
+# counts. Pushes, schedules and dispatches do NOT, so a gh-pages or Worker
+# deploy is never cut off halfway; their superseded PENDING run is still
+# dropped, which leaves at most one running and one waiting. Push and
+# schedule on the same branch share the group on purpose, so two deploys of
+# one site never race.
+#
+# The `reusable-` prefix keeps this group distinct from anything the caller
+# declares: an identical group in caller and callee deadlocks. The
+# `source-folder` keeps two calls from one caller run apart.
+concurrency:
+  group: reusable-documentation-${{ github.workflow }}-${{ github.ref }}-${{ inputs.source-folder }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Two jobs so the AI-baseline validation gate runs on every event,
 # including pull_request, while the actual gh-pages deploy stays
 # gated to push / schedule / workflow_dispatch. Sites that ship the
