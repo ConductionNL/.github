@@ -584,8 +584,13 @@ if echo "$cmd" | grep -qE '(^|[;&|]\s*)env\b'; then
 fi
 
 # ── date (HARD BLOCK: modifying system time — no legitimate use case) ─────────
+# Only the arguments of a `date` invocation are inspected (up to the next
+# `;`, `&`, `|` or newline; a quoted string never ends it), so another
+# command's `-s` (as in `curl -s x; date -u`) is not mistaken for `date -s`.
 if echo "$cmd" | grep -qE '(^|[;&|]\s*)date\b'; then
-    if echo "$cmd" | grep -qE '(^|\s)(-s\s|--set[[:space:]=])'; then
+    _q="'"; _dq='"'
+    _date_segments=$(echo "$cmd" | grep -oE "(^|[;&|][[:space:]]*)date\b([^;&|${_dq}${_q}]|${_dq}[^${_dq}]*${_dq}|${_q}[^${_q}]*${_q})*")
+    if echo "$_date_segments" | grep -qE '(^|\s)(-s\s|--set[[:space:]=])'; then
         hard_deny "Blocked: date -s / --set modifies the system clock. This is never allowed."
     fi
 fi

@@ -6,6 +6,10 @@ One entry per released `VERSION`, newest first. The heading is the version numbe
 
 Versions 1.0.0 to 1.3.0 were released from the now archived `ConductionNL/claude-code-config` repository, and their date is the day they reached that repository's `main`. A few versions reached `main` together with the next one instead of on their own; their entry says so, and carries the date they reached `main`. Numbers that `main` never carried (1.5.0, 1.5.2, 1.5.3, 2.4.3) are listed under a `###` heading with a note on where their changes went. The update notice reads only `##` headings, so it skips them.
 
+## 2.8.1 — 2026-11-12
+
+A read-only command is no longer blocked as a clock change when another command on the same line has a `-s` flag, as in `curl -s … ; date -u`; only the arguments of `date` itself are checked.
+
 ## 2.8.0 — 2026-10-02
 
 The update notice is now short at session start and says in one sentence what each pending version adds. Ask Claude how to update for the full steps, or for the details of the changes with links to the pull requests.
