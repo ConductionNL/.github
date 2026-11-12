@@ -666,6 +666,12 @@ add_deny  "date: -s behind an escaped ;"                 'date +a\;b -s 2020-01-
 add_deny  "date: -s behind an escaped \""                'date +\" -s 2020-01-01'
 add_deny  "date: -s behind an escaped '"                 "date +\\' -s 2020-01-01"
 add_deny  "date: -s inside an unclosed quote"            'date -d "a -s now'
+# A substitution can hold its own separator; with one on the line the whole line counts.
+add_deny  "date: -s behind a \$( ; ) substitution"       'date $(echo +%F; true) -s 2020-01-01'
+add_deny  "date: -s behind a backtick substitution"      'date `echo +%F; true` -s 2020-01-01'
+add_deny  "date: -s behind a \$( | ) substitution"       'date $(echo a | cat) -s 2020-01-01'
+add_deny  "date: -s behind a process substitution"       'date <(echo a; echo b) -s 2020-01-01'
+add_allow "date: substitution on the line, no -s"        'date -d "$(echo now)" +%s; curl x'
 
 # ── v2.7.3 git push: `push` must end the word ─────────────────────────────────
 add_allow "push v2.7.3: git push-notes is another command" "git push-notes"
