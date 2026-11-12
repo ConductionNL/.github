@@ -630,6 +630,16 @@ on:
         required: false
         type: boolean
         default: false
+      enable-checker-floor:
+        description: "Enforce the app's checker floor (.checker-floor.json, hydra-gates scripts/lib/checker_floor.py): the Common Ground component checker scans the checkout, and no criterion's status (pass > warn > info > fail) may get worse than the floor and the score may not drop. On a PULL REQUEST the floor is the one committed at the merge base, and the change may raise the floor file but not lower or delete it; on a PUSH the tree is held to its own committed floor. A scan that cannot run, or that leaves a floor criterion unmeasured, FAILS the job: it is no result, never a pass. OPT-IN, default false. Runs as its own job (Checker floor), listed in the Quality Report."
+        required: false
+        type: boolean
+        default: false
+      checker-floor-ref:
+        description: "The ref of the checker (rubenvdlinde/CommonGroundChecker) the checker floor scans with. Floors are recorded with this build, so change it together with a re-recorded floor."
+        required: false
+        type: string
+        default: "scan/local-build"
       hydra-gates-e2e-anchor-blocking:
         # THE OPT-IN GATE-46 ALREADY INVITES AND NOTHING COULD ACCEPT.
         #
@@ -8852,6 +8862,109 @@ jobs:
             gh pr close "${n}" --delete-branch --comment "Superseded by ${URL}." || true
           done
 
+  # ── The checker floor ────────────────────────────────────────────────────
+  #
+  # The Common Ground component checker's counterpart of the maintainability
+  # floor: the app commits .checker-floor.json (per criterion the best status
+  # seen, plus the score) and no change may make one worse. Its own job
+  # because a scan installs the checker and runs lizard, jscpd, gitleaks and
+  # Spectral over the whole tree, which does not fit the gates job's budget.
+  # Exit 2 of checker_floor.py (the scanner could not run, or left a floor
+  # criterion unmeasured) fails the job: no result is not a pass.
+  checker-floor:
+    needs: [route]
+    if: ${{ !cancelled() && needs.route.outputs.heavy != 'false' && inputs.enable-checker-floor }}
+    runs-on: ubuntu-latest
+    name: "Checker floor"
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          path: app
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Checkout conduction/hydra-gates
+        uses: actions/checkout@v4
+        with:
+          repository: ConductionNL/.github
+          ref: ${{ inputs.hydra-gates-ref }}
+          path: gates
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install the checker's analysis tools
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+        run: |
+          set -eu
+          pip3 install --quiet --break-system-packages lizard==1.24.3 || pip3 install --quiet lizard==1.24.3
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          sums="gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          cd "${RUNNER_TEMP}"
+          curl -fsSLO "${base}/${tarball}"
+          curl -fsSLO "${base}/${sums}"
+          grep " ${tarball}\$" "${sums}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${tarball}" -C "${RUNNER_TEMP}/bin" gitleaks
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+          lizard --version
+          "${RUNNER_TEMP}/bin/gitleaks" version
+
+      - name: Checker floor
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          GATES_REF: ${{ inputs.hydra-gates-ref }}
+          CHECKER_REF: ${{ inputs.checker-floor-ref }}
+          HYDRA_GATE_TOOLS_DIR: ${{ runner.temp }}/checker-tools
+          HYDRA_GATE_FLOOR_CACHE: ${{ runner.temp }}/checker-floor-cache
+        run: |
+          set -u
+          FLOOR="${GITHUB_WORKSPACE}/gates/hydra-gates/scripts/lib/checker_floor.py"
+          if [ ! -f "${FLOOR}" ]; then
+            echo "::error::enable-checker-floor is on, but hydra-gates-ref='${GATES_REF}' ships no scripts/lib/checker_floor.py. Bump the ref or turn the input off."
+            exit 1
+          fi
+          OUT="${RUNNER_TEMP}/checker-floor.txt"
+          # A pull request is held to the floor at its merge base; a push to its own committed floor.
+          if { [ "${EVENT}" = "pull_request" ] || [ "${EVENT}" = "pull_request_target" ]; } && [ -n "${BASE_REF}" ]; then
+            BASE="origin/${BASE_REF}"
+          else
+            BASE="HEAD"
+          fi
+          python3 "${FLOOR}" compare "${GITHUB_WORKSPACE}/app" --base-ref "${BASE}" > "${OUT}" 2>&1 && RC=0 || RC=$?
+          cat "${OUT}"
+          { echo "### Checker floor"; echo; echo '```'; cat "${OUT}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          case "${RC}" in
+            0) exit 0 ;;
+            4) echo "::notice::The checker floor holds and the app is better than it somewhere. Raise it: python3 checker_floor.py record <checkout>, and commit .checker-floor.json."; exit 0 ;;
+            3) echo "::notice::No checker floor applies to this repository (no .checker-floor.json)."; exit 0 ;;
+            1) echo "::error::The change makes the app worse than its checker floor. See the [checker-floor] line above." ;;
+            *) echo "::error::The checker floor has NO RESULT (exit ${RC}): the scan could not run or left a floor criterion unmeasured. This is not a pass. See the [checker-floor] line above." ;;
+          esac
+          exit 1
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/checker-floor.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-checker-floor
+          path: quality-results/
+
   # ── gate-33, the one gate that needs a browser ──────────────────────────
   #
   # Split out of `hydra-gates` on 2026-09-12 so the other gates stop waiting
@@ -9227,7 +9340,7 @@ jobs:
     # which is exactly why this has to be gated separately: a green PHPUnit
     # matrix measured on versions the app never claimed is the failure this
     # whole change exists to remove, and it looks identical to a pass.
-    needs: [route, php-quality, vue-quality, lockfile-sync, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, hydra-gates-axe, app-check-code, info-xml, reuse, changes]
+    needs: [route, php-quality, vue-quality, lockfile-sync, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, hydra-gates-axe, checker-floor, app-check-code, info-xml, reuse, changes]
     if: ${{ always() && needs.route.outputs.run != 'false' }}
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
@@ -9719,6 +9832,9 @@ jobs:
             # job renders as ⏭️ rather than vanishing.
             if [ '${{ inputs.enable-axe }}' = 'true' ]; then
               echo "| Hydra gates (axe) | | | | | $(icon '${{ needs.hydra-gates-axe.result }}') |"
+            fi
+            if [ '${{ inputs.enable-checker-floor }}' = 'true' ]; then
+              echo "| Checker floor | | | | | $(icon '${{ needs.checker-floor.result }}') |"
             fi
             echo ""
           } > "$REPORT"
