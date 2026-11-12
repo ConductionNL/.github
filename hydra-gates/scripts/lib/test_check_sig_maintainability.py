@@ -530,6 +530,17 @@ class Profiles(unittest.TestCase):
         self.assertIn("Estimated SIG maintainability rating", out)
         self.assertIn("4★", out)
 
+    def test_report_lists_every_star_band(self):
+        report, _ = self.report()
+        bands = report["bands"]
+        self.assertEqual(bands["unit_size"]["bounds"], [15, 30, 60])
+        self.assertEqual(bands["unit_size"]["4"], [.480, .242, .091])
+        self.assertEqual(bands["unit_complexity"]["5"], [.158, .044, .005])
+        self.assertEqual(bands["duplication"], {"5": .035, "4": .058, "3": .116, "2": .230})
+        self.assertEqual(bands["component_independence"], {"5": .973, "4": .945})
+        self.assertEqual(set(bands), {"unit_size", "unit_complexity", "unit_interfacing", "module_coupling",
+                                      "duplication", "component_independence", "component_entanglement"})
+
     def test_default_is_four_star(self):
         report, out = self.report()
         self.assertEqual(report["profile"], "four-star")
