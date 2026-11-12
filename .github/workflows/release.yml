@@ -1296,6 +1296,14 @@ jobs:
             --auto \
             || echo "::warning::Could not set auto-merge on the version-bump PR for $BR — it stays open and ${{ github.ref_name }} remains one version behind the tag. Check that allow_auto_merge and allow_merge_commit are enabled on this repository, then merge it with a MERGE COMMIT, not a squash."
 
+      # What gets packaged is the working tree of this checkout, so it is
+      # recorded here, after the version bump, and checked again right before
+      # the copy (#904).
+      - name: Record the release checkout
+        run: |
+          echo "RELEASE_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "RELEASE_REF=$(git symbolic-ref -q --short HEAD || echo detached)" >> "$GITHUB_ENV"
+
       # ── SYNC THE RELEASE BRANCH BACK INTO `development` ────────────────
       #
       # A release COMMITS a version bump onto the branch it ran from. Nothing
@@ -1362,7 +1370,28 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -q -B "$BR" origin/development
+
+          # In a worktree of its own, never in the release checkout: the
+          # packaging steps below rsync the CURRENT working tree, so a checkout
+          # of development here shipped development's code under the release
+          # branch's tag whenever the merge conflicted or succeeded (#904).
+          # A fresh directory per run: a fixed path could be planted in advance.
+          # Guarded, because under `bash -e` a failing mktemp would fail the job.
+          WT_DIR="$(mktemp -d "${RUNNER_TEMP}/sync-to-development.XXXXXX")" || {
+            echo "::warning::Could not create a temporary directory for ${BR}; skipping the sync."
+            exit 0
+          }
+          WT="${WT_DIR}/worktree"
+          # A run killed before its trap leaves a registered worktree behind.
+          git worktree prune || true
+          git worktree add -q -B "$BR" "$WT" origin/development || {
+            echo "::warning::Could not create a worktree for ${BR}; skipping the sync."
+            exit 0
+          }
+          # Clean-up only: under `bash -e` a failing trap would turn the step's
+          # `exit 0` into a failure, and this step must never fail the job.
+          trap 'cd "${GITHUB_WORKSPACE}" && git worktree remove --force "$WT" && rmdir "$WT_DIR" || echo "::warning::Could not remove the sync worktree $WT."' EXIT
+          cd "$WT"
 
           # The ONLY conflict this may legitimately resolve is the version,
           # which both branches bump independently. `--ours` here is
@@ -1434,6 +1463,22 @@ jobs:
             --merge \
             --auto \
             || echo "::warning::Could not arm auto-merge on ${BR}; it stays open. Merge it with a MERGE COMMIT, not a squash."
+
+      # A step between the version bump and here that moves the checkout (the
+      # sync above did, until #904) makes the tarball contain another branch's
+      # code under this release's tag. Refuse instead of shipping it. This
+      # compares HEAD and branch, not the working tree: it catches a moved
+      # checkout, it is not a guard against files changed by the build itself
+      # (the frontend and composer steps run the repository's own code).
+      - name: The package is built from the release checkout
+        run: |
+          HEAD_NOW="$(git rev-parse HEAD)"
+          REF_NOW="$(git symbolic-ref -q --short HEAD || echo detached)"
+          if [ "${HEAD_NOW}" != "${RELEASE_HEAD}" ] || [ "${REF_NOW}" != "${RELEASE_REF}" ]; then
+            echo "::error::The checkout moved from ${RELEASE_REF}@${RELEASE_HEAD} to ${REF_NOW}@${HEAD_NOW} after the version bump; packaging it would ship that code under this release's tag."
+            exit 1
+          fi
+          echo "OK: packaging ${RELEASE_REF}@${RELEASE_HEAD}."
 
       - name: Copy files into package directory
         run: |
