@@ -136,7 +136,8 @@ on:
 # deploy is never cut off halfway; their superseded PENDING run is still
 # dropped, which leaves at most one running and one waiting. Push and
 # schedule on the same branch share the group on purpose, so two deploys of
-# one site never race.
+# one site from the same branch never race; one site deployed from two
+# branches or two repositories is not covered.
 #
 # The `reusable-` prefix keeps this group distinct from anything the caller
 # declares: an identical group in caller and callee deadlocks. The
