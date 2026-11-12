@@ -13,7 +13,9 @@ repositories are temporary git checkouts with hand-written lockfiles.
   3. SEVERITY: OSV database severity labels and CVSS scores.
   4. BANDS: the thresholds per level that the report publishes, and that the
      ratings agree with them.
-  5. REPORT: a full report on a stubbed repository; an unreachable OSV gives a
+  5. CONTINUOUS RATINGS: 0.5 to 5.5 per property, the interpolation between
+     the limits, the absolute cap, monotonicity, and stars matching the rating.
+  6. REPORT: a full report on a stubbed repository; an unreachable OSV gives a
      null rating, never a good one.
 
 Run: python3 scripts/lib/test_check_open_source_health.py
@@ -181,6 +183,115 @@ class BandTests(unittest.TestCase):
             self.assertEqual(osh.rate_management(share), int(level))
 
 
+class ContinuousRatingTests(unittest.TestCase):
+    F = (osh.FRESHNESS_LIMITS, osh.FRESHNESS_MAX_YEARS)
+
+    def assertConsistent(self, rating, stars):
+        self.assertEqual(osh.rating_to_stars(rating), stars)
+        self.assertEqual(rating, round(rating, 2))
+
+    def test_rating_to_stars_bands(self):
+        self.assertEqual([osh.rating_to_stars(r) for r in (0.5, 1.49, 1.5, 3.49, 3.5, 4.5, 5.5)], [1, 1, 2, 3, 4, 5, 5])
+
+    def test_share_rating_ends_and_limits(self):
+        caps = osh.age_caps(34.2)
+        self.assertEqual(osh.share_rating(0.0, caps), 5.5)
+        self.assertAlmostEqual(osh.share_rating(17.1, caps), 4.5)
+        self.assertAlmostEqual(osh.share_rating(34.2, caps), 3.5)
+        self.assertAlmostEqual(osh.share_rating((17.1 + 34.2) / 2, caps), 4.0)
+        self.assertAlmostEqual(osh.share_rating(100.0, caps), 1.5)
+        activity = osh.age_caps(21.4)
+        self.assertAlmostEqual(osh.share_rating(85.6, activity), 1.5)
+        self.assertAlmostEqual(osh.share_rating((85.6 + 100) / 2, activity), 1.0)
+        self.assertAlmostEqual(osh.share_rating(100.0, activity), 0.5)
+
+    def test_freshness_rating(self):
+        self.assertEqual(osh.age_rating([0.1] * 100, *self.F), 5.5)
+        self.assertEqual(osh.age_rating([1.5] * 342 + [0.1] * 658, *self.F), 3.5)
+        self.assertEqual(osh.age_rating([1.5] * 343 + [0.1] * 657, *self.F), 3.49)
+        self.assertEqual(osh.age_rating([1.5] * 171 + [0.1] * 829, *self.F), 4.5)
+        self.assertEqual(osh.age_rating([1.5] * 34 + [0.1] * 66, *self.F), 3.51)
+        self.assertEqual(osh.age_rating([1.5] * 25 + [0.1] * 75, *self.F), 4.04)
+
+    def test_worst_bound_counts(self):
+        # >1y share 20% rates 4.33, >3.5y share 11% rates 3.52
+        ages = [4.0] * 11 + [1.5] * 9 + [0.1] * 80
+        self.assertEqual(osh.age_rating(ages, *self.F), 3.52)
+
+    def test_absolute_bound_caps_at_the_top_of_three_stars(self):
+        ages = [6.0] + [0.1] * 99
+        self.assertEqual(osh.age_rating(ages, *self.F), 3.49)
+        self.assertConsistent(osh.age_rating(ages, *self.F), 3)
+        worse = [6.0] * 40 + [0.1] * 60
+        self.assertLess(osh.age_rating(worse, *self.F), 3.49)
+
+    def test_beyond_the_two_star_limit(self):
+        rating = osh.age_rating([5.0] * 90 + [0.1] * 10, osh.ACTIVITY_LIMITS, osh.ACTIVITY_MAX_YEARS)
+        self.assertTrue(0.5 <= rating < 1.5)
+        self.assertEqual(osh.age_rating([5.0] * 100, osh.ACTIVITY_LIMITS, osh.ACTIVITY_MAX_YEARS), 0.5)
+
+    def test_management_rating(self):
+        self.assertEqual(osh.management_rating(0.0), 5.5)
+        self.assertEqual(osh.management_rating(3.0), 4.0)
+        self.assertEqual(osh.management_rating(6.0), 3.5)
+        self.assertEqual(osh.management_rating(24.0), 1.5)
+        self.assertEqual(osh.management_rating(62.0), 1.0)
+        self.assertEqual(osh.management_rating(100.0), 0.5)
+        self.assertIsNone(osh.management_rating(None))
+
+    def test_vulnerability_ratings_per_band(self):
+        def rating(high=0, moderate=0):
+            worst = {**{f"h{i}": "high" for i in range(high)}, **{f"m{i}": "moderate" for i in range(moderate)}}
+            return osh.vulnerabilities_rating(worst)
+        self.assertEqual(rating(), 5.5)
+        self.assertEqual(osh.vulnerabilities_rating({"a": "low", "b": "unknown"}), 5.5)
+        self.assertEqual(rating(moderate=1), 4.0)
+        self.assertEqual(rating(moderate=9), 4.0)
+        self.assertEqual([rating(high=n) for n in range(1, 8)], [3.0, 2.5, 2.17, 1.83, 1.5, 1.0, 1.0])
+        self.assertEqual(rating(high=1, moderate=5), 3.0)
+
+    def test_licence_ratings_per_band(self):
+        base = dict.fromkeys(osh.LICENCE_ORDER, 0)
+        self.assertEqual(osh.licences_rating({**base, "none": 40}), 5.5)
+        self.assertEqual([osh.licences_rating({**base, "low": n}) for n in range(1, 6)], [4.17, 3.83, 3.5, 3.0, 3.0])
+        self.assertEqual(osh.licences_rating({**base, "medium": 1}), 3.0)
+        self.assertEqual(osh.licences_rating({**base, "high": 2}), 2.0)
+        self.assertEqual(osh.licences_rating({**base, "critical": 1, "low": 1}), 1.0)
+
+    def test_counts_are_monotone_and_match_the_stars(self):
+        base = dict.fromkeys(osh.LICENCE_ORDER, 0)
+        for key in ("low", "medium", "high", "critical"):
+            ratings = [osh.licences_rating({**base, key: n}) for n in range(12)]
+            self.assertEqual(ratings, sorted(ratings, reverse=True))
+            for n, value in enumerate(ratings):
+                self.assertConsistent(value, osh.rate_licences({**base, key: n}))
+        for severity in ("high", "moderate"):
+            worst = {}
+            previous = 5.5
+            for n in range(12):
+                value = osh.vulnerabilities_rating(worst)
+                self.assertLessEqual(value, previous)
+                self.assertConsistent(value, osh.rate_vulnerabilities(worst))
+                previous = value
+                worst[f"d{n}"] = severity
+
+    def test_shares_are_monotone_and_match_the_stars(self):
+        for limits, max_years in (self.F, (osh.ACTIVITY_LIMITS, osh.ACTIVITY_MAX_YEARS)):
+            previous = 5.5
+            for old in range(101):
+                ages = [4.5] * old + [0.1] * (100 - old)
+                value = osh.age_rating(ages, limits, max_years)
+                self.assertLessEqual(value, previous)
+                self.assertConsistent(value, osh.rate_age(ages, limits, max_years))
+                previous = value
+        previous = 5.5
+        for tenths in range(1001):
+            value = osh.management_rating(tenths / 10)
+            self.assertLessEqual(value, previous)
+            self.assertConsistent(value, osh.rate_management(tenths / 10))
+            previous = value
+
+
 class SeverityTests(unittest.TestCase):
     def test_database_label(self):
         self.assertEqual(osh.osv_severity({"database_specific": {"severity": "MODERATE"}}), "moderate")
@@ -219,12 +330,20 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(props["licence"]["stars"], 1)
         self.assertEqual(props["activity"]["stars"], 1)
         self.assertEqual(props["management"]["stars"], 5)
-        self.assertIsNotNone(report["overall"])
+        self.assertEqual(props["vulnerabilities"]["rating"], 3.0)
+        self.assertEqual(props["licence"]["rating"], 1.0)
+        self.assertEqual(props["management"]["rating"], 5.5)
+        for prop in props.values():
+            self.assertEqual(osh.rating_to_stars(prop["rating"]), prop["stars"])
+        ratings = [p["rating"] for p in props.values()]
+        self.assertEqual(report["overall_rating"], round(sum(ratings) / len(ratings), 2))
+        self.assertEqual(report["overall"], osh.rating_to_stars(report["overall_rating"]))
         self.assertEqual(report["bands"], osh.star_bands())
 
     def test_unreachable_osv_is_not_rated(self):
         report = osh.build_report(self.repo, StubFetcher(self.responses(None)))
         self.assertIsNone(report["properties"]["vulnerabilities"]["stars"])
+        self.assertIsNone(report["properties"]["vulnerabilities"]["rating"])
 
 
 if __name__ == "__main__":

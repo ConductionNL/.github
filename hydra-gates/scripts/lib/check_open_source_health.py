@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: EUPL-1.2
 """Open Source Health: how healthy the third-party dependencies of a repository are.
 
-Rates five properties of the production dependencies from 1 to 5 stars,
+Rates five properties of the production dependencies from 0.5 to 5.5, and in
+1 to 5 stars,
 following the Open Source Health quality model's guidance for producers
 (sigridci docs/reference/quality-model-documents/open-source-health.md):
 
@@ -41,9 +42,35 @@ A share is the percentage of dependencies above a bound.
   management       4: <=6% unmanaged; 5: none; 3: <=12%; 2: <=24%.
 
 For freshness and activity the absolute rule ("none older than N years")
-caps the rating at 3 stars when it is broken. The overall rating is the
-rounded mean of the rated properties. The report's `bands` lists these
+caps the rating at 3 stars when it is broken. The report's `bands` lists these
 thresholds per property and level, computed from the same constants.
+
+RATING
+------
+Each property also gets a continuous `rating` from 0.5 to 5.5, two decimals,
+on the quality model's scale: every star level is a band one wide, 4.5 to 5.5
+being 5 stars, and x.5 belongs to the level above (rating_to_stars). The
+rating always lies in the band of the property's stars.
+
+  shares   (freshness, activity, management) per bound: 5.5 at 0%, k - 0.5
+           exactly at the limit of level k, linear between two limits, and
+           from 1.5 at the 2-star limit down to 0.5 at 100%. A property with
+           several bounds takes its worst bound. A broken absolute bound caps
+           the rating at 3.49, the top of the 3-star band.
+  counts   (vulnerabilities, licence) per rated class: 0 rates 5.5. A count in
+           the band of level k falls linearly from k + 0.5 at the largest
+           count the level above allows (that count itself still rates as the
+           level above) to k - 0.5 at the largest count level k allows. A level
+           that allows any count, and 1 star, rate the band's midpoint k. The
+           property takes its worst class. More findings never raise a rating.
+
+  vulnerabilities  critical or high: 1 -> 3.0, 2 -> 2.5, 3 -> 2.17, 4 -> 1.83,
+                   5 -> 1.5, 6 or more -> 1.0; moderate: 1 or more -> 4.0.
+  licence          low: 1 -> 4.17, 2 -> 3.83, 3 -> 3.5, 4 or more -> 3.0;
+                   medium -> 3.0; high -> 2.0; critical -> 1.0.
+
+`overall_rating` is the mean of the property ratings, two decimals, and
+`overall` its whole stars.
 
 Usage:
     check_open_source_health.py report <repo-dir> [--json FILE] [--offline]
@@ -55,6 +82,7 @@ import concurrent.futures
 import datetime
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -313,6 +341,49 @@ def licence_class(licences):
     return min(classes, key=LICENCE_ORDER.index)
 
 
+def rating_to_stars(rating):
+    """Whole stars of a 0.5 to 5.5 rating: each level is a band one wide, x.5 rounds up."""
+    return max(1, min(5, math.floor(rating + 0.5)))
+
+
+def within_stars(raw, stars):
+    """`raw` to two decimals, kept inside the band of `stars` so that rating_to_stars gives `stars` back."""
+    top = 5.5 if stars == 5 else stars + 0.49
+    return max(stars - 0.5, min(top, round(raw, 2)))
+
+
+def share_rating(share, caps):
+    """Continuous rating of one share against {5: cap, 4: cap, 3: cap, 2: cap}: 5.5 at 0, k - 0.5 at the cap
+    of level k, linear in between, and from 1.5 at the 2-star cap down to 0.5 at 100%."""
+    lower = 0.0
+    for level in (5, 4, 3, 2):
+        if share <= caps[level]:
+            upper = caps[level]
+            return level + 0.5 if upper <= lower else level + 0.5 - (share - lower) / (upper - lower)
+        lower = caps[level]
+    return max(0.5, 1.5 - (share - lower) / (100.0 - lower))
+
+
+def count_rating(count, limits):
+    """Continuous rating of one count against {level: most allowed}, a missing level allowing any count.
+
+    0 rates 5.5. Within the band of level k the rating falls linearly from k + 0.5, at the largest count
+    of the level above (which still rates as that level), to k - 0.5 at the largest count level k allows.
+    A level that allows any count rates its midpoint k, and so does 1 star.
+    """
+    if count == 0:
+        return 5.5
+    above = -1
+    for level in (5, 4, 3, 2):
+        limit = limits.get(level)
+        if limit is None:
+            return float(level)
+        if count <= limit:
+            return level + 0.5 - (count - above) / (limit - above)
+        above = limit
+    return 1.0
+
+
 def rate_counts(counts, bands):
     """The highest level whose limits all hold for `counts`, else 1."""
     for level, limits in bands:
@@ -321,21 +392,44 @@ def rate_counts(counts, bands):
     return 1
 
 
+def counts_rating(counts, bands):
+    """The continuous rating of `counts`: the worst rating of the rated classes."""
+    raw = min(count_rating(counts[key], {level: limits.get(key) for level, limits in bands})
+              for key in {key for _, limits in bands for key in limits})
+    return within_stars(raw, rate_counts(counts, bands))
+
+
+def vulnerability_counts(worst):
+    return {"critical_or_high": sum(1 for level in worst.values() if level in ("high", "critical")),
+            "moderate": sum(1 for level in worst.values() if level == "moderate")}
+
+
 def rate_vulnerabilities(worst):
-    return rate_counts({"critical_or_high": sum(1 for level in worst.values() if level in ("high", "critical")),
-                        "moderate": sum(1 for level in worst.values() if level == "moderate")},
-                       VULNERABILITY_BANDS)
+    return rate_counts(vulnerability_counts(worst), VULNERABILITY_BANDS)
+
+
+def vulnerabilities_rating(worst):
+    return counts_rating(vulnerability_counts(worst), VULNERABILITY_BANDS)
+
+
+def age_caps(limit):
+    """{level: largest share in percent} of one bound."""
+    return {level: min(100.0, limit * factor) for level, factor in AGE_FACTORS}
+
+
+def age_shares(ages_years, limits):
+    total = len(ages_years)
+    return [100.0 * sum(1 for age in ages_years if age > bound) / total for bound, _ in limits]
 
 
 def rate_age(ages_years, limits, max_years):
     """Stars for a list of ages: shares above each bound against the scaled limits."""
     if not ages_years:
         return None
-    total = len(ages_years)
-    shares = [100.0 * sum(1 for age in ages_years if age > bound) / total for bound, _ in limits]
+    shares = age_shares(ages_years, limits)
     stars = 1
-    for level, factor in AGE_FACTORS:
-        if all(share <= limit * factor for share, (_, limit) in zip(shares, limits)):
+    for level, _ in AGE_FACTORS:
+        if all(share <= age_caps(limit)[level] for share, (_, limit) in zip(shares, limits)):
             stars = level
             break
     if any(age > max_years for age in ages_years):
@@ -343,17 +437,40 @@ def rate_age(ages_years, limits, max_years):
     return stars
 
 
+def age_rating(ages_years, limits, max_years):
+    """The continuous rating of a list of ages: the worst bound's share rating, inside the band of rate_age,
+    so a broken absolute bound caps it at the top of the 3-star band."""
+    if not ages_years:
+        return None
+    raw = min(share_rating(share, age_caps(limit)) for share, (_, limit) in zip(age_shares(ages_years, limits), limits))
+    return within_stars(raw, rate_age(ages_years, limits, max_years))
+
+
 def rate_licences(counts):
     return rate_counts(counts, LICENCE_BANDS)
+
+
+def licences_rating(counts):
+    return counts_rating(counts, LICENCE_BANDS)
+
+
+def management_caps():
+    return {level: MANAGEMENT_LIMIT * factor for level, factor in MANAGEMENT_FACTORS}
 
 
 def rate_management(share):
     if share is None:
         return None
-    for level, factor in MANAGEMENT_FACTORS:
-        if share <= MANAGEMENT_LIMIT * factor:
+    for level, cap in management_caps().items():
+        if share <= cap:
             return level
     return 1
+
+
+def management_rating(share):
+    if share is None:
+        return None
+    return within_stars(share_rating(share, management_caps()), rate_management(share))
 
 
 def age_bands(limits, max_years):
@@ -391,6 +508,7 @@ def build_report(repo, fetcher):
     worst = vulnerabilities(fetcher, deps) if deps else {}
     report["properties"]["vulnerabilities"] = {
         "stars": None if worst is None else rate_vulnerabilities(worst),
+        "rating": None if worst is None else vulnerabilities_rating(worst),
         "detail": None if worst is None else {
             level: sum(1 for value in worst.values() if value == level) for level in SEVERITY_ORDER},
         "affected": None if worst is None else dict(sorted(worst.items())),
@@ -411,17 +529,21 @@ def build_report(repo, fetcher):
         counts[licence_class(licences)] += 1
     report["properties"]["freshness"] = {
         "stars": rate_age(behind, FRESHNESS_LIMITS, FRESHNESS_MAX_YEARS),
+        "rating": age_rating(behind, FRESHNESS_LIMITS, FRESHNESS_MAX_YEARS),
         "detail": age_detail(behind, FRESHNESS_LIMITS, FRESHNESS_MAX_YEARS), "unknown": len(deps) - len(behind)}
     report["properties"]["activity"] = {
         "stars": rate_age(inactive, ACTIVITY_LIMITS, ACTIVITY_MAX_YEARS),
+        "rating": age_rating(inactive, ACTIVITY_LIMITS, ACTIVITY_MAX_YEARS),
         "detail": age_detail(inactive, ACTIVITY_LIMITS, ACTIVITY_MAX_YEARS), "unknown": unknown}
-    report["properties"]["licence"] = {"stars": rate_licences(counts) if deps else None, "detail": counts}
+    report["properties"]["licence"] = {"stars": rate_licences(counts) if deps else None,
+                                       "rating": licences_rating(counts) if deps else None, "detail": counts}
     share, note = unmanaged_share(repo, deps)
-    report["properties"]["management"] = {"stars": rate_management(share),
+    report["properties"]["management"] = {"stars": rate_management(share), "rating": management_rating(share),
                                           "detail": {"unmanaged_percent": share, "note": note}}
 
-    rated = [p["stars"] for p in report["properties"].values() if p["stars"] is not None]
-    report["overall"] = round(sum(rated) / len(rated)) if rated else None
+    rated = [p["rating"] for p in report["properties"].values() if p["rating"] is not None]
+    report["overall_rating"] = round(sum(rated) / len(rated), 2) if rated else None
+    report["overall"] = None if report["overall_rating"] is None else rating_to_stars(report["overall_rating"])
     report["bands"] = star_bands()
     report["errors"] = fetcher.errors[:20]
     return report
@@ -455,8 +577,9 @@ def main(argv):
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
             json.dump(report, handle, indent=2)
-    stars = {name: prop["stars"] for name, prop in report["properties"].items()}
-    print(f"open-source-health: {report['dependencies']} dependencies; overall {report['overall']}; {stars}")
+    ratings = {name: prop["rating"] for name, prop in report["properties"].items()}
+    print(f"open-source-health: {report['dependencies']} dependencies; overall {report['overall']} stars "
+          f"({report['overall_rating']}); {ratings}")
     return 0 if report["dependencies"] or report["properties"]["management"]["stars"] is not None else 4
 
 
