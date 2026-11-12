@@ -42,7 +42,8 @@ A share is the percentage of dependencies above a bound.
 
 For freshness and activity the absolute rule ("none older than N years")
 caps the rating at 3 stars when it is broken. The overall rating is the
-rounded mean of the rated properties.
+rounded mean of the rated properties. The report's `bands` lists these
+thresholds per property and level, computed from the same constants.
 
 Usage:
     check_open_source_health.py report <repo-dir> [--json FILE] [--offline]
@@ -86,6 +87,16 @@ FRESHNESS_MAX_YEARS = 5.0
 ACTIVITY_LIMITS = [(1.0, 21.4), (2.0, 13.0), (4.0, 9.6)]
 ACTIVITY_MAX_YEARS = 5.5
 MANAGEMENT_LIMIT = 6.0
+# Factors on the 4-star share limits per level; a broken absolute bound caps the rating at AGE_CAP_STARS.
+AGE_FACTORS = ((5, 0.5), (4, 1.0), (3, 2.0), (2, 4.0))
+AGE_CAP_STARS = 3
+MANAGEMENT_FACTORS = ((5, 0.0), (4, 1.0), (3, 2.0), (2, 4.0))
+# Most dependencies allowed per level; a class or severity that is absent has no limit.
+VULNERABILITY_BANDS = ((5, {"critical_or_high": 0, "moderate": 0}), (4, {"critical_or_high": 0}),
+                       (3, {"critical_or_high": 2}), (2, {"critical_or_high": 5}))
+LICENCE_BANDS = ((5, {"critical": 0, "high": 0, "medium": 0, "low": 0}),
+                 (4, {"critical": 0, "high": 0, "medium": 0, "low": 3}),
+                 (3, {"critical": 0, "high": 0}), (2, {"critical": 0}))
 
 
 # --------------------------------------------------------------------------
@@ -302,14 +313,18 @@ def licence_class(licences):
     return min(classes, key=LICENCE_ORDER.index)
 
 
+def rate_counts(counts, bands):
+    """The highest level whose limits all hold for `counts`, else 1."""
+    for level, limits in bands:
+        if all(counts[key] <= limit for key, limit in limits.items()):
+            return level
+    return 1
+
+
 def rate_vulnerabilities(worst):
-    severe = sum(1 for level in worst.values() if level in ("high", "critical"))
-    moderate = sum(1 for level in worst.values() if level == "moderate")
-    if severe == 0 and moderate == 0:
-        return 5
-    if severe == 0:
-        return 4
-    return 3 if severe <= 2 else 2 if severe <= 5 else 1
+    return rate_counts({"critical_or_high": sum(1 for level in worst.values() if level in ("high", "critical")),
+                        "moderate": sum(1 for level in worst.values() if level == "moderate")},
+                       VULNERABILITY_BANDS)
 
 
 def rate_age(ages_years, limits, max_years):
@@ -319,32 +334,51 @@ def rate_age(ages_years, limits, max_years):
     total = len(ages_years)
     shares = [100.0 * sum(1 for age in ages_years if age > bound) / total for bound, _ in limits]
     stars = 1
-    for level, factor in ((5, 0.5), (4, 1.0), (3, 2.0), (2, 4.0)):
+    for level, factor in AGE_FACTORS:
         if all(share <= limit * factor for share, (_, limit) in zip(shares, limits)):
             stars = level
             break
     if any(age > max_years for age in ages_years):
-        stars = min(stars, 3)
+        stars = min(stars, AGE_CAP_STARS)
     return stars
 
 
 def rate_licences(counts):
-    if counts["critical"]:
-        return 1
-    if counts["high"]:
-        return 2
-    if counts["medium"] or counts["low"] > 3:
-        return 3
-    return 4 if counts["low"] else 5
+    return rate_counts(counts, LICENCE_BANDS)
 
 
 def rate_management(share):
     if share is None:
         return None
-    for level, limit in ((5, 0.0), (4, MANAGEMENT_LIMIT), (3, 2 * MANAGEMENT_LIMIT), (2, 4 * MANAGEMENT_LIMIT)):
-        if share <= limit:
+    for level, factor in MANAGEMENT_FACTORS:
+        if share <= MANAGEMENT_LIMIT * factor:
             return level
     return 1
+
+
+def age_bands(limits, max_years):
+    """Per bound the largest share (percent) each level allows, and the absolute bound."""
+    return {"bounds": [{"years": bound, "max_percent": {
+                str(level): min(100.0, round(limit * factor, 2)) for level, factor in AGE_FACTORS}}
+                       for bound, limit in limits],
+            "absolute": {"years": max_years, "max_count": 0, "cap_stars": AGE_CAP_STARS}}
+
+
+def count_bands(bands, keys):
+    """Per level the most dependencies allowed for each key; None means no limit."""
+    return {str(level): {key: limits.get(key) for key in keys} for level, limits in bands}
+
+
+def star_bands():
+    """The thresholds of every level from 5 down to 2 stars, per property; below them is 1 star."""
+    return {
+        "vulnerabilities": count_bands(VULNERABILITY_BANDS, ("critical_or_high", "moderate")),
+        "freshness": age_bands(FRESHNESS_LIMITS, FRESHNESS_MAX_YEARS),
+        "activity": age_bands(ACTIVITY_LIMITS, ACTIVITY_MAX_YEARS),
+        "licence": count_bands(LICENCE_BANDS, ("critical", "high", "medium", "low")),
+        "management": {"max_unmanaged_percent": {
+            str(level): round(MANAGEMENT_LIMIT * factor, 2) for level, factor in MANAGEMENT_FACTORS}},
+    }
 
 
 def build_report(repo, fetcher):
@@ -388,6 +422,7 @@ def build_report(repo, fetcher):
 
     rated = [p["stars"] for p in report["properties"].values() if p["stars"] is not None]
     report["overall"] = round(sum(rated) / len(rated)) if rated else None
+    report["bands"] = star_bands()
     report["errors"] = fetcher.errors[:20]
     return report
 

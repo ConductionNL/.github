@@ -11,7 +11,9 @@ repositories are temporary git checkouts with hand-written lockfiles.
   2. RATINGS: every star boundary of vulnerabilities, freshness, activity,
      licence and management, and the absolute age cap.
   3. SEVERITY: OSV database severity labels and CVSS scores.
-  4. REPORT: a full report on a stubbed repository; an unreachable OSV gives a
+  4. BANDS: the thresholds per level that the report publishes, and that the
+     ratings agree with them.
+  5. REPORT: a full report on a stubbed repository; an unreachable OSV gives a
      null rating, never a good one.
 
 Run: python3 scripts/lib/test_check_open_source_health.py
@@ -149,6 +151,36 @@ class RatingTests(unittest.TestCase):
         self.assertIsNone(osh.rate_management(None))
 
 
+class BandTests(unittest.TestCase):
+    def test_age_bands_scale_the_four_star_limits(self):
+        bands = osh.star_bands()["freshness"]
+        first = bands["bounds"][0]
+        self.assertEqual(first["years"], 1.0)
+        self.assertEqual(first["max_percent"], {"5": 17.1, "4": 34.2, "3": 68.4, "2": 100.0})
+        self.assertEqual(bands["absolute"], {"years": 5.0, "max_count": 0, "cap_stars": 3})
+        activity = osh.star_bands()["activity"]
+        self.assertEqual([b["years"] for b in activity["bounds"]], [1.0, 2.0, 4.0])
+        self.assertEqual(activity["bounds"][2]["max_percent"]["3"], 19.2)
+        self.assertEqual(activity["absolute"]["years"], 5.5)
+
+    def test_count_and_share_bands(self):
+        bands = osh.star_bands()
+        self.assertEqual(bands["vulnerabilities"]["5"], {"critical_or_high": 0, "moderate": 0})
+        self.assertEqual(bands["vulnerabilities"]["3"], {"critical_or_high": 2, "moderate": None})
+        self.assertEqual(bands["licence"]["4"], {"critical": 0, "high": 0, "medium": 0, "low": 3})
+        self.assertEqual(bands["licence"]["2"], {"critical": 0, "high": None, "medium": None, "low": None})
+        self.assertEqual(bands["management"]["max_unmanaged_percent"], {"5": 0.0, "4": 6.0, "3": 12.0, "2": 24.0})
+
+    def test_ratings_match_the_bands(self):
+        bands = osh.star_bands()
+        for level in ("5", "4", "3", "2"):
+            limits = bands["licence"][level]
+            counts = {"none": 0, **{key: 99 if limit is None else limit for key, limit in limits.items()}}
+            self.assertEqual(osh.rate_licences(counts), int(level))
+            share = bands["management"]["max_unmanaged_percent"][level]
+            self.assertEqual(osh.rate_management(share), int(level))
+
+
 class SeverityTests(unittest.TestCase):
     def test_database_label(self):
         self.assertEqual(osh.osv_severity({"database_specific": {"severity": "MODERATE"}}), "moderate")
@@ -188,6 +220,7 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(props["activity"]["stars"], 1)
         self.assertEqual(props["management"]["stars"], 5)
         self.assertIsNotNone(report["overall"])
+        self.assertEqual(report["bands"], osh.star_bands())
 
     def test_unreachable_osv_is_not_rated(self):
         report = osh.build_report(self.repo, StubFetcher(self.responses(None)))
