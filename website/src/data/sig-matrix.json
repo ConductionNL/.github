@@ -1,6 +1,6 @@
 {
  "measured": "2026-11-06",
- "guidance": "SIG/TUV NORD CERT Guidance for Producers v18.1",
+ "guidance": "Maintainability guidance, Guidance for Producers v18.1",
  "apps": {
   "buildiq": {
    "head": "d6f563510b359c2ce417ea978ab54a29d12bb076",
@@ -2574,14 +2574,14 @@
  "sections": [
   {
    "id": "rating",
-   "title": "Estimated SIG rating",
+   "title": "Estimated maintainability rating",
    "groups": [
     {
      "title": "overall",
      "rows": [
       {
        "id": "rating.overall",
-       "label": "Estimated SIG rating (estimate)",
+       "label": "Estimated maintainability rating (estimate)",
        "limits": "range from power mean p = -1 to p = 1, on 0.5 to 5.5; stars of the lower end",
        "cells": {
         "buildiq": {
@@ -3986,7 +3986,7 @@
   },
   {
    "id": "maintainability",
-   "title": "SIG maintainability",
+   "title": "Maintainability checks",
    "groups": [
     {
      "title": "php",
@@ -7557,7 +7557,7 @@
   },
   {
    "id": "sig-other",
-   "title": "SIG's other models",
+   "title": "Other external models",
    "groups": [
     {
      "title": "Open Source Health",
@@ -9579,7 +9579,7 @@
       "launchpad": {
        "state": "warn",
        "text": "1",
-       "title": "1 method(s) whose per-object guard compares the caller against a value the CALLER SUPPLIED, and which therefore cannot refuse (advisory, non-blocking \u2014 dossiq#799) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/launchpad/hydra-gate-no-admin-idor-request-sourced.log. The fix is to derive the comparison "
+       "title": "1 method(s) whose per-object guard compares the caller against a value the CALLER SUPPLIED, and which therefore cannot refuse (advisory, non-blocking \u2014 dossiq#799). The fix is to derive the comparison"
       },
       "learniq": {
        "state": "pass",
@@ -9589,17 +9589,17 @@
       "opencatalogi": {
        "state": "fail",
        "text": "1",
-       "title": "1 method(s) with NoAdminRequired + no guard \u2014 see /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-no-admin-idor.log. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the gu"
+       "title": "1 method(s) with NoAdminRequired + no guard. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the gu"
       },
       "openregister": {
        "state": "fail",
        "text": "46",
-       "title": "46 method(s) with NoAdminRequired + no guard \u2014 see /home/rubenlinde/sig-lanes/matrix/out/openregister/hydra-gate-no-admin-idor.log. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the g"
+       "title": "46 method(s) with NoAdminRequired + no guard. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the g"
       },
       "pipelinq": {
        "state": "fail",
        "text": "2",
-       "title": "2 method(s) with NoAdminRequired + no guard \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-no-admin-idor.log. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the guard "
+       "title": "2 method(s) with NoAdminRequired + no guard. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the guard"
       },
       "planninq": {
        "state": "pass",
@@ -10084,7 +10084,7 @@
       "pipelinq": {
        "state": "fail",
        "text": "6",
-       "title": "6 unsafe security-config read(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-security-config-fail-mode.log"
+       "title": "6 unsafe security-config read(s)"
       },
       "planninq": {
        "state": "pass",
@@ -10291,7 +10291,7 @@
       "shillinq": {
        "state": "fail",
        "text": "1",
-       "title": "1 elevation(s) reachable from a flow node, agent tool or endpoint \u2014 see /home/rubenlinde/sig-lanes/matrix/out/shillinq/hydra-gate-system-elevation.log"
+       "title": "1 elevation(s) reachable from a flow node, agent tool or endpoint"
       },
       "stackiq": {
        "state": "pass",
@@ -10392,7 +10392,7 @@
       "shillinq": {
        "state": "fail",
        "text": "1",
-       "title": "1 schema annotation(s) OpenRegister never reads (x-openregister-rbac, x-rbac-role, or the singular x-openregister-validation), so the schemas they sit on are not protected by them. Move the rules to `authorization` and `x-openregister-validations`. See /home/rubenlinde/sig-lanes/matrix/out/shillinq/"
+       "title": "1 schema annotation(s) OpenRegister never reads (x-openregister-rbac, x-rbac-role, or the singular x-openregister-validation), so the schemas they sit on are not protected by them. Move the rules to `authorization` and `x-openregister-validations`."
       },
       "stackiq": {
        "state": "pass",
@@ -12360,7 +12360,7 @@
       "buildiq": {
        "state": "fail",
        "text": "5",
-       "title": "5 unrouted method(s) or wrong-target route(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/buildiq/hydra-gate-route-reachability.log"
+       "title": "5 unrouted method(s) or wrong-target route(s)"
       },
       "decidiq": {
        "state": "pass",
@@ -12420,7 +12420,7 @@
       "openregister": {
        "state": "fail",
        "text": "12",
-       "title": "12 unrouted method(s) or wrong-target route(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/openregister/hydra-gate-route-reachability.log"
+       "title": "12 unrouted method(s) or wrong-target route(s)"
       },
       "pipelinq": {
        "state": "pass",
@@ -12814,7 +12814,7 @@
       "learniq": {
        "state": "fail",
        "text": "1",
-       "title": "1 OR-abstraction match(es) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-or-abstraction-anti-patterns.log"
+       "title": "1 OR-abstraction match(es)"
       },
       "opencatalogi": {
        "state": "pass",
@@ -12829,7 +12829,7 @@
       "pipelinq": {
        "state": "fail",
        "text": "2",
-       "title": "2 OR-abstraction match(es) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-or-abstraction-anti-patterns.log"
+       "title": "2 OR-abstraction match(es)"
       },
       "planninq": {
        "state": "pass",
@@ -13881,7 +13881,7 @@
       "dossiq": {
        "state": "fail",
        "text": "1",
-       "title": "1 finding(s): the count of procedure-named files no longer matches .procedure-code-baseline.json (decision 182: procedures are configuration, code is generic). See /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-procedure-code.log"
+       "title": "1 finding(s): the count of procedure-named files no longer matches .procedure-code-baseline.json (decision 182: procedures are configuration, code is generic)."
       },
       "filinq": {
        "state": "pass",
@@ -14125,17 +14125,17 @@
       "dossiq": {
        "state": "fail",
        "text": "11",
-       "title": "11 unresolved finding(s) (10 @spec, 1 @e2e) from 6 distinct target(s) \u2014 fix the TARGET, not each tag; see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-spec-anchor-existence.log"
+       "title": "11 unresolved finding(s) (10 @spec, 1 @e2e) from 6 distinct target(s) \u2014 fix the TARGET, not each tag"
       },
       "filinq": {
        "state": "warn",
        "text": "31",
-       "title": "31 unresolved @e2e finding(s) from 19 distinct target(s) \u2014 fix the TARGET, not each tag. Report-only: set HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/filinq/hydra-gate-spec-anchor-existence.log"
+       "title": "31 unresolved @e2e finding(s) from 19 distinct target(s) \u2014 fix the TARGET, not each tag. Report-only: set HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1 for this repo once they are worked down."
       },
       "hermiq": {
        "state": "warn",
        "text": "6",
-       "title": "6 unresolved @e2e finding(s) from 6 distinct target(s) \u2014 fix the TARGET, not each tag. Report-only: set HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/hermiq/hydra-gate-spec-anchor-existence.log"
+       "title": "6 unresolved @e2e finding(s) from 6 distinct target(s) \u2014 fix the TARGET, not each tag. Report-only: set HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1 for this repo once they are worked down."
       },
       "humaniq": {
        "state": "pass",
@@ -14165,7 +14165,7 @@
       "learniq": {
        "state": "fail",
        "text": "4",
-       "title": "4 unresolved finding(s) (4 @spec, 0 @e2e) from 3 distinct target(s) \u2014 fix the TARGET, not each tag; see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-spec-anchor-existence.log"
+       "title": "4 unresolved finding(s) (4 @spec, 0 @e2e) from 3 distinct target(s) \u2014 fix the TARGET, not each tag"
       },
       "opencatalogi": {
        "state": "pass",
@@ -14180,7 +14180,7 @@
       "pipelinq": {
        "state": "fail",
        "text": "20",
-       "title": "20 unresolved finding(s) (13 @spec, 7 @e2e) from 10 distinct target(s) \u2014 fix the TARGET, not each tag; see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-spec-anchor-existence.log"
+       "title": "20 unresolved finding(s) (13 @spec, 7 @e2e) from 10 distinct target(s) \u2014 fix the TARGET, not each tag"
       },
       "planninq": {
        "state": "pass",
@@ -14190,7 +14190,7 @@
       "portaliq": {
        "state": "fail",
        "text": "9",
-       "title": "9 unresolved finding(s) (9 @spec, 0 @e2e) from 1 distinct target(s) \u2014 fix the TARGET, not each tag; see /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-spec-anchor-existence.log"
+       "title": "9 unresolved finding(s) (9 @spec, 0 @e2e) from 1 distinct target(s) \u2014 fix the TARGET, not each tag"
       },
       "shillinq": {
        "state": "pass",
@@ -14322,12 +14322,12 @@
       "decidiq": {
        "state": "warn",
        "text": "2",
-       "title": "2 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/decidiq/hydra-gate-exclusion-evidence.log"
+       "title": "2 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected."
       },
       "dossiq": {
        "state": "warn",
        "text": "38",
-       "title": "38 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-exclusion-evidence.log"
+       "title": "38 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected."
       },
       "filinq": {
        "state": "pass",
@@ -14337,7 +14337,7 @@
       "hermiq": {
        "state": "warn",
        "text": "4",
-       "title": "4 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/hermiq/hydra-gate-exclusion-evidence.log"
+       "title": "4 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected."
       },
       "humaniq": {
        "state": "pass",
@@ -14352,7 +14352,7 @@
       "keepiq": {
        "state": "warn",
        "text": "40",
-       "title": "40 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/keepiq/hydra-gate-exclusion-evidence.log"
+       "title": "40 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected."
       },
       "larpinq": {
        "state": "pass",
@@ -14367,12 +14367,12 @@
       "learniq": {
        "state": "warn",
        "text": "3",
-       "title": "3 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-exclusion-evidence.log"
+       "title": "3 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected."
       },
       "opencatalogi": {
        "state": "warn",
        "text": "1",
-       "title": "1 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-exclusion-evidence.log"
+       "title": "1 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected."
       },
       "openregister": {
        "state": "pass",
@@ -14382,7 +14382,7 @@
       "pipelinq": {
        "state": "warn",
        "text": "9",
-       "title": "9 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-exclusion-evidence.log"
+       "title": "9 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected."
       },
       "planninq": {
        "state": "pass",
@@ -14392,7 +14392,7 @@
       "portaliq": {
        "state": "warn",
        "text": "2",
-       "title": "2 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-exclusion-evidence.log"
+       "title": "2 exclusion(s) cite a test nothing in this repo answers to \u2014 they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected."
       },
       "shillinq": {
        "state": "pass",
@@ -14997,97 +14997,97 @@
       "buildiq": {
        "state": "fail",
        "text": "55",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/buildiq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "decidiq": {
        "state": "fail",
        "text": "28",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/decidiq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "dossiq": {
        "state": "fail",
        "text": "55",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "filinq": {
        "state": "fail",
        "text": "28",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/filinq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "hermiq": {
        "state": "fail",
        "text": "55",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/hermiq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "humaniq": {
        "state": "fail",
        "text": "28",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/humaniq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "integriq": {
        "state": "fail",
        "text": "73",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/integriq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "keepiq": {
        "state": "fail",
        "text": "28",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/keepiq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "larpinq": {
        "state": "fail",
        "text": "28",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/larpinq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "launchpad": {
        "state": "fail",
        "text": "28",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/launchpad/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "learniq": {
        "state": "fail",
        "text": "28",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "opencatalogi": {
        "state": "fail",
        "text": "73",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "openregister": {
        "state": "fail",
        "text": "64",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/openregister/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "pipelinq": {
        "state": "fail",
        "text": "73",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "planninq": {
        "state": "fail",
        "text": "28",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/planninq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "portaliq": {
        "state": "fail",
        "text": "28",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "shillinq": {
        "state": "fail",
        "text": "55",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/shillinq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "stackiq": {
        "state": "fail",
        "text": "46",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/stackiq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "thematiq": {
        "state": "fail",
        "text": "55",
-       "title": "CVEs or advisories \u2014 see /home/rubenlinde/sig-lanes/matrix/out/thematiq/hydra-gate-composer-audit.log"
+       "title": "CVEs or advisories"
       },
       "versioniq": {
        "state": "pass",
@@ -15655,7 +15655,7 @@
       "dossiq": {
        "state": "fail",
        "text": "37",
-       "title": "37 schema violation(s) in src/manifest.json \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-manifest-validation.log"
+       "title": "37 schema violation(s) in src/manifest.json"
       },
       "filinq": {
        "state": "pass",
@@ -15756,7 +15756,7 @@
       "dossiq": {
        "state": "fail",
        "text": "4",
-       "title": "4 schema property(ies) missing a human-friendly title/description \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-schema-property-titles.log"
+       "title": "4 schema property(ies) missing a human-friendly title/description"
       },
       "filinq": {
        "state": "pass",
@@ -15816,7 +15816,7 @@
       "portaliq": {
        "state": "fail",
        "text": "4",
-       "title": "4 schema property(ies) missing a human-friendly title/description \u2014 see /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-schema-property-titles.log"
+       "title": "4 schema property(ies) missing a human-friendly title/description"
       },
       "shillinq": {
        "state": "pass",
@@ -15953,7 +15953,7 @@
       "dossiq": {
        "state": "fail",
        "text": "37",
-       "title": "37 structural violation(s) in the ASSEMBLED manifest (base+fragments+menu-layout) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-effective-manifest-crossref.log"
+       "title": "37 structural violation(s) in the ASSEMBLED manifest (base+fragments+menu-layout)"
       },
       "filinq": {
        "state": "pass",
@@ -15993,7 +15993,7 @@
       "learniq": {
        "state": "fail",
        "text": "2",
-       "title": "2 cross-reference failure(s) in the effective manifest \u2014 see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-effective-manifest-crossref.log"
+       "title": "2 cross-reference failure(s) in the effective manifest"
       },
       "opencatalogi": {
        "state": "pass",
@@ -16094,7 +16094,7 @@
       "learniq": {
        "state": "fail",
        "text": "1",
-       "title": "1 detail-page discipline finding(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-detail-page-discipline.log"
+       "title": "1 detail-page discipline finding(s)"
       },
       "opencatalogi": {
        "state": "pass",
@@ -16145,92 +16145,92 @@
       "buildiq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "decidiq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "dossiq": {
        "state": "fail",
        "text": "1",
-       "title": "1 icon(s) outside the canonical vocabulary (ADR-077); see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-icon-vocabulary.log"
+       "title": "1 icon(s) outside the canonical vocabulary (ADR-077)"
       },
       "filinq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "hermiq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "humaniq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "integriq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "keepiq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "larpinq": {
        "state": "fail",
        "text": "1",
-       "title": "1 icon(s) outside the canonical vocabulary (ADR-077); see /home/rubenlinde/sig-lanes/matrix/out/larpinq/hydra-gate-icon-vocabulary.log"
+       "title": "1 icon(s) outside the canonical vocabulary (ADR-077)"
       },
       "launchpad": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "learniq": {
        "state": "fail",
        "text": "1",
-       "title": "1 icon(s) outside the canonical vocabulary (ADR-077); see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-icon-vocabulary.log"
+       "title": "1 icon(s) outside the canonical vocabulary (ADR-077)"
       },
       "opencatalogi": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "openregister": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "pipelinq": {
        "state": "fail",
        "text": "1",
-       "title": "1 icon(s) outside the canonical vocabulary (ADR-077); see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-icon-vocabulary.log"
+       "title": "1 icon(s) outside the canonical vocabulary (ADR-077)"
       },
       "planninq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "portaliq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "shillinq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "stackiq": {
        "state": "skip",
        "text": "skipped",
-       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See /home/rubenlinde/sig-lane"
+       "title": "wiring: vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream \u2014 an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage."
       },
       "thematiq": {
        "state": "pass",
@@ -16660,7 +16660,7 @@
       "dossiq": {
        "state": "fail",
        "text": "1",
-       "title": "1 walkthrough flows finding(s) across 1 applicable manifest(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-walkthrough-flows-stop.log"
+       "title": "1 walkthrough flows finding(s) across 1 applicable manifest(s)"
       },
       "filinq": {
        "state": "pass",
@@ -17114,7 +17114,7 @@
       "stackiq": {
        "state": "fail",
        "text": "1",
-       "title": "1 finding(s) against ADR-112 (one reports page, its entry in the settings foldout labelled Advanced, no report reachable both as a card and as a menu entry) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/stackiq/hydra-gate-reports-one-page.log"
+       "title": "1 finding(s) against ADR-112 (one reports page, its entry in the settings foldout labelled Advanced, no report reachable both as a card and as a menu entry)"
       },
       "thematiq": {
        "state": "pass",
@@ -17276,7 +17276,7 @@
       "learniq": {
        "state": "fail",
        "text": "1",
-       "title": "1 blocking finding(s) against ADR-114 (Documentation, Features & roadmap and Flows in every app, in their declared sections, and no hand-rolled Admin settings link) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-app-chrome.log"
+       "title": "1 blocking finding(s) against ADR-114 (Documentation, Features & roadmap and Flows in every app, in their declared sections, and no hand-rolled Admin settings link)"
       },
       "opencatalogi": {
        "state": "pass",
@@ -17311,7 +17311,7 @@
       "stackiq": {
        "state": "fail",
        "text": "1",
-       "title": "1 blocking finding(s) against ADR-114 (Documentation, Features & roadmap and Flows in every app, in their declared sections, and no hand-rolled Admin settings link) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/stackiq/hydra-gate-app-chrome.log"
+       "title": "1 blocking finding(s) against ADR-114 (Documentation, Features & roadmap and Flows in every app, in their declared sections, and no hand-rolled Admin settings link)"
       },
       "thematiq": {
        "state": "pass",
@@ -17763,102 +17763,102 @@
       "buildiq": {
        "state": "warn",
        "text": "772",
-       "title": "772 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/buildiq/hydra-gate-e2e-coverage.log"
+       "title": "772 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "decidiq": {
        "state": "warn",
        "text": "1962",
-       "title": "1962 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/decidiq/hydra-gate-e2e-coverage.log"
+       "title": "1962 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "dossiq": {
        "state": "warn",
        "text": "2945",
-       "title": "2945 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-e2e-coverage.log"
+       "title": "2945 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "filinq": {
        "state": "warn",
        "text": "808",
-       "title": "808 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/filinq/hydra-gate-e2e-coverage.log"
+       "title": "808 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "hermiq": {
        "state": "warn",
        "text": "1149",
-       "title": "1149 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/hermiq/hydra-gate-e2e-coverage.log"
+       "title": "1149 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "humaniq": {
        "state": "warn",
        "text": "913",
-       "title": "913 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/humaniq/hydra-gate-e2e-coverage.log"
+       "title": "913 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "integriq": {
        "state": "warn",
        "text": "350",
-       "title": "350 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/integriq/hydra-gate-e2e-coverage.log"
+       "title": "350 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "keepiq": {
        "state": "warn",
        "text": "579",
-       "title": "579 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/keepiq/hydra-gate-e2e-coverage.log"
+       "title": "579 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "larpinq": {
        "state": "warn",
        "text": "187",
-       "title": "187 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/larpinq/hydra-gate-e2e-coverage.log"
+       "title": "187 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "launchpad": {
        "state": "warn",
        "text": "501",
-       "title": "501 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/launchpad/hydra-gate-e2e-coverage.log"
+       "title": "501 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "learniq": {
        "state": "warn",
        "text": "563",
-       "title": "563 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-e2e-coverage.log"
+       "title": "563 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "opencatalogi": {
        "state": "warn",
        "text": "868",
-       "title": "868 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-e2e-coverage.log"
+       "title": "868 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "openregister": {
        "state": "warn",
        "text": "3808",
-       "title": "3808 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/openregister/hydra-gate-e2e-coverage.log"
+       "title": "3808 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "pipelinq": {
        "state": "warn",
        "text": "1275",
-       "title": "1275 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-e2e-coverage.log"
+       "title": "1275 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "planninq": {
        "state": "warn",
        "text": "279",
-       "title": "279 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/planninq/hydra-gate-e2e-coverage.log"
+       "title": "279 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "portaliq": {
        "state": "warn",
        "text": "974",
-       "title": "974 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-e2e-coverage.log"
+       "title": "974 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "shillinq": {
        "state": "warn",
        "text": "785",
-       "title": "785 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/shillinq/hydra-gate-e2e-coverage.log"
+       "title": "785 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "stackiq": {
        "state": "warn",
        "text": "491",
-       "title": "491 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/stackiq/hydra-gate-e2e-coverage.log"
+       "title": "491 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "thematiq": {
        "state": "warn",
        "text": "276",
-       "title": "276 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/thematiq/hydra-gate-e2e-coverage.log"
+       "title": "276 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       },
       "versioniq": {
        "state": "warn",
        "text": "338",
-       "title": "338 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/versioniq/hydra-gate-e2e-coverage.log"
+       "title": "338 scenario(s) missing @e2e (advisory, non-blocking \u2014 see .github#477)"
       }
      }
     },
@@ -18081,7 +18081,7 @@
       "decidiq": {
        "state": "fail",
        "text": "1",
-       "title": "1 new page component(s) missing a visual baseline \u2014 see /home/rubenlinde/sig-lanes/matrix/out/decidiq/hydra-gate-visual-coverage.log"
+       "title": "1 new page component(s) missing a visual baseline"
       },
       "dossiq": {
        "state": "pass",
@@ -18126,7 +18126,7 @@
       "learniq": {
        "state": "fail",
        "text": "5",
-       "title": "5 new page component(s) missing a visual baseline \u2014 see /home/rubenlinde/sig-lanes/matrix/out/learniq/hydra-gate-visual-coverage.log"
+       "title": "5 new page component(s) missing a visual baseline"
       },
       "opencatalogi": {
        "state": "pass",
@@ -18141,7 +18141,7 @@
       "pipelinq": {
        "state": "fail",
        "text": "1",
-       "title": "1 new page component(s) missing a visual baseline \u2014 see /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-visual-coverage.log"
+       "title": "1 new page component(s) missing a visual baseline"
       },
       "planninq": {
        "state": "pass",
@@ -18242,7 +18242,7 @@
       "openregister": {
        "state": "fail",
        "text": "1",
-       "title": "1 orphaned write-capability method(s) \u2014 see /home/rubenlinde/sig-lanes/matrix/out/openregister/hydra-gate-orphaned-write-capability.log"
+       "title": "1 orphaned write-capability method(s)"
       },
       "pipelinq": {
        "state": "pass",
@@ -18516,7 +18516,7 @@
       "buildiq": {
        "state": "fail",
        "text": "1",
-       "title": "1 schema slug(s) the e2e seed requires are declared nowhere, or claimed from an owner that does not declare them or cannot be read - the seed would exit before Playwright starts and every spec would report as NOT RUN - see /home/rubenlinde/sig-lanes/matrix/out/buildiq/hydra-gate-seed-required-slugs."
+       "title": "1 schema slug(s) the e2e seed requires are declared nowhere, or claimed from an owner that does not declare them or cannot be read - the seed would exit before Playwright starts and every spec would report as NOT RUN -."
       },
       "decidiq": {
        "state": "pass",
@@ -18587,7 +18587,7 @@
       "dossiq": {
        "state": "warn",
        "text": "1",
-       "title": "1 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/dossiq/hydra-gate-newman-reach.log"
+       "title": "1 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down."
       },
       "filinq": {
        "state": "pass",
@@ -18627,7 +18627,7 @@
       "opencatalogi": {
        "state": "warn",
        "text": "2",
-       "title": "2 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-newman-reach.log"
+       "title": "2 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down."
       },
       "openregister": {
        "state": "pass",
@@ -18637,7 +18637,7 @@
       "pipelinq": {
        "state": "warn",
        "text": "3",
-       "title": "3 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/pipelinq/hydra-gate-newman-reach.log"
+       "title": "3 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down."
       },
       "planninq": {
        "state": "pass",
@@ -18647,7 +18647,7 @@
       "portaliq": {
        "state": "warn",
        "text": "1",
-       "title": "1 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/portaliq/hydra-gate-newman-reach.log"
+       "title": "1 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down."
       },
       "shillinq": {
        "state": "pass",
@@ -18657,7 +18657,7 @@
       "stackiq": {
        "state": "warn",
        "text": "1",
-       "title": "1 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See /home/rubenlinde/sig-lanes/matrix/out/stackiq/hydra-gate-newman-reach.log"
+       "title": "1 committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down."
       },
       "thematiq": {
        "state": "pass",
@@ -18668,7 +18668,7 @@
     },
     {
      "id": "gate.122",
-     "label": "122 sig-maintainability",
+     "label": "122 maintainability",
      "cells": {
       "buildiq": {
        "state": "pass",
@@ -18774,12 +18774,12 @@
     },
     {
      "id": "gate.123",
-     "label": "123 sig-floor",
+     "label": "123 maintainability floor",
      "cells": {
       "buildiq": {
        "state": "fail",
        "text": "1",
-       "title": "1 SIG 4-star check(s) in this app's floor are no longer met, or were removed from .github/sig-floor.json. Each is named above with its share and limit. See /home/rubenlinde/sig-lanes/matrix/out/buildiq/sig-floor.md and /home/rubenlinde/sig-lanes/matrix/out/buildiq/hydra-gate-sig-floor.log"
+       "title": "1 4-star maintainability check(s) in this app's floor are no longer met, or were removed from the app's maintainability floor file. Each is named above with its share and limit."
       },
       "decidiq": {
        "state": "pass",
@@ -18794,7 +18794,7 @@
       "filinq": {
        "state": "fail",
        "text": "1",
-       "title": "1 SIG 4-star check(s) in this app's floor are no longer met, or were removed from .github/sig-floor.json. Each is named above with its share and limit. See /home/rubenlinde/sig-lanes/matrix/out/filinq/sig-floor.md and /home/rubenlinde/sig-lanes/matrix/out/filinq/hydra-gate-sig-floor.log"
+       "title": "1 4-star maintainability check(s) in this app's floor are no longer met, or were removed from the app's maintainability floor file. Each is named above with its share and limit."
       },
       "hermiq": {
        "state": "pass",
@@ -18804,12 +18804,12 @@
       "humaniq": {
        "state": "fail",
        "text": "1",
-       "title": "1 SIG 4-star check(s) in this app's floor are no longer met, or were removed from .github/sig-floor.json. Each is named above with its share and limit. See /home/rubenlinde/sig-lanes/matrix/out/humaniq/sig-floor.md and /home/rubenlinde/sig-lanes/matrix/out/humaniq/hydra-gate-sig-floor.log"
+       "title": "1 4-star maintainability check(s) in this app's floor are no longer met, or were removed from the app's maintainability floor file. Each is named above with its share and limit."
       },
       "integriq": {
        "state": "fail",
        "text": "1",
-       "title": "1 SIG 4-star check(s) in this app's floor are no longer met, or were removed from .github/sig-floor.json. Each is named above with its share and limit. See /home/rubenlinde/sig-lanes/matrix/out/integriq/sig-floor.md and /home/rubenlinde/sig-lanes/matrix/out/integriq/hydra-gate-sig-floor.log"
+       "title": "1 4-star maintainability check(s) in this app's floor are no longer met, or were removed from the app's maintainability floor file. Each is named above with its share and limit."
       },
       "keepiq": {
        "state": "pass",
@@ -18834,7 +18834,7 @@
       "opencatalogi": {
        "state": "fail",
        "text": "1",
-       "title": "1 SIG 4-star check(s) in this app's floor are no longer met, or were removed from .github/sig-floor.json. Each is named above with its share and limit. See /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/sig-floor.md and /home/rubenlinde/sig-lanes/matrix/out/opencatalogi/hydra-gate-sig-floor.log"
+       "title": "1 4-star maintainability check(s) in this app's floor are no longer met, or were removed from the app's maintainability floor file. Each is named above with its share and limit."
       },
       "openregister": {
        "state": "pass",
@@ -18859,7 +18859,7 @@
       "shillinq": {
        "state": "fail",
        "text": "1",
-       "title": "1 SIG 4-star check(s) in this app's floor are no longer met, or were removed from .github/sig-floor.json. Each is named above with its share and limit. See /home/rubenlinde/sig-lanes/matrix/out/shillinq/sig-floor.md and /home/rubenlinde/sig-lanes/matrix/out/shillinq/hydra-gate-sig-floor.log"
+       "title": "1 4-star maintainability check(s) in this app's floor are no longer met, or were removed from the app's maintainability floor file. Each is named above with its share and limit."
       },
       "stackiq": {
        "state": "pass",
@@ -18884,7 +18884,7 @@
  "beyond": [
   {
    "label": "PHP line coverage",
-   "why": "SIG rates no tests. Coverage shows how much of the code a unit or integration test runs.",
+   "why": "The external models rate no tests. Coverage shows how much of the code a unit or integration test runs.",
    "basis": "Heitlager, Kuipers and Visser 2007: unit test coverage ++ 95-100%, + 80-95%, o 60-80%, - 20-60%, -- 0-20%"
   },
   {
@@ -18899,8 +18899,8 @@
   },
   {
    "label": "test code ratio",
-   "why": "SIG's own test volume figure (test LOC / production LOC), shown in Sigrid without stars.",
-   "basis": "Sigrid: a 100% test code ratio is roughly 80% coverage, so Heitlager's 95/80/60/20% coverage bands become 120/100/75/25% test code"
+   "why": "The external test volume figure (test LOC / production LOC), shown there without stars.",
+   "basis": "external assessment: a 100% test code ratio is roughly 80% coverage, so Heitlager's 95/80/60/20% coverage bands become 120/100/75/25% test code"
   },
   {
    "label": "baselined findings per kLOC PHP",
@@ -18909,7 +18909,7 @@
   },
   {
    "label": "suppressions per kLOC",
-   "why": "Inline @psalm-suppress, @phpstan-ignore, @SuppressWarnings, phpcs:ignore and eslint-disable silence a tool where SIG still counts the code.",
+   "why": "Inline @psalm-suppress, @phpstan-ignore, @SuppressWarnings, phpcs:ignore and eslint-disable silence a tool where an external assessment still counts the code.",
    "basis": "our own bands; no published benchmark"
   },
   {
@@ -18919,17 +18919,17 @@
   },
   {
    "label": "vulnerable dependencies, high or critical",
-   "why": "composer audit and npm audit on the lockfiles; SIG rates the same CVEs in Open Source Health.",
-   "basis": "SIG Open Source Health: 4 stars means no vulnerability above moderate; 5 stars also no moderate"
+   "why": "composer audit and npm audit on the lockfiles; the external Open Source Health model rates the same CVEs.",
+   "basis": "Open Source Health guidance: 4 stars means no vulnerability above moderate; 5 stars also no moderate"
   },
   {
    "label": "unmanaged dependencies",
    "why": "Third-party code committed into the repository (minified or vendored files) gets no security updates.",
-   "basis": "SIG Open Source Health: 4 stars at most 6% unmanaged; 3 and 2 stars double that"
+   "basis": "Open Source Health guidance: 4 stars at most 6% unmanaged; 3 and 2 stars double that"
   },
   {
    "label": "accessibility findings per .vue file",
-   "why": "SIG has no accessibility model. Gates 12 and 31-45 check WCAG 2.2 AA rules in the source.",
+   "why": "The external models have no accessibility model. Gates 12 and 31-45 check WCAG 2.2 AA rules in the source.",
    "basis": "our own bands; WCAG 2.2 AA asks for none"
   },
   {
@@ -18942,88 +18942,88 @@
   "rows": [
    {
     "id": "sig_floor",
-    "label": "SIG floor (gate 123)",
+    "label": "maintainability floor (gate 123)",
     "what": "4-star checks the app must keep",
     "cells": {
      "buildiq": {
       "value": 27,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "decidiq": {
       "value": 24,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "dossiq": {
       "value": 19,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "filinq": {
       "value": 40,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "hermiq": {
       "value": 25,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "humaniq": {
       "value": 29,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "integriq": {
       "value": 26,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "keepiq": {
       "value": 46,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "larpinq": {
       "value": 29,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "launchpad": {
       "value": 28,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "learniq": {
       "value": 22,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "opencatalogi": {
       "value": 39,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "openregister": {
       "value": 43,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "pipelinq": {
       "value": 21,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "planninq": {
       "value": 32,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "portaliq": {
       "value": 24,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "shillinq": {
       "value": 32,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "stackiq": {
       "value": 17,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "thematiq": {
       "value": 21,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      },
      "versioniq": {
       "value": 41,
-      "detail": ".github/sig-floor.json"
+      "detail": "the app's maintainability floor file"
      }
     }
    },

@@ -1,0 +1,327 @@
+---
+title: Quality matrix
+sidebar_label: Quality matrix
+description: Per app our component checker score, our estimate of the maintainability rating, our own banded measures and every gate.
+---
+
+import SigMatrix, {SigBeyond, SigFloors, SigLevers} from '@site/src/components/SigMatrix';
+import matrix from '@site/src/data/sig-matrix.json';
+
+# Quality matrix
+
+This page is our own measurement, not an external quality assessment. It has
+two parts.
+
+1. **Component checker scores.** The Common Ground component checker scores
+   each app from 0 to 100. The latest round ran on 13 November 2026.
+2. **The quality matrix.** Our estimate of the maintainability rating an
+   external assessment would give, our own measures and every gate. An
+   external assessment uses its own parsers and scoping, so its numbers can
+   differ.
+
+## Component checker scores
+
+**Measured on 13 November 2026, 04:01 to 04:19 UTC**, with checker version
+`d6a3b66`. We measured openregister on `main` and every other app on
+`development`. The commit is the head we measured.
+
+The checker rates 30 criteria in five categories: governance, security,
+architecture, maintainability, and deployment and operations. The score runs
+from 0 to 100, the rating from 1 to 5 stars. An app is endorsed when no
+mandatory criterion fails.
+
+| App | Commit | Score | Rating | Endorsed | Mandatory criteria that do not pass |
+|---|---|---|---|---|---|
+| openregister | [`5af71ed90`](https://github.com/ConductionNL/openregister/commit/5af71ed907d6a6ef8de4a50bde19f710f5489e0b) | 97 | 4.8 | yes | none |
+| thematiq | [`bafd06c33`](https://github.com/ConductionNL/thematiq/commit/bafd06c33296f22bea62ca11da40e83586a9c88d) | 97 | 4.9 | yes | none |
+| larpinq | [`1137ab67c`](https://github.com/ConductionNL/larpinq/commit/1137ab67c8cdaea7e555dc99270e050e09fa11c2) | 97 | 4.7 | yes | none |
+| filinq | [`e1f08e30b`](https://github.com/ConductionNL/filinq/commit/e1f08e30b88c6e7128cac176143bc81503fdfc44) | 97 | 4.6 | yes | none |
+| keepiq | [`2f62be103`](https://github.com/ConductionNL/keepiq/commit/2f62be103832239d6d780da9c5f8878ea00d81a4) | 93 (round: 89) | 4.3 | yes | API design rules warn, 536 warnings. Secure coding passes since the checker fix, see below |
+| versioniq | [`2d33f50fe`](https://github.com/ConductionNL/versioniq/commit/2d33f50fe156174afaee391f034217fb7a19fa8c) | 93 | 4.5 | yes | API design rules warn, 87 warnings |
+| integriq | [`0a984caa0`](https://github.com/ConductionNL/integriq/commit/0a984caa0b844fd697282e0221134d9c32a43ff2) | 93 | 4.4 | yes | API design rules warn, 25 warnings |
+| hermiq | [`beeb8ec1c`](https://github.com/ConductionNL/hermiq/commit/beeb8ec1cb99580ea9dcba2475cdf6f9e58c4bec) | 93 | 4.4 | yes | API design rules warn, 6 warnings |
+| humaniq | [`8d29580c1`](https://github.com/ConductionNL/humaniq/commit/8d29580c1b4c02a14583b6b1421a3d8faa2c5417) | 93 | 4.4 | yes | API design rules warn, no API spec found |
+| planninq | [`8fc73df3d`](https://github.com/ConductionNL/planninq/commit/8fc73df3d2f96f77e3d1812584572a3938079021) | 93 | 4.4 | yes | API design rules warn, no API spec found |
+| pipelinq | [`7933b59c4`](https://github.com/ConductionNL/pipelinq/commit/7933b59c4a21dc120616437091221d81640f87e3) | 93 | 4.3 | yes | API design rules warn, no API spec found |
+| launchpad | [`39f212172`](https://github.com/ConductionNL/launchpad/commit/39f2121728adcf3b230072c39f41de8d5807d93d) | 93 | 4.3 | yes | API design rules warn, no API spec found |
+| shillinq | [`e7b76198c`](https://github.com/ConductionNL/shillinq/commit/e7b76198c63a976df702bc5078d5244bcfca152d) | 93 | 4.3 | yes | API design rules warn, no API spec found |
+| learniq | [`c16800b62`](https://github.com/ConductionNL/learniq/commit/c16800b62670b09bea65856491d29918f897a245) | 93 | 4.3 | yes | API design rules warn, no API spec found |
+| decidiq | [`7cd7d1756`](https://github.com/ConductionNL/decidiq/commit/7cd7d1756a8b013509ce0733d1ab0e3107975fb4) | 93 | 4.3 | yes | API design rules warn, no API spec found |
+| stackiq | [`7cd10138f`](https://github.com/ConductionNL/stackiq/commit/7cd10138f5e6288db4f99cc2c8b2d16993a17760) | 92 | 4.5 | no | coverage fails, 65.17% of 80% |
+| opencatalogi | [`92b8e73e6`](https://github.com/ConductionNL/opencatalogi/commit/92b8e73e69a9478292408445b5e59e6daa47a9a2) | 90 | 4.3 | no | API design rules fail, 1 error and 1 warning |
+| portaliq | [`a893a302a`](https://github.com/ConductionNL/portaliq/commit/a893a302acc816d54c76aa3212351a8257f7e7bb) | 88 | 4.4 | no | secure coding fails, 23 findings, all in the vendored `woo/static/js` bundle |
+| buildiq | [`5f5f87c67`](https://github.com/ConductionNL/buildiq/commit/5f5f87c67fc36c647bfe4b43908e2da59a015653) | 88 | 4.3 | no | coverage fails, 79.92% of 80%. API design rules warn, no API spec found |
+| dossiq | [`d63da17a9`](https://github.com/ConductionNL/dossiq/commit/d63da17a916fa98461c4a2f5f68d514a612960ee) | 88 | 4.4 | no | coverage fails, 75.80% of 80%. API design rules warn, no API spec found |
+
+The five-layer architecture criterion warns in every app, so the table leaves
+it out. The checker sees signals of several Common Ground layers in each
+repository.
+
+- **Fleet.** The mean score is 92.7, or 92.9 with keepiq's rescan. 15 of 20
+  apps are endorsed.
+- **Blocked.** Coverage holds back stackiq, buildiq and dossiq. buildiq misses
+  80% by 0.08 points. API design rules hold back opencatalogi. Secure coding
+  holds back portaliq.
+- **Coverage is self-reported.** The checker reads the committed
+  `coverage/coverage-summary.json`. It does not run the tests itself.
+- **portaliq's secure coding findings** sit in a third-party bundle we commit,
+  not in portaliq's own source.
+
+### Why the checker scores moved this week
+
+The checker changed between rounds, so not every jump is new code.
+
+- **Round of 01:00 UTC, 13 November (checker `d6a3b66`).** Three fixes landed.
+  The hardcoded-secret rule now needs a value that looks like a secret, not
+  just a name. Go, pytest, end-to-end and Android test paths count as test
+  code. The licence check honours the excludes in each repository's scope
+  file. Eight apps gained 4 points from these fixes alone. A control scan of
+  the same commits with the old checker separates the two effects.
+- **Round of 04:00 UTC (same checker).** Every change came from merged work.
+  launchpad gained 12 points from its Docker image and Helm chart. filinq,
+  larpinq and thematiq reached 97 with a clean versioned API spec. portaliq
+  gained 3 points for the same reason.
+- **keepiq rescan, about 04:30 UTC (checker `afb5f1b`).** The secret rule now
+  looks at one line only and accepts PascalCase names. keepiq's one finding
+  was an icon name, so secure coding passes and keepiq scores 93 on the same
+  commit.
+
+## The quality matrix
+
+**Measured on {matrix.measured}.** We have not measured the matrix again
+since. The commit under each app name is the head that was measured. An app
+we measured again later shows its own date under its name. For that app, the
+rating, maintainability rows and levers come from that date. Its other rows
+keep the date above.
+
+:::note Why the matrix scores jump from 1 November 2026
+
+Until 31 October 2026 the fleet followed the Nextcloud coding standards. From
+1 November 2026 we apply the maintainability rules of the maintainability
+guidance. Gates 122 and 123 check them on every change. That is why the
+scores rise from 1 November.
+
+:::
+
+## How to read the matrix
+
+Each column is an app. The rows come in five sections.
+
+1. **Estimated maintainability rating.** Our estimate of the rating an
+   external assessment would give,
+   from 0.5 to 5.5. The overall row is a range. Below it are the five
+   sub-characteristics and the seven properties. All of it is an estimate.
+2. **Maintainability checks.** Every check of gate 122, per language, rated from
+   1 to 5 stars.
+3. **Other external models.** Open Source Health and Architecture Quality,
+   where we can measure them. The guidance publishes only the 4-star value, so a cell says
+   met (4★) or missed (&lt;4).
+4. **Our own measures.** Tests, debt, security, and accessibility and UI. We
+   define these bands ourselves. The table below the matrix gives each band's
+   basis.
+5. **Gates per category.** Each row shows the gates that pass out of the gates
+   that apply, and the findings of all of them. Open a row to see its gates.
+
+- **Unit size, complexity and interfacing:** the share of unit code above the
+  bound, for example the code in units longer than 15 lines.
+- **Duplication:** the share of redundant lines, in fragments of 6 lines or more.
+  In a Vue file we treat template, script and style as separate pieces, so a
+  fragment never crosses from one into the next. This is our assumption until a
+  real external scan confirms it.
+- **Module coupling:** the share of module code in files with more than 10, 20
+  or 50 incoming dependencies.
+- **Component independence:** the share of code that no other component calls.
+  Higher is better here. For every other check, lower is better.
+
+A cell shows the stars and the measured value. Hover a cell for the details.
+An empty cell (`·`) means the app has no such code or the gate does not apply.
+
+### Maintainability bands
+
+The 4-star limits come from the maintainability guidance, Guidance for
+Producers v18.1, dated 31 March 2026. It is the 2026 model. Volume no longer
+counts.
+
+The guidance publishes no other level. We derive the 5, 3 and 2-star limits ourselves.
+The only public table of all levels is Alves, Correia and Visser (2011). We
+take its distance between each band and the 4-star band. We apply that ratio
+to the v18.1 limits. Duplication uses the band ratios of Heitlager, Kuipers
+and Visser (2007). Anything worse than 2 stars is 1 star.
+
+| Check | 5★ | 4★ (v18.1) | 3★ | 2★ |
+|---|---|---|---|---|
+| Unit size, code in units over 15 / 30 / 60 lines | 36.0 / 17.0 / 5.5% | 48.0 / 24.2 / 9.1% | 63.0 / 34.7 / 15.4% | 84.7 / 49.0 / 25.3% |
+| Unit complexity, McCabe over 5 / 10 / 25 | 15.8 / 4.4 / 0.5% | 20.7 / 7.5 / 1.1% | 27.7 / 10.6 / 1.7% | 34.6 / 13.2 / 2.7% |
+| Unit interfacing, 3+ / 5+ / 7+ parameters | 12.5 / 2.5 / 0.6% | 15.4 / 3.4 / 0.9% | 18.3 / 4.8 / 1.4% | 26.0 / 7.2 / 2.1% |
+| Module coupling, fan-in over 10 / 20 / 50 | 7.4 / 3.3 / 1.2% | 9.7 / 5.3 / 1.8% | 10.7 / 5.9 / 2.3% | 13.0 / 8.0 / 3.8% |
+| Duplication | 3.5% | 5.8% | 11.6% | 23% |
+| Component independence | at least 97.3% | at least 94.5% | no band | no band |
+| Component entanglement | at most 0.0375 | at most 0.075 | no band | no band |
+
+The 2011 table was calibrated on a 20/20/20/20/20 spread. The 2026 model uses
+5/30/30/30/5. So the real 5-star limits are probably stricter, and the real
+2-star limits looser.
+
+For independence and entanglement no public source gives other levels. We set
+5 stars at half the 4-star exposure. A value below 4 stars shows as `<4`.
+Entanglement is our estimate from the violation degree, because the assessor
+normalises it against benchmark figures it does not publish. It is shown, but
+gate 123 does not floor it.
+
+### How we estimate the maintainability rating
+
+The external assessment rates each app from 0.5 to 5.5 stars. Our estimate
+follows its published steps, from the checks up to one number. Where nothing
+is published, we
+made a choice. Each choice is listed under assumptions.
+
+1. **Check.** A share of code between two star limits gets a rating between
+   them, on a straight line. A share at the 4-star limit rates 3.5. This is
+   equation 1 of Alves, Correia and Visser (2011). We test it on the paper's
+   own example, which rates 2.68.
+2. **Property.** A property with three checks takes its worst check. Same
+   paper.
+3. **Languages.** Each language gets its own property rating. We weight them
+   by the code each property measures in that language.
+4. **Sub-characteristic.** The plain mean of its properties. Analysability:
+   duplication and unit size. Modifiability: duplication, unit complexity and
+   module coupling. Testability: unit complexity and component independence.
+   Modularity: module coupling, component independence and component
+   entanglement. Reusability: unit size and unit interfacing.
+5. **Overall.** The power mean of the five sub-characteristics. The 2026 model switched
+   to a power mean in 2026 but does not publish the exponent. We show two:
+   p = 1, the plain mean, and p = -1, the harmonic mean. The harmonic mean
+   pulls harder towards the weakest sub-characteristic. The real rating
+   probably sits between them.
+
+Rounding to stars follows the guidance: half up, and 5.5 is still 5 stars. A rating
+row is coloured by its stars and shows the value. The overall row is coloured
+by the lower end of its range.
+
+#### Sources
+
+- Key changes in the 2026 quality models, the assessor's own note: volume is
+  removed, and the overall rating is now a power mean.
+- Guidance for Producers v18.1, 31 March 2026: the 4-star limits, per
+  language.
+- Evaluation Criteria Trusted Product Maintainability v12.0, 2020: which
+  properties feed which sub-characteristic, and the order of the steps.
+- Alves, Correia and Visser, [Benchmark-based aggregation of metrics to ratings](http://web.archive.org/web/2020/http://wiki.di.uminho.pt/twiki/pub/Personal/Tiago/Publications/mensura11-alves.pdf),
+  IWSM/Mensura 2011: the interpolation and the minimum over checks.
+- Baggen, Correia, Schill and Visser, Standardized code quality benchmarking
+  for improving software maintainability, Software Quality Journal 2012: a
+  sub-characteristic is the mean of its properties, and the overall rating
+  the mean of the sub-characteristics.
+- The worked example in the 2026 changes note fits this: its overall 3.2 is the
+  mean of the sub-characteristics, not of the properties.
+
+#### Assumptions
+
+- **Exponent.** The assessor does not publish it. We show p = 1 and p = -1 as a range.
+- **Weights.** Every property counts equally in its sub-characteristic, and
+  every sub-characteristic in the overall rating. The evaluation criteria say a
+  panel of experts sets the weights, and the assessor does not publish them.
+  The worked example fits equal weights.
+- **Mapping in 2026.** The 2020 mapping, minus volume and component balance,
+  which the 2026 model no longer rates. Nothing is added.
+- **Power mean at the last step only.** The sub-characteristics stay a plain
+  mean. The published text does not say at which step the power mean applies.
+- **Languages.** Weighted by code. The guidance says most results are weighted by code
+  volume, but not how languages combine.
+- **1 star.** Below the 2-star limit the rating falls on a straight line to
+  0.5 when all code is in the band. The paper does not give this end.
+- **Limits other than 4 stars.** Our derived 5, 3 and 2-star limits from the
+  table above.
+- **Independence and entanglement below 4 stars.** The assessor rates them below 4
+  stars but publishes only the 4-star limit. For the estimate, each star level
+  doubles the allowed exposure. Independence: at least 97.25, 94.5, 89 and
+  78% hidden code for 5, 4, 3 and 2 stars. Entanglement: at most 0.0375,
+  0.075, 0.15 and 0.30. The check rows keep showing `<4`.
+- **Entanglement value.** We rate the violation degree. The assessor combines it with
+  the communication density against benchmark maxima it does not publish.
+- **Missing structure.** Module coupling, independence and entanglement are
+  measured for PHP under `lib/` and for Python only. JavaScript, TypeScript
+  and Vue count for the unit checks and duplication.
+
+### Floors
+
+A cell with a ring and a lock is floored. Gate 123 holds that check. The app
+met it when its floor was recorded, and a change that loses it fails.
+Re-recording a floor never lowers it. A floored check that the v18.1 limits
+miss stays in the floor and shows `<4` until development meets it again.
+
+<SigMatrix />
+
+## Levers per app
+
+A lever is one property in one language. For each lever we move the next
+1,000 lines above a bound to low risk, worst band first, and rate the app
+again. The gain is how far the overall rating rises, under both exponents.
+When fewer than 1,000 lines are left, the gain is for the lines that are
+left.
+
+Lines for +0.5 is the fewest lines to fix in that language to raise the
+property by half a star. "Not by vue alone" means fixing every vue line is
+not enough, because the other languages hold the rating down.
+
+A lever is sure when it ranks in the top 3 under both exponents. The panel
+shows the top 5 of each app, ordered by their two ranks together. Start with
+a sure lever.
+
+<SigLevers />
+
+## What we add beyond the external models
+
+The external models rate maintainability, security, open source health and
+architecture. They do not rate tests, debt hidden in baselines, or accessibility. These are our
+own measures, with the reason we add each one and the basis of its bands.
+
+<SigBeyond />
+
+Spec coverage counts the methods gate 16 holds in scope, with and without an
+`@spec` tag. E2e coverage is gate 19's report over the scenarios that are not
+excluded. PHP coverage is the statement coverage in the newest clover report
+CI kept for the app: from `development` if there is one, otherwise from the
+newest run on another branch. The tooltip names the branch, commit and date. CI
+keeps these reports 14 days. Without a readable report the cell falls back to the
+coverage-guard floor in `.coverage-baseline`, says `stale` with the date that
+floor last changed, and the run prints a warning. The
+vulnerable dependency count treats a Composer advisory without a severity as
+high, because nothing shows it is lower.
+The gate rows come from a full-scope run of every gate on `development`.
+
+## Floors and ratchets per app
+
+Besides the maintainability floor, each app keeps its own floors and baselines on
+`development`. A baseline lists debt that may stay, so a lower count is
+better. A coverage floor is a minimum, so a higher value is better. A `·`
+means the app has no such file. Hover a cell for the file it came from.
+
+<SigFloors />
+
+## Refresh the data
+
+The matrix reads one JSON file in `website/src/data/`. One generator in
+`website/scripts/` writes it. Its docstring gives the exact commands.
+
+1. Clone each app's `development` branch into one directory, named after the
+   app.
+2. Run gate 122 in report mode on each clone. It writes one JSON report per
+   app.
+3. Run all gates at full scope on each clone. The runner writes `gates.json`
+   into its log directory:
+
+   ```bash
+   HYDRA_GATE_LOG_DIR=<gates-dir>/<app> bash hydra-gates/scripts/run-hydra-gates.sh --full <clones>/<app>
+   ```
+
+4. Run the generator from the repository root. It runs `composer audit` and
+   `npm audit` on the lockfiles and reads the CI coverage reports with `gh api`,
+   so it needs the network and a logged-in `gh`.
+5. Commit the new data file.
+
+The generator takes the rating estimate and the star bands from gate 122 and the own bands from
+`website/scripts/quality_measures.py`. A change to either shows up in the
+matrix on the next refresh.
+
+Back to [app health](./app-health.md).

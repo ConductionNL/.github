@@ -9,8 +9,9 @@ update themselves — click one to open that branch's runs.
 Every app is checked by the same `Code Quality` workflow. **Category** is the
 role an app plays in the fleet; **Type** is its domain.
 
-For the maintainability stars we expect from the Software Improvement Group
-(SIG), per app and per check, see [SIG scores](./sig-scores.mdx).
+For our component checker scores and the maintainability rating we expect
+from an external assessment, per app and per check, see
+[quality scores](./quality-scores.mdx).
 
 | App | Category | Type | Latest release | main | beta | development |
 | --- | --- | --- | --- | --- | --- | --- |

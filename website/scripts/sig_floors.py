@@ -104,7 +104,7 @@ def debt_total(text):
 
 # (row id, label, what it holds, matcher, reader returning value or (value, detail)).
 KNOWN = [
-    ("sig_floor", "SIG floor (gate 123)", "4-star checks the app must keep",
+    ("sig_floor", "maintainability floor (gate 123)", "4-star checks the app must keep",
      lambda p: p == ".github/sig-floor.json", lambda t: len(json.loads(t)["checks"])),
     ("procedure_code", "procedure code (gate 119)", "procedure-named classes allowed",
      lambda p: p == ".procedure-code-baseline.json", lambda t: json.loads(t)["count"]),
