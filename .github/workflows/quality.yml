@@ -182,7 +182,7 @@ on:
         type: string
         default: "[]"
       database-test-matrix:
-        description: "JSON array of databases to run PHPUnit against, e.g. '[\"pgsql\", \"mysql\", \"sqlite\"]'. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this change is inert until an app opts in."
+        description: "JSON array of databases to run PHPUnit against, e.g. '[\"pgsql\", \"mysql\", \"mariadb\", \"sqlite\"]'. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. `mariadb` starts a real MariaDB server (11.4; 12.3 on the Nextcloud 35 leg) rather than reusing MySQL 8.4: Doctrine DBAL quotes identifiers per platform keyword list, so a MariaDB-only reserved word (e.g. a `row_number` column) passes on mysql and fails on MariaDB. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this option is inert until an app opts in."
         required: false
         type: string
         default: "[]"
@@ -3757,9 +3757,9 @@ jobs:
       contents: read
 
     # A service whose `image` evaluates to an empty string is not started, which
-    # is how one job definition serves several backends. Both are keyed off
+    # is how one job definition serves several backends. All three are keyed off
     # matrix.database rather than inputs.database so a multi-database matrix
-    # starts the right container per leg.
+    # starts the right container per leg, and at most one of them per leg.
     services:
       postgres:
         image: ${{ matrix.database == 'pgsql' && 'postgres:16' || '' }}
@@ -3788,6 +3788,39 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+      # A REAL MariaDB server, not the mysql leg under another name. Doctrine
+      # DBAL quotes identifiers against the keyword list of the PLATFORM it
+      # detects, and MariaDB reserves words MySQL 8.4 does not: openregister
+      # shipped a migration with a column `row_number`, reserved on MariaDB
+      # >= 10.7 and left unquoted there, so `occ app:enable` failed on real
+      # MariaDB only while every mysql leg stayed green (openregister#4909).
+      #
+      # Version per leg, from the Nextcloud admin manual's system requirements:
+      # NC 32-34 list MariaDB 10.6 / 10.11 / 11.4 (/ 11.8), NC 35 lists 10.11 /
+      # 11.4 / 11.8 / 12.3 with 12.3 recommended. So the stable35 leg gets
+      # mariadb:12.3 and every other leg gets mariadb:11.4, the LTS line common
+      # to all of them. Reserved-word lists only grow, so the newer server is
+      # the stricter one. When a new Nextcloud major changes the recommended
+      # version, add its branch to this expression.
+      #
+      # Port 3306 is shared with `mysql` on purpose: only one of the two starts
+      # on any leg. The image has no default HEALTHCHECK; healthcheck.sh is its
+      # documented probe, and its user is created on first init, which a fresh
+      # service container always runs.
+      mariadb:
+        image: ${{ matrix.database == 'mariadb' && (matrix.nextcloud-ref == 'stable35' && 'mariadb:12.3' || 'mariadb:11.4') || '' }}
+        env:
+          MARIADB_ROOT_PASSWORD: nextcloud
+          MARIADB_USER: nextcloud
+          MARIADB_PASSWORD: nextcloud
+          MARIADB_DATABASE: nextcloud
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
 
     strategy:
       matrix:

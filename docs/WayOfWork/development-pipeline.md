@@ -82,7 +82,7 @@ Read from `quality.yml` and from the apps' own `code-quality.yml` callers. "Opt-
 | PHP | 8.3 and 8.4 for PHPUnit; 8.3 for lint and static analysis | `php-test-versions`, `php-version` |
 | Nextcloud | Every stable branch from the app's declared minimum to its declared maximum | Derived from `appinfo/info.xml` |
 | Single-server jobs | Newman, Playwright and the coverage guard run on the newest of those branches | Derived |
-| Database | PostgreSQL 16 by default; MySQL 8.4 and SQLite opt-in | `database`, `database-test-matrix` |
+| Database | PostgreSQL 16 by default; MySQL 8.4, MariaDB (11.4; 12.3 on Nextcloud 35) and SQLite opt-in | `database`, `database-test-matrix` |
 
 Because the Nextcloud range is derived from `info.xml`, the versions an app claims to support and the versions it is tested on cannot drift apart. An app may override the range, and a gate then requires the override to agree with `info.xml`.
 
