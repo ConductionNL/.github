@@ -182,7 +182,7 @@ on:
         type: string
         default: "[]"
       database-test-matrix:
-        description: "JSON array of databases to run PHPUnit against, e.g. '[\"pgsql\", \"mysql\", \"mariadb\", \"sqlite\"]'. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. `mariadb` starts a real MariaDB server (11.4; 12.3 on the Nextcloud 35 leg) rather than reusing MySQL 8.4: Doctrine DBAL quotes identifiers per platform keyword list, so a MariaDB-only reserved word (e.g. a `row_number` column) passes on mysql and fails on MariaDB. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this option is inert until an app opts in."
+        description: "JSON array of databases to run PHPUnit against, e.g. '[\"pgsql\", \"mysql\", \"mariadb\"]'; entries from pgsql, mysql, mariadb, sqlite, no duplicates. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. The FIRST entry is the primary database and gets the full (or PR-reduced) PHP x Nextcloud matrix; every further entry gets exactly ONE leg, on the primary php-version and the newest Nextcloud branch, on pull requests and pushes alike, because a portability bug such as a migration shows on any one leg and repeating the PHP x Nextcloud spread per backend only costs runner time. The coverage guard runs on the primary database only. `mariadb` starts a real MariaDB server (11.4; 12.3 on the Nextcloud 35 leg) rather than reusing MySQL 8.4: Doctrine DBAL quotes identifiers per platform keyword list, so a MariaDB-only reserved word (e.g. a `row_number` column) passes on mysql and fails on MariaDB. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this option is inert until an app opts in."
         required: false
         type: string
         default: "[]"
@@ -3308,6 +3308,11 @@ jobs:
   #                  "where did this range come from" is never a question you
   #                  have to answer by reading three files.
   #
+  # Plus `database-extra-legs`, which is not about the Nextcloud range: the
+  # PHPUnit `include:` list for every database-test-matrix entry after the
+  # first (see the step that writes it). It lives here because it needs
+  # `single-server`, and because expressions cannot slice an array.
+  #
   # Those four jobs used to read `fromJSON(inputs.nextcloud-test-refs)[0]`, and
   # the fleet's convention of writing the newest version first is what made that
   # correct. The action's `branches` output is OLDEST-FIRST — measured in its
@@ -3338,6 +3343,7 @@ jobs:
       branches: ${{ steps.resolve.outputs.branches }}
       single-server: ${{ steps.resolve.outputs.single-server }}
       source: ${{ steps.resolve.outputs.source }}
+      database-extra-legs: ${{ steps.database-legs.outputs.extra-legs }}
     steps:
       - name: Checkout the app manifest
         uses: actions/checkout@v4
@@ -3663,6 +3669,76 @@ jobs:
           sys.exit(1 if hard else 0)
           PY
 
+      # ── ONE LEG PER EXTRA DATABASE, NOT ONE PHP x NEXTCLOUD SET ────────────
+      #
+      # database-test-matrix: the FIRST entry is the phpunit job's `database`
+      # dimension and gets the full (or PR-reduced) matrix. Every further entry
+      # becomes exactly one `include:` leg on the primary PHP and the newest
+      # Nextcloud branch, on pull requests and pushes alike. Database
+      # portability bugs (a migration using a word one backend reserves) show
+      # on any single leg, so repeating the PHP x Nextcloud spread per backend
+      # would buy runner time and no signal.
+      #
+      # Each extra leg sets `extra-database: true`, a key the regular legs do
+      # not have, so single-leg steps (coverage guard, the `coverage-report`
+      # artifact) can stay on the primary database's leg. An include entry
+      # whose `database` differs from the one primary value cannot merge into
+      # an existing combination without overwriting it, so it always becomes
+      # a new leg.
+      #
+      # Unset ("[]", or only empty strings, as the phpunit `database:` line
+      # treats them) writes "[]": no extra legs. Written BEFORE any non-zero
+      # exit, like the resolve step above: a bad value turns this job red,
+      # which the Quality Report reads, while the phpunit matrix still expands.
+      - name: Resolve the extra database legs
+        id: database-legs
+        if: ${{ !cancelled() }}
+        env:
+          DB_MATRIX: ${{ inputs.database-test-matrix }}
+          PHP_VERSION: ${{ inputs.php-version }}
+          SINGLE: ${{ steps.resolve.outputs.single-server }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, sys
+
+          ALLOWED = ("pgsql", "mysql", "mariadb", "sqlite")
+          raw    = os.environ["DB_MATRIX"].strip() or "[]"
+          php    = os.environ["PHP_VERSION"].strip()
+          single = os.environ["SINGLE"].strip()
+
+          problems, legs = [], []
+          try:
+              dbs = json.loads(raw)
+          except json.JSONDecodeError as exc:
+              dbs = None
+              problems.append(f"database-test-matrix is not valid JSON ({exc}): {raw!r}")
+          if dbs is not None and not isinstance(dbs, list):
+              problems.append(f"database-test-matrix is not a JSON array: {raw!r}")
+              dbs = None
+
+          if dbs and not all(v == "" for v in dbs):
+              bad = [v for v in dbs if v not in ALLOWED]
+              if bad:
+                  problems.append(f"database-test-matrix has unsupported entries {bad!r}; allowed: {', '.join(ALLOWED)}.")
+              dupes = sorted({v for v in dbs if isinstance(v, str) and dbs.count(v) > 1})
+              if dupes:
+                  problems.append(f"database-test-matrix lists {dupes!r} more than once.")
+              if not single:
+                  problems.append("no newest Nextcloud branch was resolved, so the extra database legs have no server to run on.")
+              if not problems:
+                  legs = [{"php-version": php, "nextcloud-ref": single, "database": db, "extra-database": True}
+                          for db in dbs[1:]]
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"extra-legs={json.dumps(legs)}\n")
+
+          for problem in problems:
+              print(f"::error::{problem}")
+          print(f"extra database legs = {json.dumps(legs)}")
+          sys.exit(1 if problems else 0)
+          PY
+
   phpunit:
     # NOT gated on php-quality — deliberately. `php-quality` is a matrix job, so
     # its result is 'failure' if ANY leg fails, including phpmd (complexity/mess
@@ -3806,7 +3882,10 @@ jobs:
       # mariadb:12.3 and every other leg gets mariadb:11.4, the LTS line common
       # to all of them. Reserved-word lists only grow, so the newer server is
       # the stricter one. When a new Nextcloud major changes the recommended
-      # version, add its branch to this expression.
+      # version, add its branch to this expression. MariaDB as a further
+      # database-test-matrix entry is one leg on the newest Nextcloud branch,
+      # so an app gets exactly one of the two versions; only as the first
+      # entry does it run on every branch, and get both.
       #
       # Port 3306 is shared with `mysql` on purpose: only one of the two starts
       # on any leg. The image has no default HEALTHCHECK; healthcheck.sh is its
@@ -3851,7 +3930,8 @@ jobs:
         # AND IT IS THE ONLY REDUCTION THAT KEEPS THE COVERAGE GUARD ALIVE.
         # The `Measure merge-base coverage` step below runs on exactly one leg:
         # `matrix.php-version == inputs.php-version && matrix.nextcloud-ref ==
-        # needs.nextcloud-matrix.outputs.single-server`. The reduced matrix is
+        # needs.nextcloud-matrix.outputs.single-server` on the primary database
+        # (`matrix.extra-database != true`). The reduced matrix is
         # that pair and nothing else, so the guard still has its leg. Reducing
         # to any OTHER combination — the declared floor, say — would have left
         # that condition unsatisfiable and the coverage ratchet would simply
@@ -3865,7 +3945,15 @@ jobs:
         # and an empty vector does not skip a job — it DELETES it from the run,
         # with no row, no annotation and no trace. Measured on this repo's
         # self-test for frontend-checks: 19 jobs instead of 21.
-        database: ${{ join(fromJSON(inputs.database-test-matrix), ',') != '' && fromJSON(inputs.database-test-matrix) || fromJSON(format('["{0}"]', inputs.database)) }}
+        #
+        # When an app opts in, only the FIRST entry is this dimension, always a
+        # one-element vector (`format('["{0}"]', …)` cannot yield an empty
+        # array), so the job can never be deleted by it. Every further entry
+        # is one leg in `include:` below, built by the nextcloud-matrix job.
+        database: ${{ join(fromJSON(inputs.database-test-matrix), ',') != '' && fromJSON(format('["{0}"]', fromJSON(inputs.database-test-matrix)[0])) || fromJSON(format('["{0}"]', inputs.database)) }}
+        # "[]" for every caller without extra databases, which adds nothing.
+        # `|| '[]'` covers an output that was never written.
+        include: ${{ fromJSON(needs.nextcloud-matrix.outputs.database-extra-legs || '[]') }}
       fail-fast: false
 
     steps:
@@ -4240,7 +4328,7 @@ jobs:
       #   old logic -> b233af99  (no phpunit at that commit -> hard failure)
       #   new logic -> 27027b32  (merge-base of a92d8707 and 986730b8)
       - name: Measure merge-base coverage
-        if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server }}
+        if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server && matrix.extra-database != true }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -4368,7 +4456,7 @@ jobs:
       # sets enable-coverage-guard was updated before this workflow changed, so
       # this should never fire; if it does, the repository is the thing to fix.
       - name: Guard coverage baseline
-        if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server
+        if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server && matrix.extra-database != true
         env:
           # Through `env:`, never interpolated into the script body. A branch
           # name is attacker-controlled text and git permits a double quote in
@@ -4522,7 +4610,7 @@ jobs:
           fi
 
       - name: Upload coverage artifact
-        if: always() && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server
+        if: always() && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server && matrix.extra-database != true
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
