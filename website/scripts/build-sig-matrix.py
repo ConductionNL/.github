@@ -28,6 +28,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -53,6 +54,26 @@ SIG_OTHER = [
     ("arch_adjacency", "Architecture Quality", "component adjacency (estimate)",
      "4 stars: a component talks to at most 6 others on average"),
 ]
+
+
+# Gate names, file names and guidance titles as the published page words them,
+# and gate reasons without the local log paths they point at.
+PUBLIC_TERMS = [
+    (".github/sig-floor.json", "the app's maintainability floor file"),
+    ("sig-maintainability", "maintainability"),
+    ("sig-floor", "maintainability floor"),
+    ("SIG/TUV NORD CERT Guidance for Producers", "Maintainability guidance, Guidance for Producers"),
+    ("SIG 4-star", "4-star maintainability"),
+]
+LOG_PATH = re.compile(r"[;,]?\s*(?:\u2014\s*)?(?:see|See)\s+/\S+(?:\s+and\s+/\S+)*")
+
+
+def public_text(text):
+    """Text for the published page: no local file paths, neutral terms."""
+    text = LOG_PATH.sub(lambda m: "." if m.group(0).endswith(".") else "", text).strip()
+    for old, new in PUBLIC_TERMS:
+        text = text.replace(old, new)
+    return text
 
 
 def pct(x):
@@ -145,7 +166,7 @@ def rating_section(ratings):
                         "title": f"estimate: {rng[0]:.2f} (power mean p = -1) to {rng[1]:.2f} (p = 1); "
                                  f"stars of the lower end"}
     groups = [{"title": "overall", "rows": [{
-        "id": "rating.overall", "label": "Estimated SIG rating (estimate)",
+        "id": "rating.overall", "label": "Estimated maintainability rating (estimate)",
         "limits": "range from power mean p = -1 to p = 1, on 0.5 to 5.5; stars of the lower end",
         "cells": overall}]}]
     subs = []
@@ -166,7 +187,7 @@ def rating_section(ratings):
         props.append({"id": f"rating.prop.{prop}", "label": prop.replace("_", " "),
                       "limits": "languages weighted by their code", "cells": cells})
     groups.append({"title": "properties (estimate)", "rows": props})
-    return {"id": "rating", "title": "Estimated SIG rating", "groups": groups}
+    return {"id": "rating", "title": "Estimated maintainability rating", "groups": groups}
 
 
 def lever_panel(ratings):
@@ -230,8 +251,8 @@ def gate_rows(gates):
                     continue
                 state = {"pass": "pass", "fail": "fail", "warning": "warn"}.get(g["verdict"], "skip")
                 text = "pass" if state == "pass" else (str(g["findings"]) if g["findings"] is not None else g["verdict"])
-                cells[app] = {"state": state, "text": text, "title": (g["reason"] or g["verdict"])[:300]}
-            children.append({"id": f"gate.{n}", "label": f"{n} {names[n]}", "cells": cells})
+                cells[app] = {"state": state, "text": text, "title": public_text(g["reason"] or g["verdict"])[:300]}
+            children.append({"id": f"gate.{n}", "label": public_text(f"{n} {names[n]}"), "cells": cells})
         summary = {}
         for app, gs in per_app.items():
             judged = [g for g in gs.values() if g["verdict"] in ("pass", "fail", "warning")]
@@ -275,13 +296,13 @@ def build(report_dir, clones, gates_dir, date):
               for _mid, (_s, label, _u, _h, _c, basis, why) in qm.BANDS.items()]
     return {
         "measured": date,
-        "guidance": sig.GUIDANCE,
+        "guidance": public_text(sig.GUIDANCE),
         "apps": apps,
         "levers": lever_panel(ratings),
         "sections": [
             rating_section(ratings),
-            {"id": "maintainability", "title": "SIG maintainability", "groups": m_groups},
-            {"id": "sig-other", "title": "SIG's other models", "groups": sig_other(others)},
+            {"id": "maintainability", "title": "Maintainability checks", "groups": m_groups},
+            {"id": "sig-other", "title": "Other external models", "groups": sig_other(others)},
             {"id": "own", "title": "Our own measures", "groups": own_measures(measures)},
         ],
         "gateCategories": gate_rows(gates),
@@ -308,6 +329,9 @@ def main():
     else:
         floors, per_app = sig_floors.collect(list(data["apps"]), args.clones)
         floors["read"] = date
+        for row in floors.get("rows", []):
+            for cell in row["cells"].values():
+                cell["detail"] = public_text(cell["detail"])
         data["floors"] = floors
         for app, floor in per_app.items():
             data["apps"][app]["floor"] = floor

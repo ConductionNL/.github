@@ -39,8 +39,8 @@ function FleetAverage() {
   const checks = apps.reduce((sum, app) => sum + app.checks, 0);
   return (
     <p className={styles.average}>
-      All {apps.length} apps: {four} of {checks} SIG maintainability checks at 4 stars or better
-      ({wholePct(four, checks)}). This average is our own figure, not a SIG score.
+      All {apps.length} apps: {four} of {checks} maintainability checks at 4 stars or better
+      ({wholePct(four, checks)}). This average is our own figure, not an external score.
     </p>
   );
 }
@@ -223,7 +223,7 @@ export default function SigMatrix() {
           <tbody>
             <tr className={styles.total}>
               <th scope="row" className={styles.sticky}>
-                SIG checks at 4 stars or better
+                Maintainability checks at 4 stars or better
                 <span className={styles.value}>and the share of the app's checks</span>
               </th>
               {apps.map((app) => (
@@ -234,7 +234,7 @@ export default function SigMatrix() {
               ))}
             </tr>
             <tr className={styles.total}>
-              <th scope="row" className={styles.sticky}>SIG checks at 5 stars</th>
+              <th scope="row" className={styles.sticky}>Maintainability checks at 5 stars</th>
               {apps.map((app) => (
                 <td key={app}>{matrix.apps[app].five}/{matrix.apps[app].checks}</td>
               ))}
