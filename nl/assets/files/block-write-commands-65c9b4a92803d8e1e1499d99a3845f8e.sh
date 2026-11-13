@@ -1,0 +1,876 @@
+#!/bin/bash
+# Guard write operations for: ~/.claude/ config files (HARD BLOCK with canonical-repo check),
+# curl, gh api, gh pr/issue/repo/release/workflow/run write subcommands,
+# git push, git -C, git branch, git remote, env, date, cat, find, sort, awk, hostname
+# WSL boundary: all paths and executables that would escape the Linux filesystem are hard-blocked.
+# Most other write operations prompt for approval.
+# git push is allowed only when the last user message contains an authorized phrase.
+
+# Read stdin once so we can extract multiple fields from the hook payload
+input=$(cat)
+cmd=$(echo "$input" | jq -r '.tool_input.command // ""')
+transcript_path=$(echo "$input" | jq -r '.transcript_path // ""')
+hook_cwd=$(echo "$input" | jq -r '.cwd // ""')
+
+hard_deny() {
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$*"
+    exit 2  # exit 2 = hard block — tool call refused even if JSON parsing fails
+}
+
+# ask — record that the command needs approval, and carry on. The prompt is
+# emitted at the very end of the hook, after every guard has run, so a hard
+# deny anywhere in the file wins over an ask anywhere in the file: one
+# approval of `gh pr create … && date -s …` can no longer slip the date -s
+# past its hard block. Before v2.7.3 ask() exited on the spot, so every hard
+# deny placed below an ask guard was skipped for a chained command. The first
+# reason recorded is the one shown, as before.
+_ask_reason=""
+ask() {
+    [ -n "$_ask_reason" ] || _ask_reason="$*"
+}
+
+# Returns 0 (true) if the last human-typed user message in the transcript contains
+# an authorized push phrase.
+# Authorized phrases (case-insensitive):
+#   "push for me" | "commit and push" | "please git push" | "push my changes"
+# The transcript is a JSONL file; user-role entries cover both human-typed text
+# blocks AND tool_result blocks emitted between turns. We must skip the latter:
+# after Claude runs any tool, the most-recent type=="user" entry is a tool_result
+# with no text block, which would otherwise erase a still-valid authorization
+# given by the human one turn earlier and deny every retry within the session.
+# We must also skip isMeta entries: Claude Code appends one after a message
+# with a pasted image ("[Image: source: …/images/1.png]") and one holding the
+# body of an invoked skill. Both carry text blocks, so without the filter the
+# meta entry became the "last message" — the phrase typed alongside an image
+# was lost, and a skill body mentioning a phrase could authorize on its own.
+# A typed slash command is stored as string content with the typed text in
+# <command-args>; it counts as a human message (so it can both grant and
+# revoke). Other string content (task notifications, messages from other
+# sessions, compaction summaries) is not human-typed and is ignored.
+# NOTE: reads the FULL content of the last human-typed user message (not just
+# the last line), so multi-paragraph messages with the auth phrase on any line
+# work correctly.
+git_push_authorized() {
+    [[ -z "$transcript_path" || ! -f "$transcript_path" ]] && return 1
+    # Pipe: (1) emit the searchable text of each human-typed user message as a
+    #           JSON string, one per line (text blocks joined; for a slash
+    #           command, its arguments),
+    #       (2) keep the last one and decode it.
+    local last_msg
+    last_msg=$(jq -c 'select(.type == "user" and .isMeta != true) | .message.content
+        | if type == "string" then
+            select(test("^\\s*<command-(name|message)>"))
+            | ([capture("<command-args>(?<a>[\\s\\S]*?)</command-args>").a] | first // "")
+          elif type == "array" and any(.[]; .type == "text") then
+            [.[] | select(.type == "text") | .text] | join(" ")
+          else empty end' "$transcript_path" 2>/dev/null \
+        | tail -n 1 | jq -r '.' 2>/dev/null)
+    [[ -z "$last_msg" ]] && return 1
+    echo "$last_msg" | grep -qiE '(push for me|commit and push|please git push|push my changes)'
+}
+
+PUSH_DENY_MSG="Blocked: git push requires explicit authorization. Include one of these phrases in your message: 'push for me', 'commit and push', 'please git push', or 'push my changes'."
+
+# data_free_cmd — $cmd with the text that is only DATA taken out, for the
+# checks that ask "does this command RUN x?" (git push, production writes).
+# Without it a commit message or PR body that merely mentions `git push` was
+# hard-denied as a push.
+#
+# Removed, and nothing else:
+#   - the body of a heredoc fed to a data sink (cat, tee, git, gh, jq, wc,
+#     sort, head, tail, grep, less, more) on a line with no pipe and no
+#     command substitution. A heredoc fed to bash/sh/python/ssh/eval/… is
+#     code and stays, as does `cat <<EOF | bash`.
+#   - the quoted value of -m/--message/-b/--body/-t/--title/--notes on a
+#     git commit/tag/notes (global options such as -C <path> allowed in
+#     between) or gh pr/issue/release line. Single-quoted always
+#     (never expands); double-quoted only without $( or a backtick.
+# The config guard above deliberately keeps scanning the full $cmd: there a
+# false deny is cheaper than a gap (see README → Security model).
+data_free_cmd() {
+    printf '%s\n' "$cmd" | awk '
+        BEGIN {
+            split("cat tee git gh jq wc sort head tail grep less more", s, " ")
+            for (i in s) sink[s[i]] = 1
+            # `git [global options] commit|tag|notes` or `gh pr|issue|release`
+            val = "([^ \t;&|\"\047]|\"[^\"]*\"|\047[^\047]*\047)+"
+            gopts = "([ \t]+(-[Cc]|--(git-dir|work-tree|namespace|config-env|super-prefix|attr-source))[ \t]+" val "|[ \t]+--[a-z][a-z-]*(=" val ")?|[ \t]+-[pP])*"
+            msgline = "(^|[;&| \t(])(git" gopts "[ \t]+(commit|tag|notes)|gh[ \t]+(pr|issue|release))([ \t]|$)"
+        }
+        hd != "" {
+            t = $0; sub(/^\t+/, "", t)
+            if (t == hd) { hd = ""; print; next }
+            if (!strip) print
+            next
+        }
+        {
+            line = $0
+            if (match(line, /<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_]*["\047]?/) && substr(line, RSTART, 3) != "<<<") {
+                word = substr(line, RSTART, RLENGTH); gsub(/<<-?[ \t]*|["\047]/, "", word)
+                pre = substr(line, 1, RSTART - 1)
+                n = split(pre, seg, /;|&&|\|\|/); cmdpart = seg[n]
+                sub(/^[ \t({]*/, "", cmdpart)
+                while (match(cmdpart, /^([A-Za-z_][A-Za-z0-9_]*=[^ \t]*|sudo|env|time|command)[ \t]+/))
+                    cmdpart = substr(cmdpart, RLENGTH + 1)
+                split(cmdpart, w, /[ \t]+/)
+                hd = word
+                strip = (w[1] in sink) && line !~ /\|/ && line !~ /\$\(/ && line !~ /`/
+            }
+            if (line ~ msgline) {
+                gsub(/(-m|--message|-b|--body|-t|--title|--notes)(=|[ \t]+)\047[^\047]*\047/, "-m DATA", line)
+                while (match(line, /(-m|--message|-b|--body|-t|--title|--notes)(=|[ \t]+)"[^"]*"/)) {
+                    v = substr(line, RSTART, RLENGTH)
+                    if (v ~ /\$\(|`/) break
+                    line = substr(line, 1, RSTART - 1) "-m DATA" substr(line, RSTART + RLENGTH)
+                }
+            }
+            print line
+        }'
+}
+
+# ── Claude config guard (HARD BLOCK) ─────────────────────────────────────────
+# Prevent writes to protected ~/.claude/ config files.
+# Canonical update source: github.com/ConductionNL/.github — origin/main only.
+#
+# Detects writes via: output redirect, cp/mv, variable+redirect (same command),
+# tee, eval, bash/sh -c, and inline scripting (python, perl, node).
+# Also hard-blocks chmod that makes protected files writable.
+# shellcheck disable=SC2016 # single quotes intentional: literal regex for sed
+_h=$(printf '%s' "$HOME" | sed 's/[.[\*^$()+?{}|]/\\&/g')
+# Protected-path regex. Recognized home-dir forms: ~, $HOME, ${HOME}, or the literal expanded
+# path. The trailing slash after `hooks` is optional so that `rm -rf ~/.claude/hooks` (the
+# directory itself) is also matched — not only files inside it.
+# Optional quote between the home-form and `/.claude/` catches patterns where the quote
+# wraps only the home variable — e.g. `"$HOME"/.claude/...`, `"${HOME}"/.claude/...`,
+# `'/home/wilco'/.claude/...` — rather than the whole path.
+_prot="(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks/?|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref|user-hooks\.json)"
+
+# chmod guard: deny write-enabling permissions on protected files
+if echo "$cmd" | grep -qE "(^|[;&|]\s*)chmod\b" && echo "$cmd" | grep -qE "${_prot}"; then
+    if echo "$cmd" | grep -qE "(^|[;&|]\s*)chmod\s+(444|555|-w|\+x)(\s|$)"; then
+        : # read-only or execute-only — allowed
+    else
+        hard_deny "BLOCKED: Claude cannot make ~/.claude/ config files writable. Run chmod manually in your own terminal if an update requires it."
+    fi
+fi
+
+# chattr guard: deny attribute changes on protected files.
+# The user manages chattr ±i themselves via sudo from their own terminal — which
+# bypasses this hook. Claude is never allowed to touch chattr on protected paths;
+# otherwise Claude could clear the immutable bit and overwrite the file in one
+# session, defeating the kernel-level lock that gates v1.7.0 updates.
+# Word-boundary (not segment-boundary) so that `sudo chattr`, `env chattr`, or
+# any other wrapper is also caught — sudo is denied at the settings.json layer
+# but defense in depth keeps the hook authoritative if that layer is altered.
+if echo "$cmd" | grep -qE "\bchattr\b" && echo "$cmd" | grep -qE "${_prot}"; then
+    hard_deny "BLOCKED: Claude cannot change attributes on ~/.claude/ config files. Run 'sudo chattr -i …' / 'sudo chattr +i …' manually in your own terminal."
+fi
+
+# Destructive/in-place guard: in-place edits, truncation, and deletion of protected files
+# have NO canonical path — they are never allowed. The only permitted operation is a full
+# overwrite sourced from the canonical repo (enforced by the write guard below). This is a
+# HARD BLOCK regardless of source, because these operations cannot carry canonical content.
+#
+# Exactly ONE thing differs from the long-standing form: on the first arm, the gap
+# between the tool name and its -i flag is [^|;&]* instead of [^|]*. That closes a
+# false positive where the verb and the flag came from DIFFERENT commands in one
+# chain — `awk '{print}' f; grep -c -i x ~/.claude/hooks/y.sh` was hard-denied as an
+# "in-place edit" using awk from the first command and -i from the second. A `;` or
+# `&` can never legitimately sit between a command name and its own flag, so
+# narrowing there costs no coverage.
+#
+# Everything else is left exactly as it was, and both temptations to "tidy up" are
+# deliberately resisted:
+#
+#   1. Do NOT anchor the first two arms with `(^|[;&|]\s*)` to match the rm arm.
+#      A genuine verb is often not at a segment start: `  sed -i … ~/.claude/x`,
+#      `(sed -i … ~/.claude/x)`, `{ sed -i … ~/.claude/x; }`, `env sed -i …` and
+#      `if true; then sed -i …; fi` all stop matching, because `(`, `{` and a bare
+#      leading space are not separators.
+#
+#   2. Do NOT narrow the gap that precedes ${_prot} on any arm. This guard is plain
+#      text matching with no shell awareness, so it cannot tell a command separator
+#      from the same character inside a quoted argument. `sed -i "s/a/b/;s/c/d/"
+#      ~/.claude/settings.json` is an ordinary two-substitution sed script; with a
+#      narrowed gap it stops matching and — for perl/awk/truncate/unlink, which have
+#      no generic fallback rule — becomes a silent ALLOW of a real in-place edit.
+#
+# The residual false positives (`rm /tmp/junk; cat ~/.claude/settings-version`, and
+# `sed -i … /tmp/x; grep … ~/.claude/x`) are the price of that. They fail CLOSED — a
+# refused read, never an allowed write — and cannot be fixed at the regex level
+# without opening the fail-open hole above. Fixing them needs real shell parsing.
+if echo "$cmd" | grep -qE "\b(sed|perl|awk|gawk|ruby)\b[^|;&]*[[:space:]]-i\b[^|]*${_prot}" \
+|| echo "$cmd" | grep -qE "\b(truncate|shred|unlink)\b[^|]*${_prot}" \
+|| echo "$cmd" | grep -qE "(^|[;&|]\s*)rm\b[^|]*${_prot}"; then
+    hard_deny "BLOCKED: in-place edits, truncation, or deletion of ~/.claude/ config files are not permitted. The only allowed operation is a full overwrite with canonical content from the configured source."
+fi
+
+# Write guard: detect content writes to protected files
+_is_config_write=false
+
+# 1. Literal output redirect to a protected file.
+#    An optional leading quote is allowed before the path so that writes such as
+#    `>> "$HOME/.claude/settings.json"` (with the quote between the redirect and $HOME) are caught.
+if echo "$cmd" | grep -qE ">{1,2}[[:space:]]*[\"']?${_prot}"; then
+    _is_config_write=true
+fi
+# 2. cp/mv with a protected file as destination.
+#    Same quote allowance as rule #1 — the destination may be quoted.
+#    Command-segment boundary (not ^) so chained commands like `foo && cp …` are caught.
+if echo "$cmd" | grep -qE "(^|[;&|]\s*)(cp|mv)\b" && echo "$cmd" | grep -qE "[[:space:]][\"']?${_prot}"; then
+    _is_config_write=true
+fi
+# 3. Variable assigned to a protected path and used as redirect target (same command)
+if echo "$cmd" | grep -qE "[a-zA-Z_][a-zA-Z0-9_]*=[\"']?(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)" \
+&& echo "$cmd" | grep -qE ">[[:space:]]*[\"']?\\\$[a-zA-Z_][a-zA-Z0-9_]*"; then
+    _is_config_write=true
+fi
+# 4. tee targeting a protected file (literal or via variable assigned in same command)
+if echo "$cmd" | grep -qE "\btee\b.*${_prot}"; then
+    _is_config_write=true
+fi
+if echo "$cmd" | grep -qE "[a-zA-Z_][a-zA-Z0-9_]*=[\"']?(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)" \
+&& echo "$cmd" | grep -qE "\btee\b[^|]*\\\$[a-zA-Z_][a-zA-Z0-9_]*"; then
+    _is_config_write=true
+fi
+# 5. eval / bash -c / sh -c with a literal protected path.
+#    Require the -c flag (or bare `eval`) so that file paths ending in .sh
+#    do not trigger a false positive via the `\bsh\b` word boundary — e.g.
+#    `diff a/foo.sh b/foo.sh` where one path is also under ~/.claude/.
+if echo "$cmd" | grep -qE "(\beval\b|\b(bash|sh)\b[[:space:]]+-c\b).*${_prot}"; then
+    _is_config_write=true
+fi
+# 6. Inline scripting languages with a literal protected path
+if echo "$cmd" | grep -qiE "\b(python3?|perl|ruby|node|nodejs)\b.*-[ce]\b.*${_prot}"; then
+    _is_config_write=true
+fi
+# 7. Direct-to-file download/copy tools that write via flag rather than via redirect —
+#    wget -O, wget --output-document=, curl -o, curl --output, dd of=. These bypass rules
+#    #1–#2 because there is no `>` or cp/mv in the command.
+if echo "$cmd" | grep -qE "\bwget\b[^|]*([[:space:]]-O[[:space:]]|--output-document[= ])[^|]*${_prot}" \
+|| echo "$cmd" | grep -qE "\bcurl\b[^|]*([[:space:]]-o[[:space:]]|--output[= ])[^|]*${_prot}" \
+|| echo "$cmd" | grep -qE "\bdd\b[^|]*[[:space:]]of=[\"']?${_prot}"; then
+    _is_config_write=true
+fi
+
+if $_is_config_write; then
+    if echo "$cmd" | grep -qE "\bgit\b.*\bshow\b.*\borigin/main:"; then
+        # Method 1: git show origin/main — verify canonical repo
+        _repo_path=$(tr -d '[:space:]' < "$HOME/.claude/settings-repo-path" 2>/dev/null)
+        _git_root=""
+        [ -n "$_repo_path" ] && [ -d "$_repo_path" ] && \
+            _git_root=$(git -C "$_repo_path" rev-parse --show-toplevel 2>/dev/null)
+        if [ -n "$_git_root" ]; then
+            # The command must explicitly use -C "<_repo_path>" so that it can only read from
+            # the validated canonical repo. Without this, a `git -C /tmp/evilrepo show origin/main:…`
+            # would slip through because the canonical-repo check only consults settings-repo-path,
+            # not the actual -C argument in the command.
+            # shellcheck disable=SC2016 # sed expression must be single-quoted; \& is a sed backreference, not a shell variable
+            _esc_repo=$(printf '%s' "$_repo_path" | sed 's/[.[\*^$()+?{}|/-]/\\&/g')
+            if ! echo "$cmd" | grep -qE "\bgit\b[^|]*-C[[:space:]]+[\"']?${_esc_repo}([[:space:]\"'/]|$)"; then
+                hard_deny "BLOCKED: git show for config updates must use -C ${_repo_path} (the validated canonical repo)."
+            fi
+            _remote=$(git -C "$_git_root" remote get-url origin 2>/dev/null)
+            # Accept GitHub remote in any common form:
+            #   git@github.com:ConductionNL/.github(.git)
+            #   https://github.com/ConductionNL/.github(.git)
+            #   ssh://git@github.com/ConductionNL/.github(.git)
+            if echo "$_remote" | grep -qE "github\.com[:/]ConductionNL/\.github(\.git|/|$)"; then
+                : # canonical repo and main branch verified — allow
+            else
+                hard_deny "BLOCKED: Config update rejected. Remote '${_remote:-unknown}' is not the canonical repo (github.com/ConductionNL/.github, main branch only)."
+            fi
+        else
+            hard_deny "BLOCKED: ~/.claude/settings-repo-path is missing or invalid. Cannot verify canonical repo."
+        fi
+    elif echo "$cmd" | grep -qE "\bcurl\b[^|]*['\"]?https://raw\.githubusercontent\.com/ConductionNL/\.github/[^[:space:]'\"&;|)]+/global-settings/"; then
+        # Method 2: curl — canonical repo verified by literal URL-prefix match.
+        # The URL must appear as a literal in the same command — no variable indirection.
+        # Decoy protection: reject if any http(s) URL in the command points to a
+        # non-canonical source. A single non-canonical URL alongside the canonical one
+        # is enough to smuggle attacker-controlled content into the write target.
+        if echo "$cmd" | grep -oE "https?://[^[:space:]'\"&;|)]+" \
+           | grep -qvE "^https://raw\.githubusercontent\.com/ConductionNL/\.github/[^[:space:]'\"&;|)]+/global-settings/"; then
+            hard_deny "BLOCKED: Command mixes canonical and non-canonical URLs — possible decoy attack."
+        fi
+        : # canonical repo via GitHub raw URL — allow
+    else
+        hard_deny "BLOCKED: Claude cannot write to ~/.claude/ config files. Updates must use git show origin/main or curl from github.com/ConductionNL/.github only."
+    fi
+fi
+
+# ── Production is read-only (HARD BLOCK) ──────────────────────────────────────
+# kubectl / oc with a mutating verb, or helm install/upgrade/uninstall/delete/
+# rollback, in a command segment that names a *-prod namespace or context →
+# denied. Claude hands the command to the user, who runs it; there is no
+# phrase that unlocks it. Reads (get, describe, logs, top, rollout status /
+# history) pass. Placed before every `ask` guard: an ask exits the hook, so a
+# production write chained after, say, `gh pr create` would otherwise get
+# through on one approval of the gh prompt.
+# The binary may sit anywhere in a segment (`bash -c "kubectl …"` counts);
+# only DATA text is ignored (data_free_cmd). Added in v2.6.0; it started
+# life as a personal user-hook. (Since v2.7.3 ask() no longer exits, so the
+# placement is belt and braces.)
+_KUBE_WRITE='^(apply|create|delete|edit|patch|replace|scale|set|label|annotate|exec|cp|drain|cordon|uncordon|taint|run|expose|autoscale|debug|attach|rollout)$'
+_HELM_WRITE='^(install|upgrade|uninstall|delete|rollback)$'
+while IFS= read -r _seg; do
+    [[ "$_seg" =~ (^|[[:space:]\"\'\(])(kubectl|oc|helm)[[:space:]]+(.*)$ ]] || continue
+    _bin="${BASH_REMATCH[2]}"; _rest="${BASH_REMATCH[3]}"
+    _prod=$(printf '%s' "$_seg" | grep -oE '(^|[^A-Za-z0-9-])[A-Za-z0-9]+(-[A-Za-z0-9]+)*-prod([^A-Za-z0-9-]|$)' \
+              | head -1 | tr -cd 'A-Za-z0-9-')
+    [ -n "$_prod" ] || continue
+    _verb=""; _next=""; _skip=0
+    read -ra _words <<< "$_rest"
+    for ((_i = 0; _i < ${#_words[@]}; _i++)); do
+        _w="${_words[$_i]}"
+        if [ "$_skip" -eq 1 ]; then _skip=0; continue; fi
+        case "$_w" in
+            -n|--namespace|--context|--kubeconfig|--cluster|--user|-s|--server|--kube-context) _skip=1; continue ;;
+            -*) continue ;;
+        esac
+        _verb="${_w//[\"\']/}"; _next="${_words[$((_i + 1))]:-}"; break
+    done
+    _blocked=0
+    if [ "$_bin" = "helm" ]; then
+        [[ "$_verb" =~ $_HELM_WRITE ]] && _blocked=1
+    elif [[ "$_verb" =~ $_KUBE_WRITE ]]; then
+        _blocked=1
+        [ "$_verb" = "rollout" ] && [[ "$_next" =~ ^(status|history)$ ]] && _blocked=0
+    fi
+    if [ "$_blocked" -eq 1 ]; then
+        hard_deny "BLOCKED: \`$_bin $_verb\` against production ($_prod). Production is read-only for Claude: give the user the filled-in command as a fenced block, with what it does and how to undo it, and let them run it. Reads (get, describe, logs, top, rollout status) are not blocked."
+    fi
+done < <(data_free_cmd | sed -E 's/(\|\||&&|;|\|)/\n/g')
+
+# ── git push (HARD BLOCK without the auth phrase) ────────────────────────────
+# Every form: direct, chained (`cd x && git push`, `git -C r commit … && git
+# push`), and with git's global options before the subcommand (`git -C <path>
+# push`, `git -c k=v push`, `git --no-pager push`, `git --work-tree <path>
+# push`). Placed before every `ask` guard (v2.7.2); since v2.7.3 an ask no
+# longer exits the hook, so a push chained after a prompting command is
+# denied either way.
+# Matched on data_free_cmd: a commit message or PR body that mentions
+# `git push` is data, not a push. A push inside bash -c, eval or a heredoc
+# fed to a shell is still seen. `push` must end the word: `git push-notes`
+# is another command (an alias that pushes is caught below).
+#
+# Aliases (v2.7.3): `git p` with alias.p = push is a push. Two checks:
+#   1. a command that defines an alias and mentions push (`git config
+#      alias.p push`, `git -c alias.p=push p`, `alias.p '!git push'`, an
+#      `[alias]` section written to a git config file, heredoc included)
+#      needs the phrase too;
+#   2. every other git subcommand is looked up with `git config --get
+#      alias.<name>`, in the -C directory or the session cwd, following
+#      alias → alias chains up to ten deep. A name git ships as a command
+#      is never an alias (git ignores aliases that shadow commands).
+# Not covered: config set through GIT_CONFIG_* environment variables or
+# --config-env, and a push hidden in a script the alias runs.
+_GIT_VAL='([^[:space:];&|"'\'']|"[^"]*"|'\''[^'\'']*'\'')+'
+# git's own options that take a separate value; any other --option is a flag
+# or --option=value.
+_GIT_GOPTS='([[:space:]]+(-[Cc]|--(git-dir|work-tree|namespace|config-env|super-prefix|attr-source))[[:space:]]+'"$_GIT_VAL"'|[[:space:]]+--[a-z][a-z-]*(='"$_GIT_VAL"')?|[[:space:]]+-[pP])*'
+_PUSH_END='([^A-Za-z0-9_-]|$)'
+_dfc=$(data_free_cmd)
+
+# _git_alias_pushes <name> <dir> — 0 when `git <name>`, run in <dir>, expands
+# to a push through one or more aliases.
+_git_alias_pushes() {
+    local name="$1" dir="$2" val depth
+    for ((depth = 0; depth < 10; depth++)); do
+        val=$(git -C "$dir" config --get "alias.$name" 2>/dev/null) || return 1
+        [ -n "$val" ] || return 1
+        # An alias named after a real git command is never used by git.
+        git -C "$dir" --list-cmds=main,others 2>/dev/null | grep -qxF -- "$name" && return 1
+        if [[ "$val" == '!'* ]]; then
+            # Shell alias: any push word counts (`!git push`, `!f() { git push; }; f`).
+            printf '%s' "$val" | grep -qE '(^|[^A-Za-z0-9_-])push'"$_PUSH_END" && return 0
+            return 1
+        fi
+        printf ' %s' "$val" | grep -qE '^'"$_GIT_GOPTS"'[[:space:]]+push'"$_PUSH_END" && return 0
+        name=$(printf ' %s' "$val" | sed -E 's/^'"$_GIT_GOPTS"'[[:space:]]+//' | awk '{print $1}')
+        [ -n "$name" ] || return 1
+    done
+    return 1
+}
+
+_push_how=""
+if printf '%s\n' "$_dfc" | grep -qE '\bgit'"$_GIT_GOPTS"'[[:space:]]+push'"$_PUSH_END"; then
+    _push_how="direct"
+elif printf '%s\n' "$_dfc" | grep -qE '\balias\.[A-Za-z0-9_.-]+|\[alias\]' \
+  && printf '%s\n' "$_dfc" | grep -qE '(^|[^A-Za-z0-9_-])push'"$_PUSH_END"; then
+    _push_how="defines a git alias that pushes"
+elif printf '%s\n' "$_dfc" | grep -qE '\.gitconfig|\.git/config|/git/config' \
+  && printf '%s\n' "$cmd" | grep -qF '[alias]' \
+  && printf '%s\n' "$cmd" | grep -qE '(^|[^A-Za-z0-9_-])push'"$_PUSH_END"; then
+    # A heredoc body is data to data_free_cmd; written into a git config
+    # file (named outside the data), an [alias] section is configuration
+    # all the same.
+    _push_how="writes a git alias that pushes into a git config file"
+else
+    _base="${hook_cwd:-$PWD}"
+    while IFS= read -r _inv; do
+        [ -n "$_inv" ] || continue
+        _sub="${_inv##*[[:space:]]}"
+        _dir="$_base"
+        if [[ "$_inv" =~ [[:space:]]-C[[:space:]]+(\"[^\"]*\"|\'[^\']*\'|[^[:space:]]+) ]]; then
+            _cdir="${BASH_REMATCH[1]}"; _cdir="${_cdir//[\"\']/}"
+            # shellcheck disable=SC2088 # literal tilde token, expanded by hand
+            [[ "$_cdir" == '~/'* ]] && _cdir="$HOME/${_cdir#'~/'}"
+            [[ "$_cdir" == /* ]] || _cdir="$_base/$_cdir"
+            _dir="$_cdir"
+        fi
+        [ -d "$_dir" ] || _dir="$HOME"
+        if _git_alias_pushes "$_sub" "$_dir"; then
+            _push_how="runs \`git $_sub\`, a git alias for push"
+            break
+        fi
+    done < <(printf '%s\n' "$_dfc" | grep -oE '\bgit'"$_GIT_GOPTS"'[[:space:]]+[A-Za-z][A-Za-z0-9_.-]*' \
+             | grep -vE '[[:space:]](status|log|diff|show|add|commit|fetch|pull|checkout|switch|branch|rebase|merge|stash|rev-parse|config|remote|tag|reset|restore|worktree|ls-files|grep|blame|describe|clean|init|clone|help|version)$')
+fi
+if [ -n "$_push_how" ]; then
+    if git_push_authorized; then
+        : # authorized by user message — allow
+    elif [ "$_push_how" = "direct" ]; then
+        hard_deny "$PUSH_DENY_MSG"
+    else
+        hard_deny "Blocked: this command $_push_how, and ${PUSH_DENY_MSG#Blocked: }"
+    fi
+fi
+
+# ── curl ──────────────────────────────────────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)curl\b'; then
+    # Unambiguous write flags — check the full command string so that piped curl
+    # invocations are also caught (e.g. curl url | curl -X POST url2).
+    if echo "$cmd" | grep -qiE '(^|\s)(-[sviIkLSfnN]*X\s*(POST|PUT|DELETE|PATCH)|--request\s+(POST|PUT|DELETE|PATCH))' \
+    || echo "$cmd" | grep -qiE '(^|\s)(--data|--data-raw|--data-binary|--data-urlencode|--data-ascii|--json|--upload-file|--form-string)(=|\s)' \
+    || echo "$cmd" | grep -qiE '(^|\s)--form(=|\s)' \
+    || echo "$cmd" | grep -qiE '(^|\s)--output(=|\s)'; then
+        ask "curl write operation detected (non-GET method, data flags, or file output) — approve to proceed."
+    fi
+    # Ambiguous short flags (-o/-O, -d/-T/-F): these overlap with flags used by common
+    # read-only commands (grep -o, awk -F). Check only within pipe segments that are
+    # curl invocations so piped read tools do not cause false positives.
+    _curl_write=false
+    while IFS= read -r _seg; do
+        if echo "$_seg" | grep -qE '^\s*curl\b'; then
+            if echo "$_seg" | grep -qE '(^|\s)-[a-zA-Z]*[dTF](\s|=|$)' \
+            || echo "$_seg" | grep -qE '(^|\s)-[a-zA-Z]*[oO](\s|=|[^a-zA-Z-])'; then
+                _curl_write=true
+                break
+            fi
+        fi
+    done < <(echo "$cmd" | tr '|' '\n')
+    if $_curl_write; then
+        ask "curl write operation detected (data/upload/output short flags) — approve to proceed."
+    fi
+fi
+
+# ── docker write operations ───────────────────────────────────────────────────
+# Read-only docker commands are auto-approved via the allow list. This guard catches
+# write/mutating subcommands anywhere in the command string — including when chained
+# after an allowlisted read prefix (e.g. "docker network inspect X || docker network create Y").
+if echo "$cmd" | grep -qE '\bdocker\b'; then
+    if echo "$cmd" | grep -qE '\bdocker\s+(run|create|start|stop|restart|rm|kill|exec|build|pull|push|tag|rmi|commit|save|load|import|export|cp|rename|pause|unpause|update|wait|attach)\b' \
+    || echo "$cmd" | grep -qE '\bdocker\s+container\s+(run|create|start|stop|restart|rm|kill|exec|rename|commit|cp|pause|unpause|update|wait|attach|prune)\b' \
+    || echo "$cmd" | grep -qE '\bdocker\s+image\s+(build|pull|push|tag|rm|prune|import|load|save)\b' \
+    || echo "$cmd" | grep -qE '\bdocker\s+network\s+(create|rm|connect|disconnect|prune)\b' \
+    || echo "$cmd" | grep -qE '\bdocker\s+volume\s+(create|rm|prune)\b' \
+    || echo "$cmd" | grep -qE '\bdocker\s+compose\s+(up|down|start|stop|restart|build|pull|push|rm|create|kill|run|exec)\b' \
+    || echo "$cmd" | grep -qE '\bdocker\s+system\s+prune\b'; then
+        ask "docker write/mutating operation detected — approve to proceed."
+    fi
+fi
+
+# ── gh api ────────────────────────────────────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)gh\s+api\b'; then
+    if echo "$cmd" | grep -qiE '(^|\s)(--method\s+(POST|PUT|DELETE|PATCH)|-X\s*(POST|PUT|DELETE|PATCH))' \
+    || echo "$cmd" | grep -qiE '(^|\s)--input(=|\s)' \
+    || echo "$cmd" | grep -qiE '(^|\s)(--field|--raw-field)(=|\s)' \
+    || echo "$cmd" | grep -qE '(^|\s)-[a-zA-Z]*[fF](\s|=|$)'; then
+        ask "gh api write operation detected (non-GET method, --input, or field flags) — approve to proceed."
+    fi
+fi
+
+# ── gh pr / issue / repo / release / workflow / run write guard ───────────────
+# gh pr list, gh pr view, and similar read subcommands are auto-approved via the
+# allow list. This guard catches write subcommands — whether standalone or chained
+# with a read command (e.g. "gh pr list && gh pr merge 123"), preventing the
+# allow-list prefix match from silently approving the entire command string.
+if echo "$cmd" | grep -qE '\bgh\s+pr\s+(merge|close|edit|review|comment|create|reopen|ready|checkout)\b' \
+|| echo "$cmd" | grep -qE '\bgh\s+issue\s+(create|close|edit|comment|reopen|delete|develop)\b' \
+|| echo "$cmd" | grep -qE '\bgh\s+repo\s+(create|delete|edit|fork|rename|archive|unarchive)\b' \
+|| echo "$cmd" | grep -qE '\bgh\s+release\s+(create|delete|edit|upload)\b' \
+|| echo "$cmd" | grep -qE '\bgh\s+workflow\s+(run|enable|disable)\b' \
+|| echo "$cmd" | grep -qE '\bgh\s+run\s+(cancel|rerun|delete)\b'; then
+    ask "gh write operation detected (merge/close/create/edit/etc.) — approve to proceed."
+fi
+
+# ── git -C (allowlist — known read-only subcommands pass silently; write ops prompt) ──
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)git\b' && echo "$cmd" | grep -qE '\s-C\s'; then
+    # Extract subcommand: strip 'git', all '-C <path>' pairs, then leading flags
+    subcmd=$(echo "$cmd" \
+        | sed 's/^\s*git\s*//' \
+        | sed ':a; s/-C[[:space:]]\+[^[:space:]]\+[[:space:]]*//; ta' \
+        | sed -E 's/(^|[[:space:]])-{1,2}[a-zA-Z][a-zA-Z-]*//g' \
+        | awk '{print $1}')
+
+    case "$subcmd" in
+        # Unconditionally read-only — pass silently
+        log|status|diff|show|blame|ls-files|ls-tree|rev-parse|rev-list|\
+        describe|shortlog|cat-file|for-each-ref|name-rev|check-ignore|\
+        check-attr|grep|verify-commit|verify-tag|count-objects|fsck|fetch)
+            : # allowed
+            ;;
+        reflog)
+            if echo "$cmd" | grep -qE '\breflog\s+(delete|expire|drop)\b'; then
+                ask "git -C reflog delete/expire/drop modifies reflog history — approve to proceed."
+            fi
+            ;;
+        stash)
+            if ! echo "$cmd" | grep -qE '\bstash\s+(list|show)\b'; then
+                ask "git -C stash (non-list/show) modifies the stash — approve to proceed."
+            fi
+            ;;
+        config)
+            if ! echo "$cmd" | grep -qE '\bconfig\b.*(--get|--list|--show-origin|--show-scope)\b'; then
+                ask "git -C config without --get/--list modifies git configuration — approve to proceed."
+            fi
+            ;;
+        push)
+            : # reached only when authorized — the git push guard above denies otherwise
+            ;;
+        branch)
+            if echo "$cmd" | grep -qE '\bbranch\b.*-[a-zA-Z]*[dDmMcC]'; then
+                ask "git -C branch with -d/-D/-m/-M/-c/-C modifies branches — approve to proceed."
+            fi
+            ;;
+        remote)
+            if echo "$cmd" | grep -qE '\bremote\s+(add|remove|rename|set-url|set-head|prune|update)\b'; then
+                ask "git -C remote add/remove/rename/set-url modifies remotes — approve to proceed."
+            fi
+            ;;
+        "")
+            : # bare 'git -C path' with no subcommand — prints help, harmless
+            ;;
+        *)
+            ask "git -C '$subcmd' is not in the read-only allowlist — approve to proceed."
+            ;;
+    esac
+fi
+
+# ── git branch (prompt for write flags, bare — without -C) ───────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)git\s+branch\b' && ! echo "$cmd" | grep -qE '\s-C\s'; then
+    if echo "$cmd" | grep -qE '\bbranch\b.*-[a-zA-Z]*[dDmMcC]' \
+    || echo "$cmd" | grep -qiE '(^|\s)(--delete|--move|--copy|--force-create)(\s|=|$)'; then
+        ask "git branch with write flags (-d/-D/-m/-M/-c/-C) modifies branches — approve to proceed."
+    fi
+fi
+
+# ── git remote (prompt for write subcommands, bare — without -C) ─────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)git\s+remote\b' && ! echo "$cmd" | grep -qE '\s-C\s'; then
+    if echo "$cmd" | grep -qE '\bremote\s+(add|remove|rename|set-url|set-head|prune|update)\b'; then
+        ask "git remote add/remove/rename/set-url/prune/update modifies remotes — approve to proceed."
+    fi
+fi
+
+# ── env (prompt when used to execute a command) ───────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)env\b'; then
+    remainder="${cmd#"${cmd%%[![:space:]]*}"}"  # strip leading whitespace
+    remainder="${remainder#env}"                # strip 'env'
+    remainder="${remainder#"${remainder%%[![:space:]]*}"}"  # strip whitespace after 'env'
+    if [ -n "$remainder" ] && echo "$remainder" | tr ' \t' '\n' | grep -qE '^([a-z][a-zA-Z0-9_.-]*|[./][^[:space:]]*)$'; then
+        ask "env used to execute a command — approve to proceed."
+    fi
+fi
+
+# ── date (HARD BLOCK: modifying system time — no legitimate use case) ─────────
+# Only the arguments of a `date` invocation are inspected, so another command's
+# `-s` (as in `curl -s x; date -u`) is not mistaken for `date -s`. The segment
+# ends at a real separator only: `;`, `&&`, `||`, `|`, `|&`, a lone `&` or a
+# newline. It does NOT end at a quoted string, an escaped character (`\;`, `\"`),
+# or a redirection operator (`2>&1`, `&>`, `>|`, `<&`); a quote that is never
+# closed runs to the end of the line (fail closed). The two sed steps below
+# blank out escapes and redirections so the segment grep only sees real separators.
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)date\b'; then
+    _q="'"; _dq='"'
+    _norm=$(echo "$cmd" | sed -E -e 's/\\./xx/g' -e 's/[0-9]*(>&|<&|&>>|&>|>\|)/RR/g')
+    _date_segments=$(echo "$_norm" | grep -oE "(^|[;&|][[:space:]]*)date\b([^;&|${_dq}${_q}]|${_dq}[^${_dq}]*${_dq}|${_q}[^${_q}]*${_q}|${_dq}[^${_dq}]*\$|${_q}[^${_q}]*\$)*")
+    # A command or process substitution can hold its own `;` or `|`, which the
+    # segment grep cannot follow: with one on the line, the whole line counts.
+    if echo "$cmd" | grep -qE '\$\(|`|[<>]\('; then
+        _date_segments="$_norm"
+    fi
+    if echo "$_date_segments" | grep -qE '(^|\s)(-s\s|--set[[:space:]=])'; then
+        hard_deny "Blocked: date -s / --set modifies the system clock. This is never allowed."
+    fi
+fi
+
+# ── cat (prompt for output redirection) ──────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)cat\b'; then
+    if echo "$cmd" | grep -qE '(^|[[:space:]])>{1,2}[[:space:]]*[^[:space:]]'; then
+        ask "cat with output redirection (> or >>) would write to a file — approve to proceed."
+    fi
+fi
+
+# ── find (prompt for destructive operations) ──────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)find\b'; then
+    if echo "$cmd" | grep -qE '(^|\s)-delete\b' \
+    || echo "$cmd" | grep -qE '(^|\s)-exec(dir)?\b'; then
+        ask "find with -delete or -exec/-execdir can modify the filesystem — approve to proceed."
+    fi
+fi
+
+# ── sort (prompt for file output flags) ───────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)sort\b'; then
+    if echo "$cmd" | grep -qE '(^|\s)(-o[[:space:]]|--output[[:space:]=])' \
+    || echo "$cmd" | grep -qE '(^|[[:space:]])>{1,2}[[:space:]]*[^[:space:]]'; then
+        ask "sort with -o/--output or output redirection writes to a file — approve to proceed."
+    fi
+fi
+
+# ── awk (prompt for file output and command execution) ───────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)awk\b'; then
+    if echo "$cmd" | grep -qE 'print[[:space:]]*>{1,2}' \
+    || echo "$cmd" | grep -qE "['\"][[:space:]]*>{1,2}[[:space:]]*[^[:space:]]"; then
+        ask "awk with output redirection or print > file may write files — approve to proceed."
+    fi
+    if echo "$cmd" | grep -qE '\bsystem\s*\('; then
+        ask "awk with system() can execute arbitrary commands — approve to proceed."
+    fi
+fi
+
+# ── tee (prompt — writes output to a file) ───────────────────────────────────
+# tee copies stdin to stdout AND to each named file — any real filename is a write.
+# Harmless: bare tee (no args), tee /dev/null, tee /dev/stdout, tee /dev/stderr.
+if echo "$cmd" | grep -qE '\btee\b'; then
+    _tee_args=$(echo "$cmd" | grep -oP '(?<=\btee\b)[^|;&]*' | head -1)
+    _tee_file=$(echo "$_tee_args" | tr ' \t' '\n' \
+        | grep -vE '^(-[a-zA-Z]+|--|/dev/(null|stdout|stderr|fd/[0-9]+)|[0-9]+>?)$' \
+        | grep -vE '^$' | head -1)
+    if [ -n "$_tee_file" ]; then
+        ask "tee writes to a file — approve to proceed."
+    fi
+fi
+
+# ── hostname (prompt when setting system hostname) ────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)hostname\b'; then
+    remainder=$(echo "$cmd" | sed 's/^\s*hostname\s*//' | tr ' \t' '\n' | grep -vE '^-' | tr -d '[:space:]')
+    if [ -n "$remainder" ]; then
+        ask "hostname with a name argument sets the system hostname — approve to proceed."
+    fi
+fi
+
+# ── rm (prompt for all deletions) ────────────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)rm\b'; then
+    if echo "$cmd" | grep -qE '(^|\s)-[a-zA-Z]*[rRfFdi]'; then
+        ask "rm with recursive/force/directory flags detected — approve to proceed."
+    else
+        ask "rm will permanently delete files — approve to proceed."
+    fi
+fi
+
+# ── rmdir (prompt — removes directories) ─────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)rmdir\b'; then
+    ask "rmdir will remove directories — approve to proceed."
+fi
+
+# ── npm audit (prompt for fix — modifies package.json and lock file) ─────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)npm\s+audit\b'; then
+    if echo "$cmd" | grep -qE '\baudit\b.*\bfix\b'; then
+        ask "npm audit fix modifies package.json and lock file — approve to proceed."
+    fi
+fi
+
+# ── --legacy-peer-deps hard block ────────────────────────────────────────────
+# The --legacy-peer-deps flag papers over real peer-dependency mismatches and
+# silently produces a lockfile that won't reproduce on a clean install. If a
+# real install needs this flag, the user runs it themselves from their own
+# terminal — Claude must not.
+# Intentionally also blocks --legacy-peer-deps=false (the safe explicit opt-out):
+# Claude should never type this flag at all, in any form; .npmrc edits go through
+# the user's own terminal too.
+if echo "$cmd" | grep -qE -- '(^|[^A-Za-z0-9_-])--legacy-peer-deps\b'; then
+    hard_deny "BLOCKED: --legacy-peer-deps masks real peer-dependency conflicts and produces a non-reproducible lockfile. Run this manually in your own terminal if it is truly needed."
+fi
+
+# ── Package manager installs (npm/pnpm/yarn/bun) ──────────────────────────────
+# Word-boundary matching catches: npm i, npm add, cd && npm install, true && npm i,
+# and the same install verbs across pnpm, yarn, and bun.
+# npm ci is intentionally excluded — it is lockfile-pinned and safe without approval.
+if echo "$cmd" | grep -qiE '(^|[;&|]\s*)(npm\s+(install|i|add)\b|pnpm\s+(install|i|add)\b|yarn\s+(install|add)\b|bun\s+(install|add)\b)'; then
+    ask "Package manager install detected — approve to proceed."
+fi
+
+# ── Generic output redirect guard ────────────────────────────────────────────
+# Safety net: catch any command writing to a file via > or >> that was not
+# already handled by a specific guard above (a guard that asked first keeps
+# its own reason: ask() records only the first one).
+# The character class [^[:space:]&>/] already excludes fd-to-fd redirects
+# (>&2) and absolute paths (>/dev/null, >/tmp/…). Do NOT add a blanket
+# "skip if >/dev/null appears anywhere" — that suppresses the guard for
+# every other redirect in the same command (decoy /dev/null attack).
+if echo "$cmd" | grep -qE '>{1,2}[[:space:]]*[^[:space:]&>/]'; then
+    ask "Output redirection to a file detected — approve to proceed."
+fi
+
+# ── ln (symlink/hardlink guard — blocks links targeting protected paths) ──────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)ln\b'; then
+    if echo "$cmd" | grep -qE "${_prot}"; then
+        hard_deny "BLOCKED: Creating symlinks or hardlinks to ~/.claude/ config files is not allowed."
+    else
+        ask "ln creates a link — approve to proceed."
+    fi
+fi
+
+# ── sed -i (in-place file editing) ───────────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)sed\b' && echo "$cmd" | grep -qE "(^|\s)-[a-zA-Z]*i"; then
+    ask "sed -i edits files in place — approve to proceed."
+fi
+
+# ── chown (change file ownership) ────────────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)chown\b'; then
+    ask "chown changes file ownership — approve to proceed."
+fi
+
+# ── install (copy files with permissions) ────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)install\b'; then
+    ask "install copies files and sets permissions — approve to proceed."
+fi
+
+# ── Pipe-to-shell and obfuscation guard ──────────────────────────────────────
+# Catches common obfuscation techniques that bypass command-specific guards.
+if echo "$cmd" | grep -qE '\|\s*(bash|sh|zsh|dash)\b' \
+|| echo "$cmd" | grep -qE '\bbase64\s+(-d|--decode)\b' \
+|| echo "$cmd" | grep -qE '(^|[;&|]\s*)eval\b'; then
+    ask "Potential command obfuscation detected (pipe to shell, base64 decode, or eval) — approve to proceed."
+fi
+
+# ── Script-body scanner ──────────────────────────────────────────────────────
+# Catches the "write a script that targets ~/.claude/, then execute it" bypass.
+# When the command invokes a script via `bash <path>`, `sh <path>` (without -c),
+# `source <path>`, `. <path>`, or `./<path>`, read the script body and re-apply
+# the protected-path + write-operator regex to its contents.
+#
+# Acknowledged limitations (documented for future reviewers):
+#   - Process substitution (`bash <(curl …)`) is not unpacked.
+#   - Scripts whose bodies are produced at runtime — and whose generator does
+#     not appear inline — slip through. (Inline generators using `>` redirects
+#     are caught by the existing write guard above.)
+#   - Obfuscation via `base64 -d | bash` is caught by the ask-prompt one block
+#     up; this scanner does not attempt to defeat encoded content directly.
+# Defense in depth: this raises the bar so casual bypass attempts surface in the
+# transcript rather than silently succeeding. Combined with the filesystem-level
+# `chattr +i` lock (initial setup), Claude has no path to overwriting protected
+# files in a single session.
+_check_script_body() {
+    local path="$1"
+    [ -f "$path" ] && [ -r "$path" ] || return 0
+    local size
+    size=$(wc -c <"$path" 2>/dev/null || echo 0)
+    [ "$size" -gt 102400 ] && return 0   # cap at 100 KB so hook stays fast
+    grep -qE "${_prot}" "$path" 2>/dev/null || return 0
+    # Protected path appears in the script. Check whether it appears in a
+    # write context (any of the operators flagged by the inline write guard).
+    if grep -qE "(>{1,2}[[:space:]]*[\"']?${_prot}|(^|[;&|[:space:]])(cp|mv|rm|tee|chmod|chattr|truncate|shred|unlink|ln|dd|sed|wget|curl)\b[^|]*${_prot})" "$path" 2>/dev/null; then
+        return 1
+    fi
+    return 0
+}
+
+# Extract candidate script paths from the command. We split on top-level
+# command separators (; & | ()) and inspect the first token of each segment:
+#   - `bash <path>` / `sh <path>` / `zsh <path>` / `dash <path>`  → that path
+#     (skipping `-c` and intermediate flag arguments)
+#   - `source <path>` / `. <path>`                                 → that path
+#   - bare path forms (`./foo`, `/tmp/foo.sh`, `~/bin/script`,
+#     `$HOME/foo`, `${HOME}/foo`)                                   → that token
+# This catches the common bypass shapes: `bash /tmp/x.sh`, `/tmp/x.sh` alone,
+# and `chmod +x /tmp/x.sh && /tmp/x.sh`.
+_extract_script_paths() {
+    local _seg _t1 _t2 _i
+    while IFS= read -r _seg; do
+        _seg="${_seg#"${_seg%%[![:space:]]*}"}"   # ltrim
+        [ -z "$_seg" ] && continue
+        _t1=$(echo "$_seg" | awk '{print $1}')
+        _t2=$(echo "$_seg" | awk '{print $2}')
+        # shellcheck disable=SC2088,SC2016 # case patterns match literal tokens — tilde and $HOME are intentionally NOT expanded
+        case "$_t1" in
+            bash|sh|zsh|dash)
+                # `bash -c '…'` takes an inline string, no file to scan.
+                [ "$_t2" = "-c" ] && continue
+                # Skip intermediate short flags (e.g. `bash -x /tmp/x.sh`).
+                _i=2
+                while [[ "$_t2" == -* ]]; do
+                    _i=$((_i+1))
+                    _t2=$(echo "$_seg" | awk -v i="$_i" '{print $i}')
+                done
+                [ -n "$_t2" ] && echo "$_t2"
+                ;;
+            source|.)
+                [ -n "$_t2" ] && echo "$_t2"
+                ;;
+            ./*|/*|'~/'*|'$HOME/'*|'${HOME}/'*|'"$HOME"/'*|'"${HOME}"/'*)
+                # Bare path execution as a command. Quoted-home forms are
+                # already-stripped by the loop's case match.
+                echo "$_t1"
+                ;;
+        esac
+    done < <(echo "$cmd" | tr ';&|()' '\n')
+}
+
+while IFS= read -r _spath; do
+    [ -z "$_spath" ] && continue
+    # Strip surrounding quotes and expand $HOME / ~ tokens so the body scan
+    # can locate the file. Unresolvable variables (e.g. `$P` in `bash $P`)
+    # remain opaque and the file lookup silently no-ops.
+    _spath="${_spath%\"}"; _spath="${_spath#\"}"
+    _spath="${_spath%\'}"; _spath="${_spath#\'}"
+    # shellcheck disable=SC2088,SC2016 # case patterns and ${var#…} prefixes match literal tokens — intentional
+    case "$_spath" in
+        '~/'*)         _spath="${HOME}/${_spath#'~'/}" ;;
+        '$HOME/'*)     _spath="${HOME}/${_spath#'$HOME/'}" ;;
+        '${HOME}/'*)   _spath="${HOME}/${_spath#'${HOME}/'}" ;;
+    esac
+    if ! _check_script_body "$_spath"; then
+        hard_deny "BLOCKED: script '$_spath' contains a write operation targeting ~/.claude/ config files. Writing and executing such a script bypasses the canonical update flow."
+    fi
+done < <(_extract_script_paths)
+
+WSL_DENY_MSG="BLOCKED: This command would leave the WSL Ubuntu workspace. Claude must never navigate to, execute from, or access the Windows filesystem or Windows processes. All work must stay within the WSL Linux environment."
+
+# ── WSL boundary guard ────────────────────────────────────────────────────────
+# WSL mounts Windows drives at /mnt/<letter>/ (e.g. /mnt/c/ = C:\).
+# Windows executables (*.exe) run via WSL interop spawn Windows-side processes.
+# Both are hard-blocked: there is no legitimate reason to leave the WSL workspace.
+
+# Block cd to Windows drive mount points (/mnt/c/, /mnt/d/, etc.)
+# Matches: cd /mnt/c  |  cd /mnt/c/  |  cd /mnt/c/Users/...  (single-letter drive only)
+if echo "$cmd" | grep -qE '(^|[;&|[:space:]])(cd)[[:space:]]+/mnt/[a-zA-Z](/|[[:space:]]|$)'; then
+    hard_deny "$WSL_DENY_MSG"
+fi
+
+# Block any command that references a Windows drive mount path (/mnt/<letter>/)
+# Catches file reads, writes, cp, mv, rsync, etc. targeting Windows filesystem.
+if echo "$cmd" | grep -qE '(^|[[:space:]])/mnt/[a-zA-Z](/|[[:space:]]|$)'; then
+    hard_deny "$WSL_DENY_MSG"
+fi
+
+# Block Windows executables run via WSL interop (named or path-referenced *.exe)
+# Covers: cmd.exe, powershell.exe, pwsh.exe, explorer.exe, wsl.exe, notepad.exe, etc.
+if echo "$cmd" | grep -qiE '(^|[[:space:]/])[^[:space:]]*\.exe([[:space:]]|$)'; then
+    hard_deny "$WSL_DENY_MSG"
+fi
+
+# Block wsl / wsl.exe without extension (e.g. `wsl --exec`, `wsl -e cmd`)
+# The wsl binary itself can run commands on the Windows host or switch distros.
+if echo "$cmd" | grep -qiE '(^|[[:space:]])(wsl)([[:space:]]|$)'; then
+    hard_deny "$WSL_DENY_MSG"
+fi
+
+# ── Deferred ask ─────────────────────────────────────────────────────────────
+# Every hard deny has had its turn; now raise the prompt, if any guard asked.
+if [ -n "$_ask_reason" ]; then
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$_ask_reason"
+fi
+
+exit 0
