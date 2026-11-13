@@ -51,7 +51,7 @@ Every app calls one shared workflow, `quality.yml` in [ConductionNL/.github](htt
 | Pull request ready for review | Full | Everything the app enables, including PHPUnit, Newman, Playwright and the Hydra gates. |
 | Push to an integration branch | Full | The same, with the complete PHP and Nextcloud matrix. |
 
-Two options make a ready pull request cheaper, and apps may switch them on. Path filtering skips PHPUnit and Playwright when the diff touches no code. Matrix reduction runs PHPUnit on one PHP version and the newest Nextcloud only. Both apply to pull requests, never to the push after the merge.
+Two options make a ready pull request cheaper, and apps may switch them on. Path filtering skips PHPUnit and Playwright when the diff touches no code. Matrix reduction runs PHPUnit on one PHP version and the newest Nextcloud only, for pull requests into the app's development branch (`development` unless the app lists another in `reduce-pr-base-branches`). Both apply to pull requests, never to the push after the merge.
 
 The Hydra gates judge only the lines the pull request changed (ADR-020).
 

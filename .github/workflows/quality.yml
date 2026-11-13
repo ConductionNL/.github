@@ -704,10 +704,15 @@ on:
         type: boolean
         default: false
       reduce-pr-matrix:
-        description: "On a pull_request event, run PHPUnit on the PRIMARY php-version against the NEWEST declared Nextcloud only, instead of the full php-test-versions x declared-range product. OPT-IN, default false. The full matrix still runs on every push to a default branch, so the declared range is exercised on every merge and on the release PR into beta — breadth moves from per-commit to per-merge, it is not dropped. The reasoning is that version-drift does not appear between two commits an hour apart; it appears when a dependency or a Nextcloud minor moves, and a push-time matrix catches that just as well at a fraction of the queue cost. Measured: 6 legs at ~2.2 min each, of which ~46s is the test suite and ~85s is container init, two checkouts and a Nextcloud install repeated per leg."
+        description: "On a pull_request event into one of the branches listed in reduce-pr-base-branches (default: development), run PHPUnit on the PRIMARY php-version against the NEWEST declared Nextcloud only, instead of the full php-test-versions x declared-range product. OPT-IN, default false. The full matrix still runs on every push to a default branch, so the declared range is exercised on every merge and on the release PR into beta — breadth moves from per-commit to per-merge, it is not dropped. The reasoning is that version-drift does not appear between two commits an hour apart; it appears when a dependency or a Nextcloud minor moves, and a push-time matrix catches that just as well at a fraction of the queue cost. Measured: 6 legs at ~2.2 min each, of which ~46s is the test suite and ~85s is container init, two checkouts and a Nextcloud install repeated per leg."
         required: false
         type: boolean
         default: false
+      reduce-pr-base-branches:
+        description: "JSON array of base branches whose pull requests reduce-pr-matrix applies to, matched exactly against github.base_ref. Default '[\"development\"]', the fleet's development line. A repo that develops on another branch lists it here, e.g. '[\"main\"]' for an app whose mainline is main and whose release line is a stableX.Y branch; PRs into the release line keep the full matrix unless that branch is listed too. Has no effect unless reduce-pr-matrix is true."
+        required: false
+        type: string
+        default: '["development"]'
 
 concurrency:
   # KEYED BY EVENT AS WELL AS REF, so a deliberately-requested run is not
@@ -3824,11 +3829,16 @@ jobs:
 
     strategy:
       matrix:
-        # REDUCED ON PULL REQUESTS when the caller sets reduce-pr-matrix. The
+        # REDUCED ON PULL REQUESTS when the caller sets reduce-pr-matrix, and
+        # only on a PR whose base is listed in reduce-pr-base-branches (default
+        # ["development"]; a repo developing on `main` lists "main"). The
         # full product still runs on every push to a default branch, so the
         # declared range is exercised on every merge and on the release PR into
         # beta — breadth moves from per-commit to per-merge, it is not dropped.
-        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && github.base_ref == 'development') && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
+        # `contains()` on an array matches whole elements, never substrings,
+        # and is evaluated last: on a push base_ref is empty and the
+        # event_name test has already made the whole condition false.
+        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && contains(fromJSON(inputs.reduce-pr-base-branches), github.base_ref)) && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
         # DERIVED from appinfo/info.xml by the `nextcloud-matrix` job, not read
         # from an input any more. The `needs:` edge below is what makes this
         # expression resolvable; without it the matrix evaluates to nothing and
@@ -3846,7 +3856,7 @@ jobs:
         # to any OTHER combination — the declared floor, say — would have left
         # that condition unsatisfiable and the coverage ratchet would simply
         # never have run on a pull request, silently and with nothing red.
-        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && github.base_ref == 'development') && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
+        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && contains(fromJSON(inputs.reduce-pr-base-branches), github.base_ref)) && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
         # An empty database-test-matrix collapses to the single `database`
         # input, which is what every caller uses today — so the matrix keeps
         # exactly its current dimensions until an app opts in. Routed through

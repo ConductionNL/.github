@@ -32,8 +32,9 @@
 #                           touches no code path. Decided by the `changes`
 #                           job from the PR's diff (or a push's before..after).
 #   reduce-pr-matrix        runs ONE PHP version and ONE Nextcloud server on
-#                           a pull request into development, instead of the
-#                           full declared matrix.
+#                           a pull request into development (or another
+#                           base listed in reduce-pr-base-branches), instead
+#                           of the full declared matrix.
 #
 # A `workflow_dispatch` run is subject to NEITHER, by construction rather than
 # by configuration: the `changes` job runs everything for any event that is
