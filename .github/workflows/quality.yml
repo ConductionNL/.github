@@ -631,7 +631,7 @@ on:
         type: boolean
         default: false
       enable-checker-floor:
-        description: "Enforce the app's checker floor (.checker-floor.json, hydra-gates scripts/lib/checker_floor.py): the Common Ground component checker scans the checkout, and no criterion's status (pass > warn > info > fail) may get worse than the floor and the score may not drop. On a PULL REQUEST the floor is the one committed at the merge base, and the change may raise the floor file but not lower or delete it; on a PUSH the tree is held to its own committed floor. A scan that cannot run, or that leaves a floor criterion unmeasured, FAILS the job: it is no result, never a pass. OPT-IN, default false. Runs as its own job (Checker floor), listed in the Quality Report."
+        description: "Enforce the app's checker floor (.checker-floor.json, hydra-gates scripts/lib/checker_floor.py): the Common Ground component checker scans the checkout, and no criterion's status (pass > warn > info > fail) or star rating (1 to 5) may get worse than the floor and the score may not drop. On a PULL REQUEST the floor is the one committed at the merge base, and the change may raise the floor file but not lower or delete it; on a PUSH the tree is held to its own committed floor. A scan that cannot run, or that leaves a floor criterion unmeasured, FAILS the job: it is no result, never a pass. OPT-IN, default false. Runs as its own job (Checker floor), listed in the Quality Report."
         required: false
         type: boolean
         default: false

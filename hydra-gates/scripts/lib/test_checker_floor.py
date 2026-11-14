@@ -16,6 +16,9 @@ statuses on real git histories:
      file anywhere is 3.
   3. NO RESULT: a scanner that fails, crashes or is missing is 2, never a pass.
   4. CACHE: a clean commit is scanned once; a dirty tree is never cached.
+  5. STARS: record holds the most stars per criterion; compare fails on fewer
+     stars while the status holds, and on a change that lowers the stars in
+     the floor file; more stars is 4; a floor file without stars still works.
 
 Run: python3 scripts/lib/test_checker_floor.py
 """
@@ -51,10 +54,14 @@ if s.get("exit"):
 doc = {"tool": "stub", "toolVersion": "0.0.1+stub", "scoringDigest": "d1", "score": s["score"],
        "commit": "x", "criteria": {k: {"status": v, "message": ""} for k, v in s["criteria"].items()},
        "unmeasured": s.get("unmeasured", [])}
+if "stars" in s:
+    doc["report"] = {"results": [{"id": k, "starRating": v} for k, v in s["stars"].items()]}
 json.dump(doc, open(out, "w"))
 '''
 
 BASE = {"score": 80, "criteria": {"license": "pass", "maintainability": "warn", "secretscanning": "fail"}}
+STARS = {"license": 5, "maintainability": 3, "secretscanning": 1}
+STARRED = dict(BASE, stars=STARS)
 
 
 def run(cmd, cwd):
@@ -274,6 +281,91 @@ class CheckerFloorTest(unittest.TestCase):
         self.main("measure", self.app)
         with open(self.calls) as fh:
             self.assertEqual(len(fh.read().splitlines()), 2)
+
+
+    # 5. stars
+    def record_starred_base(self):
+        self.commit(STARRED, "starred scan")
+        self.record_base()
+
+    def test_record_writes_the_stars(self):
+        self.write_scan(STARRED)
+        rc, out = self.main("record", self.app)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.floor()["stars"], STARS)
+
+    def test_record_keeps_the_most_stars_of_the_old_floor(self):
+        self.write_scan(STARRED)
+        self.main("record", self.app)
+        self.write_scan(dict(BASE, stars=dict(STARS, license=4, maintainability=4)))
+        rc, out = self.main("record", self.app)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.floor()["stars"], dict(STARS, maintainability=4))
+        self.assertIn("license stars", out)
+
+    def test_record_leaves_out_a_criterion_without_stars(self):
+        self.write_scan(dict(BASE, stars={"license": 5, "maintainability": None}))
+        self.main("record", self.app)
+        self.assertEqual(self.floor()["stars"], {"license": 5})
+
+    def test_compare_fails_on_fewer_stars_with_the_same_status(self):
+        self.record_starred_base()
+        self.commit(dict(BASE, stars=dict(STARS, license=4)), "fewer stars")
+        rc, out = self.main("compare", self.app, "--base-ref", "development")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("WORSE license stars: 5 -> 4", out)
+
+    def test_compare_fails_when_the_stars_disappear(self):
+        self.record_starred_base()
+        stars = dict(STARS)
+        del stars["license"]
+        self.commit(dict(BASE, stars=stars), "no stars")
+        rc, out = self.main("compare", self.app, "--base-ref", "development")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("WORSE license stars: 5 -> missing", out)
+
+    def test_compare_holds_the_same_stars(self):
+        self.record_starred_base()
+        self.commit(dict(STARRED), "same")
+        rc, out = self.main("compare", self.app, "--base-ref", "development")
+        self.assertEqual(rc, 0, out)
+
+    def test_compare_reports_more_stars_as_4(self):
+        self.record_starred_base()
+        self.commit(dict(BASE, stars=dict(STARS, maintainability=4)), "more stars")
+        rc, out = self.main("compare", self.app, "--base-ref", "development")
+        self.assertEqual(rc, 4, out)
+
+    def test_compare_fails_when_the_change_lowers_the_stars_in_the_floor_file(self):
+        self.record_starred_base()
+        self.commit(dict(BASE, stars=dict(STARS, license=4)), "scan")
+        self.main("record", self.app, "--reset")
+        self.commit(None, "lower the stars")
+        rc, out = self.main("compare", self.app, "--base-ref", "development")
+        self.assertEqual(rc, 1, out)
+        self.assertIn(f"the change lowers the stars of license in {checker_floor.FLOOR_FILE}", out)
+
+    def test_a_floor_file_without_stars_holds_no_star_floor(self):
+        self.record_starred_base()
+        floor = self.floor()
+        del floor["stars"]
+        run(["git", "checkout", "-q", "development"], self.app)
+        with open(os.path.join(self.app, checker_floor.FLOOR_FILE), "w") as fh:
+            json.dump(floor, fh)
+        self.commit(None, "a floor from before stars")
+        run(["git", "checkout", "-q", "-b", "feature2"], self.app)
+        self.commit(dict(BASE, stars=dict(STARS, license=1)), "fewer stars")
+        rc, out = self.main("compare", self.app, "--base-ref", "development")
+        self.assertEqual(rc, 0, out)
+
+    def test_a_floor_file_with_bad_stars_is_no_result(self):
+        self.record_base()
+        floor = self.floor()
+        floor["stars"] = {"license": "five"}
+        with open(os.path.join(self.app, checker_floor.FLOOR_FILE), "w") as fh:
+            json.dump(floor, fh)
+        rc, out = self.main("compare", self.app, "--base-ref", "development")
+        self.assertEqual(rc, 2, out)
 
 
 if __name__ == "__main__":

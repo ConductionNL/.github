@@ -12,26 +12,31 @@ Every app commits `.checker-floor.json` at its repository root:
       "tool_version": "<checker package version>+<checker commit>",
       "scoring_digest": "<digest of the scoring configuration>",
       "score": 89,
-      "criteria": {"license": "pass", "maintainability": "warn", ...}
+      "criteria": {"license": "pass", "maintainability": "warn", ...},
+      "stars": {"license": 5, "maintainability": 4, ...}
     }
 
 The values come from the Common Ground component checker's local scan
 (`scripts/scan-local.ts` in the checker repository), run on the checkout with
 the scoring configuration next to this file (checker_scoring.json). A status
 ranks pass > warn > info > fail; the score is the checker's 0 to 100 score.
+`stars` holds the checker's 1 to 5 star rating per criterion (the
+`starRating` of `report.results` in the scan), so a criterion that slips from
+5 to 4 stars while its status stays pass is caught too. A floor file without
+`stars` (or without a criterion in it) holds no star floor for it.
 
 MODES
 -----
 record <checkout>                write the floor: per criterion the best status
-                                 of the old floor and the measurement, and the
-                                 higher score. --reset writes the measurement
+                                 and the most stars of the old floor and the
+                                 measurement, and the higher score. --reset writes the measurement
                                  as is (after a checker or scoring change).
 compare <checkout> --base-ref R  the floor is the best of the floor file
                                  committed at the merge base of R and HEAD and
                                  the checkout's own floor file. FAIL when a
-                                 criterion's status is worse than the floor,
-                                 the score is lower, or the change lowers or
-                                 deletes the committed floor file.
+                                 criterion's status or stars are worse than
+                                 the floor, the score is lower, or the change
+                                 lowers or deletes the committed floor file.
 measure <checkout>               print the measured floor values, write nothing.
 
 --scan FILE reads a scan document the checker already wrote instead of
@@ -210,6 +215,17 @@ def read_scan(path):
     return doc
 
 
+def stars_from_scan(doc):
+    """The star rating per criterion of a scan; a criterion without one is left out."""
+    results = ((doc.get("report") or {}).get("results")) or []
+    stars = {}
+    for r in results:
+        cid, s = (r or {}).get("id"), (r or {}).get("starRating")
+        if cid in doc["criteria"] and isinstance(s, int) and not isinstance(s, bool):
+            stars[cid] = s
+    return dict(sorted(stars.items()))
+
+
 def values_from_scan(doc):
     return {
         "commit": doc.get("commit"),
@@ -218,6 +234,7 @@ def values_from_scan(doc):
         "scoring_digest": doc.get("scoringDigest"),
         "score": doc["score"],
         "criteria": {cid: c["status"] for cid, c in sorted(doc["criteria"].items())},
+        "stars": stars_from_scan(doc),
         "unmeasured": sorted(doc.get("unmeasured") or []),
     }
 
@@ -230,6 +247,15 @@ def measure(tree, scan_file=None):
     return values_from_scan(run_scan(os.path.abspath(tree)))
 
 
+def valid_floor(data):
+    if not isinstance(data, dict) or not isinstance(data.get("criteria"), dict):
+        return False
+    if any(s not in RANK for s in data["criteria"].values()):
+        return False
+    stars = data.get("stars", {})
+    return isinstance(stars, dict) and all(isinstance(s, int) and not isinstance(s, bool) for s in stars.values())
+
+
 def read_floor(path):
     if not os.path.isfile(path):
         return None
@@ -238,7 +264,7 @@ def read_floor(path):
             data = json.load(fh)
     except (OSError, ValueError) as e:
         raise FloorError(f"cannot read {path}: {e}")
-    if not isinstance(data.get("criteria"), dict) or any(s not in RANK for s in data["criteria"].values()):
+    if not valid_floor(data):
         raise FloorError(f"{path} is not a checker floor file")
     return data
 
@@ -251,13 +277,13 @@ def floor_at_commit(tree, commit):
         data = json.loads(text)
     except ValueError:
         raise FloorError(f"{FLOOR_FILE} at {commit[:10]} is not JSON")
-    if not isinstance(data.get("criteria"), dict) or any(s not in RANK for s in data["criteria"].values()):
+    if not valid_floor(data):
         raise FloorError(f"{FLOOR_FILE} at {commit[:10]} is not a checker floor file")
     return data
 
 
 def best(a, b):
-    """The per criterion best of two floors, and the higher score when both use the same scoring."""
+    """The per criterion best status and most stars of two floors, and the higher score when both use the same scoring."""
     if a is None:
         return b
     if b is None:
@@ -266,8 +292,13 @@ def best(a, b):
     for cid, status in b["criteria"].items():
         if cid not in criteria or RANK[status] > RANK[criteria[cid]]:
             criteria[cid] = status
+    stars = dict(a.get("stars") or {})
+    for cid, s in (b.get("stars") or {}).items():
+        if cid not in stars or s > stars[cid]:
+            stars[cid] = s
     out = dict(b)
     out["criteria"] = criteria
+    out["stars"] = stars
     if a.get("scoring_digest") == b.get("scoring_digest"):
         out["score"] = max(a.get("score", 0), b.get("score", 0))
     return out
@@ -286,6 +317,17 @@ def verdict(floor, head):
             worse.append((cid, status, h))
         elif RANK[h] > RANK[status]:
             better.append((cid, status, h))
+    head_stars = head.get("stars") or {}
+    for cid, s in sorted((floor.get("stars") or {}).items()):
+        h = head_stars.get(cid)
+        if cid in head["unmeasured"]:
+            continue
+        if h is None:
+            worse.append((f"{cid} stars", s, "missing"))
+        elif h < s:
+            worse.append((f"{cid} stars", s, h))
+        elif h > s:
+            better.append((f"{cid} stars", s, h))
     for cid in sorted(set(head["criteria"]) - set(floor["criteria"])):
         notes.append(f"{cid} is not in the floor ({head['criteria'][cid]}); record it to hold it")
     if floor.get("scoring_digest") and floor.get("scoring_digest") != head.get("scoring_digest"):
@@ -310,18 +352,24 @@ def lowered(old, new):
         n = new["criteria"].get(cid)
         if n is None or RANK[n] < RANK[status]:
             out.append(f"the change lowers {cid} in {FLOOR_FILE} ({status} -> {n or 'removed'})")
+    new_stars = new.get("stars") or {}
+    for cid, s in sorted((old.get("stars") or {}).items()):
+        n = new_stars.get(cid)
+        if n is None or n < s:
+            out.append(f"the change lowers the stars of {cid} in {FLOOR_FILE} ({s} -> {n or 'removed'})")
     if old.get("scoring_digest") == new.get("scoring_digest") and new.get("score", 0) < old.get("score", 0):
         out.append(f"the change lowers the score in {FLOOR_FILE} ({old['score']} -> {new['score']})")
     return out
 
 
 def table(floor, head):
-    lines = [f"  {'':22} {'floor':>6} {'head':>6}"]
+    lines = [f"  {'':22} {'floor':>6} {'head':>6} {'stars':>6} {'head':>5}"]
+    fs, hs = floor.get("stars") or {}, head.get("stars") or {}
     for cid in sorted(set(floor["criteria"]) | set(head["criteria"])):
         h = head["criteria"].get(cid, "-")
         if cid in head["unmeasured"]:
             h = f"{h}?"
-        lines.append(f"  {cid:22} {floor['criteria'].get(cid, '-'):>6} {h:>6}")
+        lines.append(f"  {cid:22} {floor['criteria'].get(cid, '-'):>6} {h:>6} {fs.get(cid, '-'):>6} {hs.get(cid, '-'):>5}")
     lines.append(f"  {'score':22} {floor.get('score', '-'):>6} {head['score']:>6}")
     return "\n".join(lines)
 
@@ -335,6 +383,7 @@ def floor_document(values):
         "scoring_digest": values.get("scoring_digest"),
         "score": values.get("score"),
         "criteria": dict(sorted(values["criteria"].items())),
+        "stars": dict(sorted((values.get("stars") or {}).items())),
     }
 
 
@@ -366,6 +415,8 @@ def cmd_record(args):
         json.dump(floor_document(new), fh, indent=2)
         fh.write("\n")
     kept = [cid for cid in (old or {}).get("criteria", {}) if old["criteria"][cid] != values["criteria"].get(cid)]
+    kept += [f"{cid} stars" for cid, s in ((old or {}).get("stars") or {}).items()
+             if s != (values.get("stars") or {}).get(cid)]
     extra = f"; kept the better floor for {', '.join(kept)}" if kept else ""
     print(f"{TAG} WRITTEN: {path}, score {new['score']}, {len(new['criteria'])} criteria{extra}")
     return OK
@@ -408,7 +459,7 @@ def cmd_compare(args):
         print(f"{TAG} IMPROVED: holds and is better than the floor ({what}); raise it: "
               f"python3 {os.path.abspath(__file__)} record {head_tree}")
         return IMPROVED
-    print(f"{TAG} PASS: every criterion and the score hold the floor (merge base {mb[:10]})")
+    print(f"{TAG} PASS: every criterion, its stars and the score hold the floor (merge base {mb[:10]})")
     return OK
 
 
