@@ -99,7 +99,7 @@ def cache_root():
 
 def scan_cache_dir():
     base = os.environ.get("HYDRA_GATE_FLOOR_CACHE") or os.path.join(cache_root(), "hydra-gates", "floor-cache")
-    return os.path.join(base, "checker")
+    return os.path.join(base, "checker-full")
 
 
 def refresh_checker(home):
@@ -183,7 +183,7 @@ def run_scan(tree):
     with tempfile.TemporaryDirectory(prefix="checker-scan-") as tmp:
         out = os.path.join(tmp, "scan.json")
         cmd = [os.path.join(home, "node_modules", ".bin", "tsx"), os.path.join(home, "scripts", "scan-local.ts"),
-               tree, "--scoring", scoring, "--out", out]
+               tree, "--scoring", scoring, "--out", out, "--full"]
         try:
             p = subprocess.run(cmd, cwd=home, capture_output=True, text=True, errors="replace", timeout=timeout)
         except subprocess.TimeoutExpired:
