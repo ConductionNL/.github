@@ -346,5 +346,29 @@ class ReportTests(unittest.TestCase):
         self.assertIsNone(report["properties"]["vulnerabilities"]["rating"])
 
 
+    def test_licence_exclude_only_leaves_the_licence_property(self):
+        def osv(body):
+            names = [q["package"]["name"] for q in body["queries"]]
+            return {"results": [{"vulns": [{"id": "GHSA-1"}]} if n == "@scope/ui" else {} for n in names]}
+
+        baseline = osh.build_report(self.repo, StubFetcher(self.responses(osv)))["properties"]
+        props = osh.build_report(self.repo, StubFetcher(self.responses(osv)), ["@scope/.*"])["properties"]
+        self.assertEqual(props["licence"]["detail"]["excluded"], 1)
+        self.assertEqual(baseline["licence"]["detail"]["excluded"], 0)
+        self.assertGreater(props["licence"]["rating"], baseline["licence"]["rating"])
+        self.assertEqual(props["vulnerabilities"]["affected"], {"npm:@scope/ui@2.0.0": "high"})
+        for name in ("vulnerabilities", "freshness", "activity", "management"):
+            self.assertEqual(props[name], baseline[name])
+
+    def test_licence_exclude_must_match_the_whole_name(self):
+        report = osh.build_report(self.repo, StubFetcher(self.responses(None)), ["@scope", "ui"])
+        self.assertEqual(report["properties"]["licence"]["detail"]["excluded"], 0)
+
+    def test_invalid_licence_exclude_is_reported_and_skipped(self):
+        report = osh.build_report(self.repo, StubFetcher(self.responses(None)), ["(", "@scope/ui"])
+        self.assertEqual(report["properties"]["licence"]["detail"]["excluded"], 1)
+        self.assertTrue(any(error.startswith("licence exclude '('") for error in report["errors"]))
+
+
 if __name__ == "__main__":
     unittest.main()

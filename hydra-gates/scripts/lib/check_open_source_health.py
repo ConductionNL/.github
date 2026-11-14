@@ -72,8 +72,16 @@ rating always lies in the band of the property's stars.
 `overall_rating` is the mean of the property ratings, two decimals, and
 `overall` its whole stars.
 
+LICENCE EXCLUDES
+----------------
+`--exclude-licence REGEX` (repeatable) leaves every dependency whose name
+fully matches REGEX out of the licence property only, for a dependency whose
+licence the maintainers have reviewed and accepted. Such a dependency still counts for vulnerabilities, freshness, activity and management. The
+licence detail reports how many were excluded.
+
 Usage:
     check_open_source_health.py report <repo-dir> [--json FILE] [--offline]
+                                       [--exclude-licence REGEX ...]
 
 Exit status: 0 a report, 2 bad arguments, 4 no dependency data to rate.
 """
@@ -498,8 +506,20 @@ def star_bands():
     }
 
 
-def build_report(repo, fetcher):
+def compile_licence_excludes(patterns, errors):
+    """The valid patterns, compiled; an invalid one is reported in `errors` and skipped."""
+    compiled = []
+    for pattern in patterns or ():
+        try:
+            compiled.append(re.compile(pattern))
+        except re.error as error:
+            errors.append(f"licence exclude {pattern!r}: {error}")
+    return compiled
+
+
+def build_report(repo, fetcher, licence_excludes=()):
     deps = read_dependencies(repo)
+    excludes = compile_licence_excludes(licence_excludes, fetcher.errors)
     now = fetcher.now
     year = 365.25 * 24 * 3600
     report = {"repository": os.path.abspath(repo), "dependencies": len(deps),
@@ -518,6 +538,7 @@ def build_report(repo, fetcher):
         histories = list(pool.map(lambda d: release_history(fetcher, d), deps))
     behind, inactive, unknown = [], [], 0
     counts = dict.fromkeys(LICENCE_ORDER, 0)
+    excluded = 0
     for dep, (used, latest, fetched_licences) in zip(deps, histories):
         if latest is None:
             unknown += 1
@@ -525,6 +546,9 @@ def build_report(repo, fetcher):
             inactive.append((now - latest) / year)
             if used is not None:
                 behind.append(max(0.0, (latest - used) / year))
+        if any(rx.fullmatch(dep["name"]) for rx in excludes):
+            excluded += 1
+            continue
         licences = dep["licences"] if dep["licences"] is not None else fetched_licences
         counts[licence_class(licences)] += 1
     report["properties"]["freshness"] = {
@@ -536,7 +560,8 @@ def build_report(repo, fetcher):
         "rating": age_rating(inactive, ACTIVITY_LIMITS, ACTIVITY_MAX_YEARS),
         "detail": age_detail(inactive, ACTIVITY_LIMITS, ACTIVITY_MAX_YEARS), "unknown": unknown}
     report["properties"]["licence"] = {"stars": rate_licences(counts) if deps else None,
-                                       "rating": licences_rating(counts) if deps else None, "detail": counts}
+                                       "rating": licences_rating(counts) if deps else None,
+                                       "detail": {**counts, "excluded": excluded}}
     share, note = unmanaged_share(repo, deps)
     report["properties"]["management"] = {"stars": rate_management(share), "rating": management_rating(share),
                                           "detail": {"unmanaged_percent": share, "note": note}}
@@ -564,6 +589,8 @@ def main(argv):
     rep.add_argument("repo")
     rep.add_argument("--json")
     rep.add_argument("--offline", action="store_true", help="use only cached registry and OSV data")
+    rep.add_argument("--exclude-licence", action="append", default=[], metavar="REGEX",
+                     help="leave dependencies whose name fully matches REGEX out of the licence property")
     rep.add_argument("--cache", default=os.path.join(
         os.environ.get("HYDRA_GATE_TOOLS_DIR") or os.path.join(os.path.expanduser("~"), ".cache", "hydra-gates"),
         "open-source-health-cache.json"))
@@ -572,7 +599,7 @@ def main(argv):
         print(f"not a directory: {args.repo}", file=sys.stderr)
         return 2
     fetcher = Fetcher(args.cache, offline=args.offline)
-    report = build_report(args.repo, fetcher)
+    report = build_report(args.repo, fetcher, args.exclude_licence)
     fetcher.save()
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
