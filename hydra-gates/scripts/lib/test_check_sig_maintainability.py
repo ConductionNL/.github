@@ -693,6 +693,32 @@ class Structure(unittest.TestCase):
         finally:
             repo.close()
 
+    def test_php_structure_follows_the_psr4_autoload_roots(self):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        repo.write("composer.json", json.dumps({
+            "autoload": {"psr-4": {"OWC\\PDC\\Base\\": "./src/Base"}},
+            "autoload-dev": {"psr-4": {"OWC\\PDC\\Base\\Tests\\": "./tests"}}}))
+        repo.write("src/Base/Foundation/Plugin.php",
+                   "<?php\nnamespace OWC\\PDC\\Base\\Foundation;\nuse OWC\\PDC\\Base\\Models\\Item;\n"
+                   "class Plugin { public function f(Item $i): void {} }\n")
+        repo.write("src/Base/Models/Item.php", "<?php\nnamespace OWC\\PDC\\Base\\Models;\nclass Item {}\n")
+        repo.write("pdc-base.php", "<?php\nrequire 'autoloader.php';\n")
+        repo.commit("plugin")
+        self.assertEqual(sig.php_source_roots(repo.dir, {}), ["src/Base/"])
+        report = sig.build_report(repo.dir, LIZARD, None)
+        php = report["structure"]["php"]
+        self.assertEqual(php["modules"], 2)
+        self.assertEqual(php["component_root"], "src/Base")
+
+    def test_php_source_roots_fall_back_to_lib_then_src(self):
+        with tempfile.TemporaryDirectory() as app:
+            self.assertEqual(sig.php_source_roots(app, {"lib/A.php": "php", "src/B.php": "php"}), ["lib/"])
+            self.assertEqual(sig.php_source_roots(app, {"src/B.php": "php"}), ["src/"])
+            with open(os.path.join(app, "composer.json"), "w") as fh:
+                json.dump({"autoload": {"psr-4": {"A\\": ["lib/", "extra"], "B\\": ""}}}, fh)
+            self.assertEqual(sig.php_source_roots(app, {}), ["", "extra/", "lib/"])
+
 
 def rated_report(langs, structure=None):
     """A report with the fields rating_inputs() reads. `langs` maps a language

@@ -706,6 +706,32 @@ def duplication_profile(app, clones, files_by_lang, limit=DUPLICATION_LIMIT):
 
 # ---- module structure ------------------------------------------------------
 
+def php_source_roots(app, files):
+    """Directory prefixes ("lib/", "src/Base/", "" for the root) that hold the
+    measured PHP: the PSR-4 roots of composer.json's `autoload` (autoload-dev
+    is test code), else lib/, else src/, whichever holds PHP first."""
+    roots = []
+    try:
+        with open(os.path.join(app, "composer.json"), encoding="utf-8") as fh:
+            psr4 = (json.load(fh).get("autoload") or {}).get("psr-4") or {}
+    except (OSError, ValueError, AttributeError):
+        psr4 = {}
+    if isinstance(psr4, dict):
+        for dirs in psr4.values():
+            for d in [dirs] if isinstance(dirs, str) else dirs if isinstance(dirs, list) else []:
+                d = re.sub(r"^(\./)+", "", str(d).strip()).strip("/")
+                if d in ("", "."):
+                    d = ""
+                roots.append(f"{d}/" if d else "")
+    if roots:
+        return sorted(set(roots))
+    php = [f for f, lg in files.items() if lg == "php"]
+    for d in ("lib/", "src/"):
+        if any(f.startswith(d) for f in php):
+            return [d]
+    return ["lib/"]
+
+
 def php_dependencies(app, files):
     """{module: set(modules it depends on)} for PHP files that declare a class
     in a namespace. Dependencies are `use` imports, fully-qualified names, and
@@ -1048,7 +1074,8 @@ def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE, reader=None):
             "most_complex_units": worst(rows, "ccn"),
             "widest_units": worst(rows, "params"),
         }
-    php = {f: lg for f, lg in files.items() if lg == "php" and f.startswith("lib/")}
+    roots = php_source_roots(app, files)
+    php = {f: lg for f, lg in files.items() if lg == "php" and any(f.startswith(r) for r in roots)}
     py = {f: lg for f, lg in files.items() if lg == "python"}
     report["structure"] = {}
     if php:
