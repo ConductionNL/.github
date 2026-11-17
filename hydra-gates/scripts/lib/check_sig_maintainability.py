@@ -746,20 +746,43 @@ def php_dependencies(app, files):
     return deps
 
 
+def python_module_names(app, rel):
+    """The dotted names a Python file is importable under: its path from the
+    repository root, and its name below the outermost directory that holds an
+    __init__.py (src/openzaak/utils.py is openzaak.utils). The second is None
+    for a file outside any package."""
+    parts = rel[:-3].split("/")
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    path_name = ".".join(parts)
+    dirs = rel.split("/")[:-1]
+    top = len(dirs)
+    while top > 0 and os.path.isfile(os.path.join(app, *dirs[:top], "__init__.py")):
+        top -= 1
+    package_name = ".".join(parts[top:]) if top < len(dirs) else None
+    return path_name, package_name
+
+
 def python_dependencies(app, files):
-    """{module: set(modules it imports)} for Python files, resolving absolute
-    imports against the repository root and every `src`-style parent, and
-    relative imports against the file's package."""
-    index = {}
+    """{module: set(modules it imports)} for Python files. An absolute import
+    resolves only when its first name is one of the project's own top-level
+    packages, or a top-level directory of the repository; a third-party or
+    standard-library import (django, typing) never resolves onto a local file
+    that happens to share its name. Relative imports resolve against the
+    file's package."""
+    index, own = {}, set()
     for rel in files:
-        mod = rel[:-3].replace("/", ".")
-        if mod.endswith(".__init__"):
-            mod = mod[: -len(".__init__")]
-        parts = mod.split(".")
-        for i in range(len(parts)):
-            index.setdefault(".".join(parts[i:]), rel)
+        path_name, package_name = python_module_names(app, rel)
+        index.setdefault(path_name, rel)
+        if "/" in rel:
+            own.add(rel.split("/")[0])
+        if package_name:
+            index.setdefault(package_name, rel)
+            own.add(package_name.split(".")[0])
 
     def resolve(name):
+        if name.split(".")[0] not in own:
+            return None
         while name:
             if name in index:
                 return index[name]

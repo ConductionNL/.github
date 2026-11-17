@@ -672,6 +672,27 @@ class Structure(unittest.TestCase):
         finally:
             repo.close()
 
+    def test_python_imports_resolve_only_within_the_project_packages(self):
+        repo = Repo()
+        try:
+            repo.write("src/openzaak/__init__.py", "")
+            repo.write("src/openzaak/query/__init__.py", "")
+            repo.write("src/openzaak/query/typing.py", "Alias = int\n")
+            repo.write("src/openzaak/query/django.py", "x = 1\n")
+            repo.write("src/openzaak/utils.py", "def f():\n    return 1\n")
+            repo.write("src/openzaak/views.py", "import typing\nfrom django.db import models\n"
+                       "from typing import Any\nimport openzaak.utils\nfrom openzaak.query import typing as t\n")
+            py = ["src/openzaak/__init__.py", "src/openzaak/query/__init__.py", "src/openzaak/query/typing.py",
+                  "src/openzaak/query/django.py", "src/openzaak/utils.py", "src/openzaak/views.py"]
+            deps = sig.python_dependencies(repo.dir, py)
+            self.assertEqual(deps["src/openzaak/views.py"], {"src/openzaak/utils.py", "src/openzaak/query/typing.py"})
+
+            repo.write("src/openzaak/plain.py", "import typing\nimport django\n")
+            deps = sig.python_dependencies(repo.dir, py + ["src/openzaak/plain.py"])
+            self.assertEqual(deps["src/openzaak/plain.py"], set())
+        finally:
+            repo.close()
+
 
 def rated_report(langs, structure=None):
     """A report with the fields rating_inputs() reads. `langs` maps a language
