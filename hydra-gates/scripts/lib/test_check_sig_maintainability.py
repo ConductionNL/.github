@@ -439,6 +439,25 @@ class Report(unittest.TestCase):
         self.assertIn("[gate-122] sig-maintainability: report: 2 unit(s) in 1 file(s), languages php", out)
         self.assertIn("| php | 2 |", out)
 
+    def test_jscpd_runs_with_a_raised_node_heap(self):
+        with mock.patch.dict(os.environ, {"NODE_OPTIONS": "--no-warnings"}):
+            self.assertEqual(sig.jscpd_env()["NODE_OPTIONS"], "--no-warnings --max-old-space-size=8192")
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(sig.jscpd_env()["NODE_OPTIONS"], "--max-old-space-size=8192")
+        seen = {}
+        real = subprocess.run
+
+        def spy(cmd, *a, **kw):
+            if cmd and cmd[0] == JSCPD:
+                seen["env"] = kw.get("env")
+            return real(cmd, *a, **kw)
+        repo = Repo()
+        self.addCleanup(repo.close)
+        repo.write("lib/A.php", php_class("A", [php_method("a")]))
+        with mock.patch.object(sig.subprocess, "run", spy):
+            sig.run_jscpd(repo.dir, JSCPD, ["lib/A.php"])
+        self.assertIn("--max-old-space-size=8192", seen["env"]["NODE_OPTIONS"])
+
     def test_duplication_counts_every_later_copy_of_six_code_lines(self):
         block = lambda tag: php_method("copy", lines=1, tag=tag).replace("        return 0;", DUP_BLOCK + "        return 0;")
         self.repo.write("lib/Service/A.php", php_class("A", [block("a")]))

@@ -638,6 +638,17 @@ def read_text(path):
 # duplication
 # --------------------------------------------------------------------------
 
+JSCPD_HEAP = "--max-old-space-size=8192"
+
+
+def jscpd_env():
+    """The environment jscpd runs in: node's default heap runs out on a large
+    repository, so the heap is raised to 8 GB on top of any NODE_OPTIONS."""
+    env = dict(os.environ)
+    env["NODE_OPTIONS"] = f"{env.get('NODE_OPTIONS', '')} {JSCPD_HEAP}".strip()
+    return env
+
+
 def run_jscpd(app, exe, files):
     """Clone pairs among `files` (repo-relative), as a list of
     {"a": (file, start, end), "b": (file, start, end), "lines": n, "code": {file: set}}.
@@ -654,7 +665,7 @@ def run_jscpd(app, exe, files):
     try:
         cmd = [exe, "--silent", "--reporters", "json", "--output", out_dir,
                "--min-lines", str(DUP_MIN_LINES), "--min-tokens", "30", "--mode", "weak", *files]
-        p = subprocess.run(cmd, cwd=app, capture_output=True, text=True)
+        p = subprocess.run(cmd, cwd=app, capture_output=True, text=True, env=jscpd_env())
         report = os.path.join(out_dir, "jscpd-report.json")
         if not os.path.isfile(report):
             raise RuntimeError(f"jscpd exited {p.returncode} without a report: {(p.stderr or p.stdout).strip()[-300:]}")
