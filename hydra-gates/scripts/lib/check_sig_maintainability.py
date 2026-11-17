@@ -26,9 +26,10 @@ ratchet   (the gate, on a delta base)
 
 report    (nightly, or a full-scope run with no base)
     The whole risk profile of one app, per language, against the 4-star limits:
-    unit size, unit complexity, unit interfacing, duplication, and for PHP and
-    Python module coupling, component independence and an entanglement
-    approximation. Written as JSON and as a short markdown table.
+    unit size, unit complexity, unit interfacing, duplication, and for PHP,
+    Python and JavaScript/TypeScript/Vue (one import graph) module coupling,
+    component independence and an entanglement approximation. Written as
+    JSON and as a short markdown table.
 
 PROFILES (report mode)
 ----------------------
@@ -839,6 +840,108 @@ def python_dependencies(app, files):
     return deps
 
 
+JS_LANGS = ("javascript", "typescript", "vue")
+JS_STRUCTURE = "js/ts/vue"
+JS_RESOLVE_EXTS = (".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".vue")
+JS_ALIASES = {"@/": "src/"}
+JS_TOKENS = re.compile(r"""("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|//[^\n]*|/\*.*?\*/""", re.S)
+JS_SPECIFIERS = re.compile(
+    r"""(?:^|[^\w$.])(?:import|export)\s+(type\s+)?(?:[\w$*{}\s,]+?\s+from\s+)?["']([^"'\n]+)["']"""
+    r"""|(?:^|[^\w$.])(?:require|import)\s*\(\s*["']([^"'\n]+)["']\s*\)""", re.M)
+JS_GRAPH_ENV = "HYDRA_GATE_SIG_JS_GRAPH"
+
+
+def js_specifiers(code):
+    """Module specifiers a JavaScript or TypeScript source imports: static
+    `import ... from`, side-effect `import '...'`, `export ... from`,
+    `require()` and dynamic `import()`. Comments are ignored, and so are
+    type-only imports, which leave no runtime dependency."""
+    text = JS_TOKENS.sub(lambda m: m.group(0) if m.group(1) else " ", code)
+    out = []
+    for m in JS_SPECIFIERS.finditer(text):
+        if m.group(1):
+            continue
+        out.append(m.group(2) or m.group(3))
+    return out
+
+
+def js_resolve(spec, rel, known):
+    """The measured file a specifier of `rel` names, or None for a package.
+    Relative paths resolve from the file's directory and `@/` from src/, with
+    the extensions and index files a bundler tries; a `.js` specifier also
+    finds the `.ts` source it compiles from."""
+    for alias, target in JS_ALIASES.items():
+        if spec.startswith(alias):
+            base = target + spec[len(alias):]
+            break
+    else:
+        if not spec.startswith("."):
+            return None
+        base = os.path.normpath(os.path.join(os.path.dirname(rel), spec)).replace(os.sep, "/")
+    base = base.split("?")[0].rstrip("/")
+    stem, ext = os.path.splitext(base)
+    candidates = [base] + [base + e for e in JS_RESOLVE_EXTS] + [f"{base}/index{e}" for e in JS_RESOLVE_EXTS]
+    if ext in (".js", ".mjs", ".cjs", ".jsx"):
+        candidates += [stem + ".ts", stem + ".tsx"]
+    for c in candidates:
+        if c in known:
+            return c
+    return None
+
+
+def js_dependencies_regex(app, files):
+    """{module: set(modules it imports)} from the regex import parser. A Vue
+    file is read from its <script> blocks only."""
+    known = set(files)
+    deps = {}
+    for rel, lang in files.items():
+        code = read_text(os.path.join(app, rel))
+        if lang == "vue":
+            code = vue_script(code)[0]
+        targets = {js_resolve(s, rel, known) for s in js_specifiers(code)}
+        deps[rel] = {t for t in targets if t} - {rel}
+    return deps
+
+
+def js_dependencies_depcruise(app, files):
+    """{module: set(modules it imports)} from dependency-cruiser's JSON, or
+    None when it is not available or fails. Type-only dependencies are left
+    out, as in the regex parser."""
+    exe = shutil.which("depcruise")
+    cmd = [exe] if exe else (["npx", "--no-install", "depcruise"] if shutil.which("npx") else None)
+    if not cmd or not files:
+        return None
+    dirs = sorted({f.split("/")[0] if "/" in f else f for f in files})
+    try:
+        p = subprocess.run([*cmd, "--output-type", "json", *dirs], cwd=app, capture_output=True, text=True)
+        data = json.loads(p.stdout) if p.returncode == 0 else None
+    except (OSError, ValueError):
+        data = None
+    if not isinstance(data, dict):
+        return None
+    deps = {rel: set() for rel in files}
+    for mod in data.get("modules", []):
+        src = mod.get("source")
+        if src not in deps:
+            continue
+        for d in mod.get("dependencies", []):
+            t = d.get("resolved")
+            if t in deps and t != src and "type-only" not in d.get("dependencyTypes", []):
+                deps[src].add(t)
+    return deps
+
+
+def js_dependencies(app, files):
+    """(graph, source) for the JavaScript, TypeScript and Vue files: the regex
+    parser by default, dependency-cruiser when HYDRA_GATE_SIG_JS_GRAPH is
+    `depcruise` and it runs (the regex parser otherwise)."""
+    if os.environ.get(JS_GRAPH_ENV) == "depcruise":
+        deps = js_dependencies_depcruise(app, files)
+        if deps is not None:
+            return deps, "dependency-cruiser"
+    return js_dependencies_regex(app, files), "regex"
+
+
 def component_of_factory(files):
     """Components are directories. Start at the repository root and descend
     while one child directory holds more than 80% of the modules under the
@@ -1082,6 +1185,12 @@ def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE, reader=None):
         report["structure"]["php"] = structure(app, php, php_dependencies(app, php), prof)
     if py:
         report["structure"]["python"] = structure(app, py, python_dependencies(app, py), prof)
+    js = {f: lg for f, lg in files.items() if lg in JS_LANGS}
+    if js:
+        deps, source = js_dependencies(app, js)
+        report["structure"][JS_STRUCTURE] = structure(app, js, deps, prof)
+        if report["structure"][JS_STRUCTURE]:
+            report["structure"][JS_STRUCTURE]["graph"] = source
     report["rating"] = rating_estimate(report)
     return report
 
@@ -1388,7 +1497,8 @@ def markdown(report):
             continue
         e = s["component_entanglement"]
         ci = s["component_independence"]
-        out += ["", f"{lang} structure ({s['modules']} modules, components under `{s['component_root']}`): "
+        graph = f", import graph: {s['graph']}" if s.get("graph") else ""
+        out += ["", f"{lang} structure ({s['modules']} modules, components under `{s['component_root']}`{graph}): "
                 f"module coupling >10/20/50 {cells(s['module_coupling'])}; "
                 f"component independence {pct(ci['hidden_share'])} {ci['stars']}★{'' if ci['ok'] else ' ✗'} (min {pct(ci['limit_min'])}); "
                 f"entanglement inputs: {e['communication_lines']} lines between {e['connected_components']} components, "
