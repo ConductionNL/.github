@@ -134,6 +134,11 @@ class Units(unittest.TestCase):
                "\t<!-- one line -->\n\t<div />\n\t<!-- open\n\tclose --> <span />\n</template>\n")
         self.assertEqual(sig.code_lines(vue, "vue"), {5, 7, 9, 10})
 
+    def test_php_attributes_are_code_and_hash_lines_are_comments(self):
+        php = "<?php\nclass A {\n    #[NoAdminRequired]\n    # a comment\n    #comment\n    public function f() {}\n}\n"
+        self.assertEqual(sig.code_lines(php, "php"), {1, 2, 3, 6, 7})
+        self.assertEqual(sig.code_lines("#[not an attribute]\nx = 1\n", "python"), {2})
+
     def test_python_self_and_cls_are_not_parameters(self):
         src = "class K:\n    def m(self, x, y):\n        return x\n\n    @classmethod\n    def c(cls, x):\n        return x\n\ndef f(self_like, b):\n    return b\n"
         got = {u["name"]: u["params"] for u in self.reader.units("k.py", "python", src)}
