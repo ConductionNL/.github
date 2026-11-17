@@ -25,7 +25,10 @@
      violation degree on the examples in SIG's Guidance for Producers. Python
      imports resolve only within the project's own packages, PHP is measured
      under the PSR-4 autoload roots, and JS/TS/Vue comes from a regex import
-     graph (or dependency-cruiser, when asked for).
+     graph (or dependency-cruiser, when asked for). The analysis scope file's
+     components:, component_base_dirs and component_depth define the
+     components; a single component leaves independence and entanglement
+     unrated, with a warning.
   6. PROFILES: four-star is the v18.1 guidance; five-star is the derived
      5-star band, stricter than four-star on every check; a share between the
      two passes four-star and misses five-star; every report row carries the
@@ -619,16 +622,70 @@ class Structure(unittest.TestCase):
         self.assertEqual(comp("lib/Service/X1.php"), "Service")
         self.assertEqual(comp("lib/AppInfo.php"), "(root)")
 
-    def test_components_from_scope_reads_top_level_directories(self):
+    def scope_components(self, text):
         with tempfile.TemporaryDirectory() as app:
             with open(os.path.join(app, "sigrid.yaml"), "w") as fh:
-                fh.write('component_base_dirs: [""]\n')
-            self.assertTrue(sig.sigrid_yaml_top_level_components(app))
-            with open(os.path.join(app, "sigrid.yaml"), "w") as fh:
-                fh.write("component_base_dirs: [lib]\n")
-            self.assertFalse(sig.sigrid_yaml_top_level_components(app))
-        self.assertEqual(sig.top_level_component_of("lib/Service/A.php"), "lib")
-        self.assertEqual(sig.top_level_component_of("index.php"), "Root files")
+                fh.write(text)
+            definition = sig.scope_file_components(app)
+        return definition, sig.scope_component_factory(definition)[1] if definition else None
+
+    def test_scope_file_component_base_dirs(self):
+        definition, comp = self.scope_components('model: "2026"\ncomponent_base_dirs: [""]  # top level\n')
+        self.assertEqual(definition, {"component_base_dirs": [""]})
+        self.assertEqual(comp("lib/Service/A.php"), "lib")
+        self.assertEqual(comp("index.php"), "Root files")
+        _d, comp = self.scope_components('component_base_dirs:\n  - "my-component"\n  - ""\nexclude:\n  - ".*/x/.*"\n')
+        self.assertEqual(comp("my-component/my-sub-component-a/a.py"), "my-component/my-sub-component-a")
+        self.assertEqual(comp("my-component/b.py"), "my-component")
+        self.assertEqual(comp("other-component/c.py"), "other-component")
+        _d, comp = self.scope_components("component_base_dirs: [lib]\n")
+        self.assertEqual(comp("lib/Service/A.php"), "lib/Service")
+        self.assertEqual(comp("src/main.js"), "src")
+
+    def test_scope_file_component_depth(self):
+        definition, comp = self.scope_components("component_depth: 2\n")
+        self.assertEqual(definition, {"component_depth": 2})
+        self.assertEqual(comp("src/openzaak/utils/a.py"), "src/openzaak")
+        self.assertEqual(comp("src/manage.py"), "src")
+        self.assertEqual(comp("setup.py"), "Root files")
+
+    def test_scope_file_components_list(self):
+        _d, comp = self.scope_components(
+            "components:\n  - name: North\n    include:\n      - \".*/my-sub-component-a/.*\"\n"
+            "      - \".*/my-sub-component-b/.*\"\n    exclude:\n      - \".*/b[.]py\"\n"
+            "  - name: South\n    include:\n      - \".*/other-component/.*\"\n      - \".*/b[.]py\"\n"
+            "component_depth: 1\n")
+        self.assertEqual(comp("my-sub-component-a/a.py"), "North")
+        self.assertEqual(comp("my-sub-component-b/b.py"), "South")
+        self.assertEqual(comp("other-component/c.py"), "South")
+        self.assertEqual(comp("elsewhere/d.py"), sig.UNASSIGNED)
+        self.assertEqual(self.scope_components("model: \"2026\"\n"), (None, None))
+
+    def test_one_component_leaves_independence_and_entanglement_unrated(self):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        repo.write("sigrid.yaml", 'component_base_dirs: [""]\n')
+        repo.write("lib/Service/A.php", "<?php\nnamespace OCA\\Fx\\Service;\nuse OCA\\Fx\\Db\\Thing;\nclass A { public function f(Thing $t): void {} }\n")
+        repo.write("lib/Db/Thing.php", "<?php\nnamespace OCA\\Fx\\Db;\nclass Thing {}\n")
+        repo.commit("app")
+        self.addCleanup(setattr, sig, "COMPONENTS_FROM_SCOPE", False)
+        sig.COMPONENTS_FROM_SCOPE = True
+        report = sig.build_report(repo.dir, LIZARD, None)
+        php = report["structure"]["php"]
+        self.assertEqual(php["components"].keys(), {"lib"})
+        self.assertIn("one component", php["warning"])
+        self.assertEqual((php["component_independence"]["stars"], php["component_independence"]["ok"]), (None, None))
+        self.assertIsNone(php["component_entanglement"]["stars"])
+        self.assertNotIn("php component_independence", [label for label, _ok in sig.checks_of(report)])
+        self.assertEqual(report["rating"]["properties"]["component_independence"]["languages"], {})
+        self.assertEqual(report["rating"]["properties"]["component_entanglement"]["languages"], {})
+        self.assertIn("Warning (php):", sig.markdown(report))
+
+        sig.COMPONENTS_FROM_SCOPE = False
+        php = sig.build_report(repo.dir, LIZARD, None)["structure"]["php"]
+        self.assertEqual(php["components"].keys(), {"Service", "Db"})
+        self.assertNotIn("warning", php)
+        self.assertIsNotNone(php["component_independence"]["stars"])
 
     def test_component_root_in_a_python_service_and_modules_outside_it(self):
         files = ["src/__init__.py", "src/api/main.py", "src/api/routers/a.py", "src/api/routers/b.py",
