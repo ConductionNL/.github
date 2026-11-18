@@ -128,7 +128,35 @@ Code that works today can still be too hard to change tomorrow. We score maintai
 
 Gate 122 holds the line on new work. A unit a pull request adds or edits fails when it has more than 60 lines of code, a McCabe complexity above 10, or five or more parameters. A new duplicated fragment of six lines or more fails too. A unit that was already over the bound, and did not get worse, is inherited.
 
-The first measurement, on 29 October 2026, was humbling. OpenRegister kept 17.7% of its PHP in units over 60 lines, where four stars allows 8.3%. The gate ships as a warning for now, so the fleet can catch up before it blocks.
+The gate ships as a warning for now, so the fleet can catch up before it blocks. The current rating of every app is on the [Quality matrix](../hydra/operations/quality-scores.mdx).
+
+#### Three ways to look at maintainability
+
+A star rating describes one code base. What a customer pays for is the maintenance of everything they run. So we look at maintainability in three ways, and combine them:
+
+```
+maintenance cost per party = (cost of one code base × number of code bases) ÷ parties sharing the cost
+```
+
+1. **The code base itself.** How hard is this code to change? That is the star rating above.
+2. **The number of code bases.** Ten simple applications are ten sets of logins, permissions, storage, updates and security fixes. Fewer code bases means less to maintain, even when each one is larger.
+3. **The parties carrying the cost.** A code base that 300 organisations share costs each of them a fraction of one that 3 share.
+
+The third factor is why we build for more than Dutch municipalities. Our apps run on any Nextcloud, for any organisation that needs them. Every extra party that uses a code base lowers the share each one pays.
+
+#### Why one core beats many small applications
+
+We expect municipalities to keep more than 40 registers in the coming years. The signs all point that way:
+
+- **The government's own count.** In 2024 the State Secretary for Digitalisation listed at least 65 public government registers, and later told parliament there are more ([Kamerstuk 32761-293](https://zoek.officielebekendmakingen.nl/kst-32761-293.pdf), [Binnenlands Bestuur](https://www.binnenlandsbestuur.nl/digitaal/omgevingswet/65-openbare-overheidsregisters-bekend)).
+- **The municipal data model.** VNG's Gemeentelijk Gegevensmodel (GGM) covers every policy domain of a municipality, with one domain registration per domain. More than a hundred municipalities use it ([VNG](https://vng.nl/praktijkvoorbeelden/het-gemeentelijk-gegevensmodel)).
+- **The national object registry.** VNG specified the Objecttypes API so municipalities do not have to build a full API for every simple object ([VNG](https://vng.nl/projecten/overige-objecten-registratie-api)). A standard like that only exists because the number of object types keeps growing.
+- **New rules add registers.** The algorithm register is on its way to becoming mandatory ([Binnenlands Bestuur](https://www.binnenlandsbestuur.nl/digitaal/traject-gestart-om-algoritmeregister-te-verplichten)), and the Wet open overheid (Woo) adds categories that must be published actively.
+- **Our own apps.** The apps we build today already define 32 registers between them, with about 960 schemas.
+
+Built the usual way, 40 registers are 40 code bases. Each one may score well on its own, and together they are 40 times the logins, permissions, updates and security fixes. One core configured 40 times scores lower as a single code base, and far better on the formula above. That is the choice behind [One core, many registers](../strategy/one-core-many-registers.md).
+
+It pays off in features too. Every capability the core gains, every register gets at once: an audit trail, access rules, search, notifications, and APIs such as REST and GraphQL subscriptions. A small application per register would have to build each of those again, and most never would.
 
 ### Review agents
 
@@ -151,7 +179,7 @@ Read from `quality.yml` and from the apps' own `code-quality.yml` callers. "Opt-
 | PHP | 8.3 and 8.4 for PHPUnit; 8.3 for lint and static analysis | `php-test-versions`, `php-version` |
 | Nextcloud | Every stable branch from the app's declared minimum to its declared maximum | Derived from `appinfo/info.xml` |
 | Single-server jobs | Newman, Playwright and the coverage guard run on the newest of those branches | Derived |
-| Database | PostgreSQL 16 by default; MySQL 8.4 and SQLite opt-in | `database`, `database-test-matrix` |
+| Database | PostgreSQL 16. MySQL 8.4 and SQLite are available as an opt-in, and no app uses it yet | `database`, `database-test-matrix` |
 
 Because the Nextcloud range is derived from `info.xml`, the versions an app claims to support and the versions it is tested on cannot drift apart. An app may override the range, and a gate then requires the override to agree with `info.xml`.
 
