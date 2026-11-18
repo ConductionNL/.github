@@ -71,7 +71,7 @@ When hosted CI is unavailable, the same steps run locally on a developer machine
 
 ### 6. Nightly
 
-The fleet drift sweep starts one full run of every app's quality workflow on `development`, every night at 03:00 UTC. It runs the whole matrix with no path filtering, so an app nobody touched is still measured against today's gates. The badges on [App health](../hydra/operations/app-health.md) show the results.
+The fleet drift sweep starts one full run of every app's quality workflow on its integration branch, every night at 03:00 UTC: `main` for apps on the Nextcloud branch model, `development` for the rest. It runs the whole matrix with no path filtering, so an app nobody touched is still measured against today's gates. The badges on [App health](../hydra/operations/app-health.md) show the results.
 
 ## How we know the code is good
 
