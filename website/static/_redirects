@@ -2,3 +2,11 @@
 /hydra/operations/sig-scores/ /hydra/operations/quality-scores/ 301
 /nl/hydra/operations/sig-scores /nl/hydra/operations/quality-scores/ 301
 /nl/hydra/operations/sig-scores/ /nl/hydra/operations/quality-scores/ 301
+/hydra/context /hydra/learning-loop/ 301
+/hydra/context/ /hydra/learning-loop/ 301
+/nl/hydra/context /nl/hydra/learning-loop/ 301
+/nl/hydra/context/ /nl/hydra/learning-loop/ 301
+/hydra/agentic-workflow /hydra/pipeline-overview/ 301
+/hydra/agentic-workflow/ /hydra/pipeline-overview/ 301
+/nl/hydra/agentic-workflow /nl/hydra/pipeline-overview/ 301
+/nl/hydra/agentic-workflow/ /nl/hydra/pipeline-overview/ 301
