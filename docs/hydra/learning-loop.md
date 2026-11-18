@@ -38,7 +38,7 @@ That order comes from experience. The rule against em-dashes in user-facing text
 Each developer's Claude Code keeps a memory: a folder of markdown files that grows with every session. The memory we build the fleet with holds more than 2,000 files. It works because of its shape:
 
 - **One fact per file.** Each file, a leaf, holds one rule, trap or fact, with why it matters and how to apply it.
-- **Hubs group the leaves.** 34 hub files each cover one topic, such as git safety, CI verdicts or OpenRegister behaviour.
+- **Hubs group the leaves.** 43 hub files each cover one topic, such as git safety, CI verdicts or OpenRegister behaviour.
 - **One root, loaded every session.** A single index file routes each topic to its hub. It has a hard budget of 20 KB, so only the rules that must always apply live there.
 - **Links between facts.** A leaf links related leaves with `[[name]]`, so the memory reads as a graph rather than a list.
 - **Nothing is deleted.** A fact that turns out wrong is marked as superseded by the fact that replaced it. The history of a decision stays readable.
