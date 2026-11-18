@@ -28,7 +28,7 @@ You don't need to write code to contribute:
 | Translate content       | PR to `.github` (docs site)                                |
 | Review a pull request   | GitHub PR review   |
 | Answer questions        | GitHub Discussions / Issues                     |
-| Report a security issue | See [Security Policy](../ISO/security)                     |
+| Report a security issue | See [Security Policy](../iso/security.md)                     |
 
 ## First-Time Contributors
 
@@ -46,7 +46,7 @@ Before filing a bug report, check existing issues — it may already be reported
 - Screenshots, logs, or error messages where relevant
 - Version of the app and Nextcloud (if applicable)
 
-**For security issues, do NOT open a public issue. See [Security Policy](../ISO/security).**
+**For security issues, do NOT open a public issue. See [Security Policy](../iso/security.md).**
 
 ## Suggesting Enhancements
 
@@ -62,16 +62,18 @@ Enhancement suggestions are tracked as issues on the repo's host — GitHub. Inc
 ### External contributors (fork & PR)
 
 1. Fork the repository
-2. Create a branch from `development`: `git checkout -b feature/your-feature-name`
+2. Create a branch from `main`: `git checkout -b feature/your-feature-name`
 3. Make your changes and commit using [Conventional Commits](#commit-messages)
 4. Sign off your commits (see [DCO](#developer-certificate-of-origin-dco))
-5. Push to your fork and open a PR targeting the `development` branch
+5. Push to your fork and open a PR targeting `main`
 6. Wait for CI to pass and request a review
 
 ### Conduction team members (direct branch)
 
-1. Create a branch from `development`: `feature/*`, `bugfix/*`
-2. Open a PR to `development` when ready
+1. Create a branch from `main`: `feature/*`, `bugfix/*`
+2. Open a PR to `main` when ready
+
+Some apps have not moved to this model yet. For those, branch from `development` and target `development`. The [branch model](#branch-model) below tells you how to check.
 
 ### PR checklist
 
@@ -80,27 +82,31 @@ Before opening a PR:
 - [ ] CI quality checks pass locally (`composer cs:check`, `composer phpstan`, `npm run lint`)
 - [ ] New code has tests where applicable
 - [ ] Documentation updated if behavior changes
-- [ ] PR labeled with `major`, `minor`, or `patch` (controls version bump)
+- [ ] On apps that still use `development`: PR labeled with `major`, `minor`, or `patch` (controls the version bump)
 - [ ] DCO sign-off on all commits (`git commit -s`)
 
-## Branch Model
+## Branch model
 
-All branches are protected via organization-wide rulesets. Direct pushes are not allowed. Every change flows through a pull request with peer review and CI.
+We follow Nextcloud's own convention (ADR-122). `main` is the development branch, and releases come from a `stableX.Y` branch per minor version.
 
+```mermaid
+flowchart LR
+  F["feature/*<br/>bugfix/*"] --> M["main<br/>next version"]:::accent
+  M -- "cut at release candidate" --> S["stableX.Y<br/>RC, final, patches"]
+  M -. "/backport to stableX.Y" .-> S
+  classDef accent fill:#F36C21,stroke:#F36C21,color:#fff;
 ```
-feature/* ──┐
-bugfix/*  ──┼──→ development ──→ beta ──→ main
-hotfix/*  ──┘                    ↑
-                                 └── (hotfix can target beta or main directly)
-```
 
-| Target        | Allowed sources           | Reviews required | CI required          |
-| ------------- | ------------------------- | ---------------- | -------------------- |
-| `development` | `feature/*`, `bugfix/*`   | 1                | Quality CI           |
-| `beta`        | `development`, `hotfix/*` | 1                | Quality CI           |
-| `main`        | `beta`, `hotfix/*`        | 2                | Branch Protection CI |
+| Target | Allowed sources | What happens |
+| --- | --- | --- |
+| `main` | `feature/*`, `bugfix/*` and other work branches | A GitHub prerelease. Nothing goes to the App Store. |
+| `stableX.Y` | `backport/*`, `release/v*`, `hotfix/*`, `dependabot/*` | Release candidates, finals and patches for that line |
 
-All rulesets enforce: no force pushes, no branch deletion, stale reviews dismissed on new pushes, all threads resolved before merge.
+Fixes always land on `main` first. Comment `/backport to stableX.Y` on the merged pull request, and the backport workflow opens a pull request into the stable branch. Nothing is merged upward from a stable branch.
+
+All branches are protected. Direct pushes are not allowed, and every change goes through a pull request with review and CI.
+
+**Apps move over one at a time.** OpenRegister moved first, on 9 November 2026. An app on this model lists `branch-model: main` in its workflows and appears under `main-branch` in [`fleet-apps.json`](https://github.com/ConductionNL/.github/blob/main/fleet-apps.json). On an app that has not moved yet, work still flows `development` → `beta` → `main`, as described on [Release process](release-process.md#apps-that-have-not-moved-yet). On a moved app, `development` and `beta` are locked.
 
 ## Quality Workflow
 
@@ -111,7 +117,7 @@ Every PR triggers automated quality checks. **All must pass before merge.**
 | Check           | Tool                      |
 | --------------- | ------------------------- |
 | Syntax          | `php -l`                  |
-| Code style      | PHPCS ([Conduction standard](ci-cd.md#formatting--the-important-one)) |
+| Code style      | PHPCS ([Conduction standard](ci-cd.md#formatting--one-standard-and-it-is-nextclouds)) |
 | Static analysis | PHPStan (level 5) + Psalm |
 | Mess detection  | PHPMD                     |
 
@@ -131,7 +137,7 @@ Every PR triggers automated quality checks. **All must pass before merge.**
 
 > **`cs:check` / `cs:fix` are PHPCS here, not php-cs-fixer.** They are the script
 > names `nextcloud/coding-standard` defines, and in this fleet they are aliases for
-> `phpcs` / `phpcbf`. See [CI/CD and Code Standards](ci-cd.md#formatting--the-important-one).
+> `phpcs` / `phpcbf`. See [CI/CD and Code Standards](ci-cd.md#formatting--one-standard-and-it-is-nextclouds).
 
 ```bash
 # PHP
@@ -176,7 +182,9 @@ If you forget, amend your last commit: `git commit --amend -s`
 
 ## Release Process
 
-Releases are fully automated via GitHub Actions on merge to `beta` (nightly) or `main` (stable). Version numbers are calculated from PR labels:
+On the Nextcloud model, the version is the one committed in `appinfo/info.xml` on the branch you release from. A stable release ships exactly that version, from a `stableX.Y` branch.
+
+On apps that have not moved yet, releases run on merge to `beta` (beta channel) or `main` (stable), and PR labels decide the version:
 
 | Label             | Effect            |
 | ----------------- | ----------------- |
