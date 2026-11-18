@@ -15,19 +15,16 @@ This page shows how the pieces fit together. Each piece has its own page, linked
 ## The loop
 
 ```mermaid
-flowchart LR
-  U["<b>Users</b><br/>request a feature<br/>report a bug"]
-  D["<b>Define</b><br/>spec · ADR<br/>capability · screen"]
-  B["<b>Build</b><br/>Hydra agents<br/>write code and tests"]:::accent
-  V["<b>Verify</b><br/>101 gates · tests<br/>review agents"]
-  H["<b>Developer</b><br/>decides and merges"]
-  R["<b>Release</b><br/>the app the user asked for"]
-  L["<b>Learn</b><br/>memory · skills<br/>new gates"]
-  U --> D --> B --> V --> H --> R --> U
-  V -. "what went wrong" .-> L
-  H -. "corrections" .-> L
-  L -. "better context" .-> D
-  L -. "new checks" .-> V
+flowchart TD
+  U["1 · Users<br/>ask for a feature"] --> D["2 · Define<br/>spec, ADR, screen"]
+  D --> B["3 · Build<br/>Hydra agents"]:::accent
+  B --> V["4 · Verify<br/>gates and tests"]
+  V --> H["5 · Developer<br/>decides and merges"]
+  H --> R["Release"]
+  R --> U
+  V -.-> L["6 · Learn<br/>memory, skills, gates"]
+  H -.-> L
+  L -.-> D
   classDef accent fill:#F36C21,stroke:#F36C21,color:#fff;
 ```
 
@@ -36,7 +33,7 @@ flowchart LR
 3. **Build.** Hydra's agents turn the spec into a pull request, tests included. See [Hydra](../hydra/README.md).
 4. **Verify.** Gates, test suites and review agents check the pull request against the definition. See [Development pipeline](development-pipeline.md).
 5. **Decide.** A developer reads the result and merges it, or sends it back.
-6. **Learn.** Every mistake that cost time becomes a memory, a sharper skill or a new gate. See [The learning loop](../hydra/learning-loop.md).
+6. **Learn.** What the checks catch and what the developer corrects flows back, as a memory, a sharper skill or a new gate. The next change starts with it. See [The learning loop](../hydra/learning-loop.md).
 
 ## Why we do not trust the model
 
