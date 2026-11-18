@@ -2,55 +2,92 @@
 title: Hydra
 sidebar_label: Hydra
 sidebar_position: 1
-description: Conduction's agentic spec-driven CI/CD pipeline — what it is, how it works, and how to put it to work on your PR.
+description: Conduction's agent pipeline. How a spec becomes a reviewed pull request, who the agents are, and where the developer stands.
 ---
 
 # Hydra
 
-**Hydra is Conduction's agentic spec-driven CI/CD pipeline.** It takes an OpenSpec change proposal and runs it through a multi-stage AI pipeline — Builder, automated quality tests, parallel Code and Security Review — and produces a draft pull request ready for a single human approval. No code reaches `main` without a human in the loop.
+Hydra is the part of the [code factory](../WayOfWork/spec-driven-development.md) that writes code. It takes an OpenSpec change and runs it past four agents. Out comes a pull request with its tests, its reviews and a verdict. A developer decides whether it lands.
 
-It is the factory, not the product. The applications Hydra builds live under the [ConductionNL](https://github.com/ConductionNL) GitHub org; Hydra itself lives at [ConductionNL/hydra](https://github.com/ConductionNL/hydra) (private).
+Hydra lives in [ConductionNL/hydra](https://github.com/ConductionNL/hydra), a private repository. The apps it builds are public, under [ConductionNL](https://github.com/ConductionNL).
 
-## How it works
+## Where the work comes from
 
-<cn-arch-flow>
-  <span>Todo</span>
-  <span accent>Builder</span>
-  <span>Quality tests</span>
-  <span>Browser tests</span>
-</cn-arch-flow>
-<cn-arch-flow arrow="down">
-  <span>Code review</span>
-  <span hex>Security review</span>
-  <span>Draft PR</span>
-  <span>Archive</span>
-</cn-arch-flow>
+```mermaid
+flowchart LR
+  R["Users<br/>feature requests, bug reports"] --> S
+  T["Specter<br/>tenders, competitors"] --> S
+  S["OpenSpec change<br/>proposal · specs · design · tasks"]:::accent --> H["Hydra<br/>build and review"]
+  H --> P["Pull request<br/>with tests and verdicts"]
+  P --> D["Developer<br/>merge or send back"]
+  classDef accent fill:#F36C21,stroke:#F36C21,color:#fff;
+```
 
-- **Builder** — implements the change, pushes the branch early, opens a draft PR. The accent of the build phase.
-- **Quality tests** — lint, phpcs, phpmd, psalm, phpstan, phpmetrics, composer audit, eslint, stylelint, npm audit, PHPUnit, Newman. A failure loops back to the Builder for a bounded `fix-quality` round.
-- **Browser tests** — Playwright MCP runs the GIVEN/WHEN/THEN acceptance criteria against a live Nextcloud. Failures loop back to the Builder for a bounded `fix-browser` round.
-- **Code review** — reads diff + ADRs, applies bounded in-scope fixes directly to the PR branch. A `fail` verdict escalates to `needs-input` — no retry loop ([ADR-013](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-013-container-pool.md)).
-- **Security review** — runs after the code reviewer hands off (sequential — reviewers share git state), same bounded fix authority. The orange-hex accent is here because security is the last gate before human approval.
-- **Draft PR** — a human reviews and merges. With the `yolo` label, the pipeline approves and merges automatically.
-- **Archive** — after merge, sync specs to Specter, generate test scenarios, update changelog.
+Two streams feed the specs:
 
-**Traceability.** Every line of code traces to its spec via two paths: a `@spec` PHPDoc tag pointing at `openspec/changes/{name}/tasks.md#task-N`, and `git blame` → commit `(#N)` → PR `Closes #N` → issue → spec. Branch naming is `feature/{issue-number}/{change-name}` and every commit includes `(#N)`.
+- **Users.** A request filed from inside an app becomes an issue. A `needs-spec` label makes Hydra write the spec for it. [Users are the moat](../strategy/users-are-the-moat.md) describes that path.
+- **Specter.** Our research pipeline reads public tenders and competitor documentation. It turns them into capability rows and spec changes, and opens an issue that starts the build.
 
-**Model selection.** Default model for every persona is Sonnet. When the weekly Sonnet quota runs out, the Builder falls back to **Haiku** (cheaper, still good at pattern-following from `tasks.md`/`design.md`); the Reviewers and the Applier fall back to **Opus** (deeper, since judgment work is the last line of defense before human approval). Authoritative configuration lives in each persona's `agents/<persona>/config.yaml` in the hydra repo; runtime overrides via `HYDRA_BUILDER_MODEL`, `HYDRA_REVIEWER_MODEL`, `HYDRA_APPLIER_MODEL`, and their `*_FALLBACK_MODEL` counterparts.
+Hydra never builds from a prompt. If no spec exists, there is nothing to build.
 
-## How to use Hydra on your PR
+## The agents
 
-You don't run Hydra yourself — you trigger it with labels.
+Each agent runs in its own container, with its own token and its own narrow job. They all default to Sonnet.
 
-1. **Open an issue** in the target repo with a clear acceptance description and add the `ready-to-build` label. Hydra picks it up.
-2. **Or, on an existing PR**, request review from Hydra by adding a label:
-   - `code-review:queued` — queue a code review.
-   - `security-review:queued` — queue a security review.
+| Agent | Role | May change code? |
+| --- | --- | --- |
+| **Al Gorithm** | Builder. Implements the tasks, writes the tests, opens the pull request | Yes |
+| **Juan Claude van Damme** | Code reviewer. Reads the diff against the ADRs and the spec | Bounded fixes only |
+| **Clyde Barcode** | Security reviewer. Adds Semgrep and reads the code after Juan's fixes | Bounded fixes only |
+| **Axel Pliér** | Applier. Gives the final go or no-go | No |
 
-   Reviews are **sequential** by design (the security review consumes the code review's git state). Setting both queued labels at once is not supported and will produce conflicts. Trigger them one at a time.
+The split is deliberate. The agent that writes the code never judges it. The agent that judges it last cannot change it, so it has no reason to grade its own fixes kindly.
 
-3. **Crashes escalate to `needs-input`** rather than auto-retrying. If a Hydra container fails, or either reviewer emits a fail verdict, you'll see a `needs-input` label so a human can investigate. There is no retry loop ([ADR-013](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-013-container-pool.md)) — recovery is explicit via the `retry:queued` (fix the flagged findings) or `rebuild:queued` (start over) labels.
-4. **The `yolo` label means auto-merge after the pipeline passes.** All phases still run; `yolo` only removes the human approval gate at the end.
+## How a change moves
+
+```mermaid
+flowchart TD
+  A["ready-to-build"] --> B["Al Gorithm builds<br/>code + tests"]:::accent
+  B --> C{"Quality and<br/>browser tests"}
+  C -- red --> B
+  C -- green --> D["Juan reviews code<br/>bounded fixes"]
+  D --> E["Clyde reviews security<br/>bounded fixes"]
+  E --> F{"Fixes applied?"}
+  F -- none --> G["Done"]
+  F -- some --> H["Re-run checks,<br/>Axel decides"]
+  H -- pass --> G
+  H -- fail --> N["needs-input<br/>a person looks"]
+  D -- fail --> N
+  E -- fail --> N
+  G --> M["Developer merges"]
+  classDef accent fill:#F36C21,stroke:#F36C21,color:#fff;
+```
+
+- **Build.** Al Gorithm pushes the branch early and runs the quality checks and the Playwright scenarios. A red result goes back to the builder for a bounded fix round.
+- **Review.** Juan, then Clyde, read the diff. They run one after the other, because they share the branch. Each may fix what is small and in scope, and must report the rest.
+- **Decide.** When the reviewers fixed nothing, the change is done. When they did fix something, the checks run again, and Axel reads the final diff.
+- **Escalate.** Any failure ends in `needs-input`. Hydra does not retry in a loop (ADR-013). A person reads what went wrong and chooses `retry:queued` or `rebuild:queued`.
+
+The full state machine, with every label, is on [Pipeline overview](pipeline-overview.md).
+
+## The developer in the middle
+
+The agents type. The developer decides, and nothing in Hydra takes that away:
+
+- **Before the build,** the developer approves the spec. A spec that missed the point is cheap to fix here.
+- **During the build,** the developer answers `needs-input`. The pipeline stops instead of guessing.
+- **After the build,** the developer reviews and merges. The `yolo` label skips that last approval, and it is only for small changes the developer has already judged.
+
+A developer also works next to Hydra, with Claude Code in their own session. The same skills, gates and review agents run there. [Using Hydra](../claude/README.md) covers that way of working.
+
+## How to start Hydra
+
+You start Hydra with labels.
+
+1. **Build from a spec.** Add `ready-to-build` to an issue that links an OpenSpec change.
+2. **Write the spec first.** Add `needs-spec` to an issue. Hydra writes the change, then builds it.
+3. **Review an existing pull request.** Add `code-review:queued`. Add `security-review:queued` after the code review finishes. Setting both at once causes conflicts.
+4. **Recover.** After `needs-input`, use `retry:queued` to fix the flagged findings, or `rebuild:queued` to start over.
 
 ## Hydra repo vs .github repo
 
@@ -58,14 +95,14 @@ You don't run Hydra yourself — you trigger it with labels.
 
 Two separate repos, two distinct purposes, no overlap:
 
-| | **[`Conduction/hydra`](https://github.com/ConductionNL/hydra)** *(private)* | **[`Conduction/.github`](https://github.com/ConductionNL/.github)** *(public)* |
+| | **[`ConductionNL/hydra`](https://github.com/ConductionNL/hydra)** *(private)* | **[`ConductionNL/.github`](https://github.com/ConductionNL/.github)** *(public)* |
 |---|---|---|
 | **What it contains** | Container images, agent personas, orchestration scripts, the `.claude/skills/` catalogue (`hydra-gate-*`, `opsx-*`, `test-*`), OpenSpec changes, K8s manifests | Developer guides (`docs/claude/`), Way-of-Work and onboarding (`docs/WayOfWork/`), the public Hydra one-pager (`docs/hydra/`), ISO compliance (`docs/iso/`), global Claude settings (`global-settings/`), the usage-tracker tool |
-| **What it's for** | *Running* the pipeline — everything that executes | *Reading and configuring* — everything you study, install once per machine, or hand to a new colleague |
+| **What it's for** | *Running* the pipeline: everything that executes | *Reading and configuring*: everything you study, install once per machine, or hand to a new colleague |
 | **Clone it when** | You want to run Hydra locally, modify a skill, inspect agent configs, or browse the OpenSpec change backlog | You want to read the docs offline, install the mandatory global Claude settings, or contribute to the developer handbook |
-| **Self-description** | "Factory, not the product" — from [`hydra/README.md`](https://github.com/ConductionNL/hydra/blob/main/README.md) and [`hydra/CLAUDE.md`](https://github.com/ConductionNL/hydra/blob/main/CLAUDE.md) | "Central hub for org-level defaults, developer guides, global tooling configuration, and shared documentation" — from [`.github/README.md`](https://github.com/ConductionNL/.github/blob/main/README.md) |
+| **Self-description** | "Factory, not the product", from [`hydra/README.md`](https://github.com/ConductionNL/hydra/blob/main/README.md) and [`hydra/CLAUDE.md`](https://github.com/ConductionNL/hydra/blob/main/CLAUDE.md) | "Central hub for org-level defaults, developer guides, global tooling configuration, and shared documentation", from [`.github/README.md`](https://github.com/ConductionNL/.github/blob/main/README.md) |
 
-Each repo has its own `docs/` directory, and that's not a duplication: **Hydra's `docs/`** covers pipeline internals (container architecture, secrets, cron, retrospectives) — only relevant if you operate the pipeline. **`.github/docs/`** is for everyone using the pipeline as a consumer.
+Each repo has its own `docs/` directory, and that's not a duplication: **Hydra's `docs/`** covers pipeline internals (container architecture, secrets, cron, retrospectives), which matter only if you operate the pipeline. **`.github/docs/`** is for everyone using the pipeline as a consumer.
 
 Most developers only need `.github`. You only need the Hydra clone when you're working *on* the pipeline (skills, agents, container images) rather than *with* it (triggering it on your PR via labels).
 
@@ -80,29 +117,33 @@ other half is the coding standard the gates check against, and that standard is
 
 Formatting is owned by php-cs-fixer via
 [`conduction/coding-standard`](https://github.com/ConductionNL/coding-standard),
-which *extends* `nextcloud/coding-standard` and can only add to it — enforced by
-that package's invariant test rather than by review. PHP_CodeSniffer keeps only
+which *extends* `nextcloud/coding-standard` and can only add to it. That package's invariant test enforces
+this, not a review. PHP_CodeSniffer keeps only
 the semantic rules (named parameters, `@spec`, banned debug functions, removed
 Nextcloud APIs), with every whitespace and brace sniff removed so the two tools
 cannot contradict each other.
 
 **gate-65 `coding-standard-adoption`** is what holds it in place. It fails an app
 that keeps a local ruleset, ships no `.editorconfig`, wires `cs:fix` to PHPCS,
-analyses against a `nextcloud/ocp` below its declared `min-version` — or **pins**
+analyses against a `nextcloud/ocp` below its declared `min-version`, or **pins**
 the gates, the coding standard or the shared workflow instead of tracking the tip.
 
 The full comparison against Nextcloud's own app CI/CD, including what we do not
-yet run, is in [Way of Work → CI/CD and Code Standards](../WayOfWork/ci-cd.md).
+yet run, is in [CI/CD and code standards](../WayOfWork/ci-cd.md).
 
 ## Where to learn more
 
-For a narrative introduction, the Academy's **[Hydra tutorial series](https://conduction.nl/academy/?series=hydra-tutorial)** walks through what Hydra is, the three pipelines, the quality gates, the skill catalogue, and how to start a real run — six short modules. Read it first if you're new to Hydra; come back here for the reference detail.
+For a narrative introduction, the Academy's **[Hydra tutorial series](https://conduction.nl/academy/?series=hydra-tutorial)** walks through what Hydra is, the three pipelines, the quality gates, the skill catalogue, and how to start a real run: six short modules. Read it first if you're new to Hydra; come back here for the reference detail.
 
 The deep technical detail stays in the [hydra repo](https://github.com/ConductionNL/hydra):
 
-- [hydra/README.md](https://github.com/ConductionNL/hydra/blob/main/README.md) — quickstart and full pipeline overview.
-- [hydra/docs/](https://github.com/ConductionNL/hydra/tree/main/docs) — pipeline-overview, agentic-workflow, container-architecture, github-workflow, deployment-models, agent-configuration.
-- [hydra/openspec/architecture/](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) — the org-wide ADRs (data layer, API, backend, frontend, security, container pool, and more). GitHub renders the directory as a browsable index; the directory itself is the authoritative list.
-- [hydra/.claude/skills/](https://github.com/ConductionNL/hydra/tree/main/.claude/skills) — every gate (`hydra-gate-*`), every opsx command (`opsx-*`), and the Hydra-specific tooling.
+- [hydra/README.md](https://github.com/ConductionNL/hydra/blob/main/README.md): quickstart and full pipeline overview.
+- [hydra/docs/](https://github.com/ConductionNL/hydra/tree/main/docs): pipeline-overview, container-architecture, github-workflow, deployment-models, agent-configuration.
+- [hydra/openspec/architecture/](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture): the org-wide ADRs (data layer, API, backend, frontend, security, container pool, and more). GitHub renders the directory as a browsable index; the directory itself is the authoritative list.
+- [hydra/.claude/skills/](https://github.com/ConductionNL/hydra/tree/main/.claude/skills): every gate (`hydra-gate-*`), every opsx command (`opsx-*`), and the Hydra-specific tooling.
 
 For how Hydra fits into the broader Claude-driven development workflow, see [Claude workflow](/claude/).
+
+## Next step
+
+Have an issue that is ready? Check that it links an OpenSpec change, then add `ready-to-build`. No spec yet? Add `needs-spec` instead.

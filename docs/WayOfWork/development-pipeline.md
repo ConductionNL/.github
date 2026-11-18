@@ -26,6 +26,8 @@ flowchart TD
 
 Each layer runs once. A whole-tree check on every edit costs hours and tells you little, because most of what it reports was there before you started.
 
+We measured what happens otherwise. In September 2026, agent sessions spent 0.8% of their tool time editing and about 70% verifying, polling and waiting. They re-ran whole-tree checks on every iteration, against a base that was already red.
+
 ### 1. Diff check, while you build
 
 The diff check runs the gates on the files you changed: `php -l`, PHP_CodeSniffer, PHPStan, the unit tests of the classes you touched, ESLint and Stylelint. It sorts every finding into **new** (on a line you touched) or **inherited** (on a line you did not). Only new findings count.
@@ -70,6 +72,73 @@ When hosted CI is unavailable, the same steps run locally on a developer machine
 ### 6. Nightly
 
 The fleet drift sweep starts one full run of every app's quality workflow on `development`, every night at 03:00 UTC. It runs the whole matrix with no path filtering, so an app nobody touched is still measured against today's gates. The badges on [App health](../hydra/operations/app-health.md) show the results.
+
+## How we know the code is good
+
+We do not trust code because an agent wrote it carefully, or because a person did. We trust it when a machine has checked it against what we wrote down first. Three kinds of checks do that, each catching what the others miss.
+
+```mermaid
+flowchart LR
+  C["Pull request"] --> G["Mechanical gates<br/>101 declared"]
+  C --> T["Tests<br/>unit · API · end-to-end"]
+  C --> R["Review agents<br/>code · security · users"]
+  G --> V{"Verdict"}
+  T --> V
+  R --> V
+  V --> D["Developer"]:::accent
+  classDef accent fill:#F36C21,stroke:#F36C21,color:#fff;
+```
+
+### Gates come from incidents
+
+A Hydra gate is a script that fails a pull request on one specific mistake. The package [`conduction/hydra-gates`](https://github.com/ConductionNL/.github/tree/main/hydra-gates) declares 101 of them. Most gates exist because the mistake shipped once:
+
+| What went wrong | Where | The gate that now catches it |
+| --- | --- | --- |
+| Four controller methods let any logged-in user act on any object | decidesk#44 | `no-admin-idor` fails an endpoint without a per-object check |
+| Authorization methods were written, and nothing called them | decidesk#60 | `orphan-auth` fails a check that no code calls |
+| Endpoints could never be reached, because they had no auth attribute | decidesk#47 | `route-auth` fails a route without one |
+| 41 controller methods had no route, yet their tasks were ticked as done | openregister | `route-reachability` fails both directions |
+| A method shipped with no link to any requirement | fleet-wide | gate 16 requires a `@spec` tag on every changed method |
+| A spec scenario shipped with no test | fleet-wide | gate 19 requires an end-to-end test for every new scenario |
+
+Gates judge only the lines a pull request changed (ADR-020). Old debt does not block new work. A separate sweep owns it.
+
+### A check that judged nothing says so
+
+A gate that inspects nothing looks exactly like a gate that passed. We learned that the expensive way, so every gate reports one of three states (ADR-115):
+
+- **Ran**, with a pass or a fail.
+- **Not applicable**, with a reason, when the thing it checks is absent.
+- **Skipped**, when its input or its own tooling is missing.
+
+Each run ends with a coverage line, such as `COVERAGE: 11 of 101 declared gates reported a result (88 not applicable; 11 of 13 applicable gates ran)`. Two applicable gates that did not run are a finding, not a pass.
+
+### Tests that can fail
+
+A test that passes whatever the code does proves nothing. So the rules ask for tests that touch the real thing:
+
+- **Security routes** need at least one test through the real router and middleware, not a controller built by hand (ADR-060).
+- **Every UI surface** needs an end-to-end test that navigates there and asserts something specific to that page (ADR-074).
+- **A spec marked implemented** must point at code that exists (ADR-060).
+
+### Maintainability (ISO 25010)
+
+Code that works today can still be too hard to change tomorrow. We score maintainability per app on the ISO 25010 model, from one to five stars. It counts how much code sits in units that are too long, too complex or take too many parameters, plus duplication.
+
+Gate 122 holds the line on new work. A unit a pull request adds or edits fails when it has more than 60 lines of code, a McCabe complexity above 10, or five or more parameters. A new duplicated fragment of six lines or more fails too. A unit that was already over the bound, and did not get worse, is inherited.
+
+The first measurement, on 29 October 2026, was humbling. OpenRegister kept 17.7% of its PHP in units over 60 lines, where four stars allows 8.3%. The gate ships as a warning for now, so the fleet can catch up before it blocks.
+
+### Review agents
+
+Mechanical gates catch known mistakes. Review agents catch the rest:
+
+- **Code review** reads the diff against the ADRs and the spec.
+- **Security review** adds static analysis with Semgrep and reads the code after the code review's fixes.
+- **User review** runs the app as personas would. Eight persona skills test it as real users, and the feature counsel reads the specs through nine perspectives, a screen-reader user among them.
+
+A review agent may fix what is small and in scope. Everything else it must report, and the developer decides.
 
 ## The test matrix
 

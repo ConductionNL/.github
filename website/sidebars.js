@@ -62,18 +62,17 @@ const sidebars = {
       collapsed: false,
       link: { type: 'doc', id: 'hydra/README' },
       items: [
+        'hydra/learning-loop',
         {
           type: 'category',
           label: 'Pipeline',
           collapsed: true,
           items: [
             'hydra/pipeline-overview',
-            'hydra/agentic-workflow',
             'hydra/agent-configuration',
             'hydra/container-architecture',
             'hydra/deployment-models',
             'hydra/github-workflow',
-            'hydra/context',
           ],
         },
         {
