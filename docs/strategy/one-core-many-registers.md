@@ -45,6 +45,8 @@ Every line we write is a line we maintain. The smallest footprint is the one wit
 
 That count only means something across the whole stack a product replaces. One app per register looks small per app. Add up each app's own login, permissions, notifications, storage and frontend, and the total is many times larger. Our individual components can look large, because the core carries what every app would otherwise repeat. Judge the total, not the component.
 
+How we weigh code quality, the number of code bases and the parties sharing the cost is on [Development pipeline](../WayOfWork/development-pipeline.md#three-ways-to-look-at-maintainability).
+
 ## Next step
 
 Planning a new app or register? Start with [The code factory](../WayOfWork/spec-driven-development.md), and check [Architecture decisions](../WayOfWork/architecture-decisions.md) for what the core already does.

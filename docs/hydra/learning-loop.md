@@ -67,7 +67,33 @@ We rate skills on seven levels (L1–L7, see [Writing skills](../claude/writing-
 
 Most skills stop at L4. They feel right but nobody has measured them. L5 turns that feeling into evidence.
 
-Self-learning skills are still being built. ADR-068 is proposed, not adopted. It sets one firm rule: a skill never rewrites itself directly. Every change it proposes goes through a gated draft that a person reviews.
+### How a skill learns
+
+Skills learn on a schedule. Hermiq, our agent app, runs the loop as Nextcloud background jobs, driven by the Nextcloud cron every five minutes:
+
+```mermaid
+flowchart LR
+  A["Agent run<br/>with skills"] --> C["Capture<br/>after every run"]
+  C --> K["learning-candidates.md"]
+  K --> P["Promote<br/>daily"]
+  P --> L["learnings.md"]:::accent
+  L --> X["Consolidate<br/>daily"]
+  X --> D["Draft of a<br/>better skill"]
+  D --> H["Person approves"]
+  H --> A
+  classDef accent fill:#F36C21,stroke:#F36C21,color:#fff;
+```
+
+| Job | When | What it does |
+| --- | --- | --- |
+| Learnings capture | After every agent run | Writes what the run taught into the skill's `learning-candidates.md` |
+| Learnings promotion | Daily | Moves a candidate into `learnings.md` once three separate runs confirm it, or once it explains a failed eval. Drops candidates nobody touched for 30 days. No model is involved, so this step cannot hallucinate. |
+| Consolidation | Daily | Turns the learnings into a draft of an improved skill, pre-qualifies it against the evals, and watches for regressions after a person accepts it |
+| Curation | Daily | Marks unused skills stale, then archives them. Nothing is deleted. |
+
+ADR-068 sets the one rule that makes this safe: a skill never rewrites itself directly. Every change becomes a draft version that passes an approval, a security re-scan and an eval regression check. Self-modifying skills would otherwise be an open door for prompt injection.
+
+The skills we develop with follow the same pattern. Nineteen Hydra skills keep a `learnings.md` next to their procedure, which the next session reads before it starts.
 
 ## Retrospectives
 
