@@ -79,6 +79,24 @@ Pick any line of code and you can walk back to the requirement, the issue and th
 
 Artifacts an agent creates carry a mark that says so (ADR-088). A reader can always tell agent work from human work.
 
+## Strict at the end of the cycle
+
+While an agent builds, it checks only the lines it touched. That keeps the loop fast. At the end of a cycle, the whole app is held to the full standard, at four moments:
+
+| Moment | What runs | On what |
+| --- | --- | --- |
+| Before the push | `composer check:strict`: `php -l`, PHP_CodeSniffer, PHPMD, Psalm, PHPStan and the complete PHPUnit suite. Then `npm run lint` | The developer's machine, once per pull request |
+| On the merge | Everything the app enables: PHPUnit, Newman, Playwright, axe-core, the Hydra gates, supply-chain checks | PHP 8.3 and 8.4, times every Nextcloud version the app declares, on PostgreSQL |
+| Every night | The same full run for every app, whether anyone touched it or not | `development` of every app, at 03:00 UTC |
+| Before a release | The full suite again, on the pull request that promotes `development` to `beta`, then `beta` to `main` | The release candidate |
+
+A red result at any of these moments is fixed first, before new work lands. The step-by-step version, with the full test matrix, is on [Development pipeline](development-pipeline.md).
+
+The results are public:
+
+- [App health](../hydra/operations/app-health.md) shows the live status of every app on every branch.
+- [Quality matrix](../hydra/operations/quality-scores.mdx) shows each app's component checker score, its maintainability rating and every gate.
+
 ## The developer in the middle
 
 The agents never decide what to build, and they never merge on their own authority. The developer does four things the factory cannot:

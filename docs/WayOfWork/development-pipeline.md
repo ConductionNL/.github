@@ -128,7 +128,7 @@ Code that works today can still be too hard to change tomorrow. We score maintai
 
 Gate 122 holds the line on new work. A unit a pull request adds or edits fails when it has more than 60 lines of code, a McCabe complexity above 10, or five or more parameters. A new duplicated fragment of six lines or more fails too. A unit that was already over the bound, and did not get worse, is inherited.
 
-The first measurement, on 29 October 2026, was humbling. OpenRegister kept 17.7% of its PHP in units over 60 lines, where four stars allows 8.3%. The gate ships as a warning for now, so the fleet can catch up before it blocks.
+The gate ships as a warning for now, so the fleet can catch up before it blocks. The current rating of every app is on the [Quality matrix](../hydra/operations/quality-scores.mdx).
 
 ### Review agents
 
@@ -151,7 +151,7 @@ Read from `quality.yml` and from the apps' own `code-quality.yml` callers. "Opt-
 | PHP | 8.3 and 8.4 for PHPUnit; 8.3 for lint and static analysis | `php-test-versions`, `php-version` |
 | Nextcloud | Every stable branch from the app's declared minimum to its declared maximum | Derived from `appinfo/info.xml` |
 | Single-server jobs | Newman, Playwright and the coverage guard run on the newest of those branches | Derived |
-| Database | PostgreSQL 16 by default; MySQL 8.4 and SQLite opt-in | `database`, `database-test-matrix` |
+| Database | PostgreSQL 16. MySQL 8.4 and SQLite are available as an opt-in, and no app uses it yet | `database`, `database-test-matrix` |
 
 Because the Nextcloud range is derived from `info.xml`, the versions an app claims to support and the versions it is tested on cannot drift apart. An app may override the range, and a gate then requires the override to agree with `info.xml`.
 
