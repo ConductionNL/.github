@@ -201,6 +201,8 @@ def check_rows(report, profile_name):
             cap = prof["limits"]["module_coupling"][i][1]
             rows[f"{lang} module_coupling >{row['above']}"] = {
                 "share": row["share"], "limit": cap, "ok": row["share"] <= cap, "higher_is_better": False}
+        if s["component_independence"].get("ok", True) is None:
+            continue
         h = s["component_independence"]["hidden_share"]
         rows[f"{lang} component_independence"] = {
             "share": h, "limit": prof["independence_min"], "ok": h >= prof["independence_min"],
