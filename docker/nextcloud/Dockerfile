@@ -26,3 +26,13 @@ RUN set -eux; \
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
     rm -rf /var/lib/apt/lists/*; \
     php -m | grep -qx soap
+
+# Exception traces without call arguments. Upstream loads no php.ini, so PHP's
+# default (Off) applies and every logged exception carries its arguments. During
+# `occ upgrade` Nextcloud forces debug logging, and core logs each "dirty table
+# reads" with a full trace; with an app's register import on the stack that was
+# ~1 MB per line. On 2026-10-11 one upgrade wrote an 83 GB nextcloud.log, filled
+# the disk and took WSL down. php.ini-production ships this On; so do we.
+RUN set -eux; \
+    printf 'zend.exception_ignore_args = On\n' > /usr/local/etc/php/conf.d/zz-conduction-logs.ini; \
+    php -r 'exit(ini_get("zend.exception_ignore_args") === "1" ? 0 : 1);'
