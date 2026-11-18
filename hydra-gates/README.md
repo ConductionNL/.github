@@ -801,6 +801,62 @@ method body.
 
 ---
 
+## Dependency and modularity analysis (tools, not gates)
+
+Next to gate 122's scorer (`scripts/lib/check_sig_maintainability.py`) the
+package ships four tools that measure how a Nextcloud app's PHP backend hangs
+together. They import the scorer from the same directory and reuse its own
+dependency graph, line count, `structure()` and `rating_estimate()`. No gate
+runs them and they never fail a build. Every number they print is an estimate
+on the scorer's 0.5 to 5.5 scale, not an official rating.
+
+A Nextcloud app sorts its classes by kind: controllers in `lib/Controller/`,
+mappers in `lib/Db/`. So a directory under `lib/` is a layer, not a component.
+These tools measure the backend both ways: per directory, and per functional
+area, as declared in the app's `sigrid.components.yaml` (a `components:` block
+of include patterns).
+
+| Tool | What it measures |
+|---|---|
+| `analyse_dependencies.py` | Hidden code, communication lines and violation degree for the directory view and the functional view; layering (references going down, level or up between entry points, services, persistence and shared types); cycles (Tarjan) and the largest cyclic set; per area the exposed code and the pairs that reference each other both ways |
+| `rate_component_views.py` | The estimated modularity rating under five component definitions: A the backend as one component, B every directory under `lib/`, C the functional areas, D as C with a foundation merged in, E as D without the foundation's references to other areas (a simulation). Also the exposed code by kind of file and by area, and per rating the largest exposed share and violation degree that still earn it |
+| `deptrac_areas.py` | A deptrac config with one layer per functional area, in which every area may use the shared area and nothing else |
+| `deptrac_summary.py` | A deptrac JSON report counted per layer pair: occurrences and distinct class pairs |
+
+```
+L=vendor/conduction/hydra-gates/hydra-gates/scripts/lib   # or hydra-gates/scripts/lib in this repo
+
+python3 $L/analyse_dependencies.py . --out /tmp/deps        # add --rev REV to measure an older commit
+python3 $L/check_sig_maintainability.py report . --json /tmp/base.json
+python3 $L/rate_component_views.py . --report /tmp/base.json --json /tmp/views.json
+#   --foundation NAME and --merge NAME[,NAME] pick the merge of view D (default Kernel and Core)
+python3 $L/deptrac_areas.py . --out deptrac-areas.yaml      # --check exits 1 when the file is stale
+bash $L/deptrac.sh . layers                                 # the generic layering rules
+bash $L/deptrac.sh . deptrac-areas.yaml                     # the functional areas
+```
+
+The app root is the first argument. The components file defaults to
+`<app>/sigrid.components.yaml`; `--components FILE` points elsewhere. An app
+without one still gets the directory view, the layering, the cycles, and views
+A and B. The functional view and views C, D and E are skipped, and the output
+says so.
+
+deptrac is not a dependency of this package. An app that wants the second
+reading installs it with
+[bamarni/composer-bin-plugin](https://github.com/bamarni/composer-bin-plugin)
+in `vendor-bin/deptrac/composer.json`:
+
+```json
+{ "require-dev": { "deptrac/deptrac": "^4.7" } }
+```
+
+and runs `composer --working-dir=vendor-bin/deptrac install`. `deptrac.sh`
+looks for `<app>/vendor-bin/deptrac/vendor/bin/deptrac`; `DEPTRAC=/path`
+overrides it. `scripts/lib/deptrac/layers.yaml` encodes the same layer rule as
+`analyse_dependencies.py`, and a test keeps the two in step.
+
+---
+
 ## Testing the package
 
 ```
