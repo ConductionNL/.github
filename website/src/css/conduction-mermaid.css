@@ -135,15 +135,32 @@
   stroke: #4D69A4 !important;
 }
 
-/* Edge labels (the small "1 → 2" or stage-number captions) read as code
- * voice, like our static-kit captions. */
+/* Mermaid wraps every label in a <p> and sizes the box from its own
+ * 14px / 1.5 / nowrap div. The site's paragraph size, line height, margin
+ * and wrapping apply inside the SVG too, so labels overflow the measured
+ * box, and the dark <b>/<strong> colour disappears on cobalt. */
+.docusaurus-mermaid-container foreignObject p,
+.mermaid foreignObject p {
+  margin: 0 !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  white-space: inherit !important;
+  color: inherit !important;
+}
+.docusaurus-mermaid-container .nodeLabel b,
+.docusaurus-mermaid-container .nodeLabel strong,
+.mermaid .nodeLabel b,
+.mermaid .nodeLabel strong {
+  color: inherit !important;
+}
+
+/* Edge labels take the panel background and the edge colour. Font, size
+ * and padding stay Mermaid's own: it sizes the label box before this CSS
+ * applies, so any change there pushes the text out of the box. */
 .docusaurus-mermaid-container .edgeLabel,
 .mermaid .edgeLabel {
   background: #EEF2F8 !important;
   color: #4D69A4 !important;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace !important;
-  font-size: 11px !important;
-  padding: 2px 6px !important;
 }
 
 /* Dark mode (Docusaurus toggles data-theme=dark on <html>): invert the
