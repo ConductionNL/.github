@@ -47,4 +47,4 @@ That count only means something across the whole stack a product replaces. One a
 
 ## Next step
 
-Planning a new app or register? Start with [Spec-driven development](../WayOfWork/spec-driven-development.md), and check [Architecture decisions](../WayOfWork/architecture-decisions.md) for what the core already does.
+Planning a new app or register? Start with [The code factory](../WayOfWork/spec-driven-development.md), and check [Architecture decisions](../WayOfWork/architecture-decisions.md) for what the core already does.

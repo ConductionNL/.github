@@ -126,3 +126,36 @@ Sourced by:
 - Git PATs should use fine-grained tokens scoped to the org
 - Never pass `ANTHROPIC_API_KEY` — always use Claude CLI with OAuth
 - Container logs (JSONL) may contain token prefixes in error messages — `logs/` is gitignored
+
+## Token scope per container
+
+Each container receives only the credentials it needs. No shared org-admin token exists in the pipeline.
+
+| Container         | Token variable                       | PAT scope                               | What it can do                                           |
+| ----------------- | ------------------------------------ | --------------------------------------- | -------------------------------------------------------- |
+| Builder           | `GIT_TOKEN` = `HYDRA_BUILDER_TOKEN`  | `contents:write`, `pull-requests:write` | Clone, push branch, create draft PR, post issue comments |
+| Code Reviewer     | `GIT_TOKEN` = `HYDRA_REVIEWER_TOKEN` | `pull-requests:write`                   | Post PR review comments only                             |
+| Security Reviewer | `GIT_TOKEN` = `HYDRA_SECURITY_TOKEN` | `pull-requests:write`                   | Post PR review comments only                             |
+
+## Container inputs
+
+Every container receives its inputs as environment variables (never as command-line args
+or mounted config files, to avoid leakage via `/proc`):
+
+| Variable            | Required by | Description                                                    |
+| ------------------- | ----------- | -------------------------------------------------------------- |
+| `GIT_TOKEN`         | all         | Scoped PAT for this persona                                    |
+| `REPO_URL`          | all         | `https://github.com/ConductionNL/<app>`                        |
+| `ISSUE_URL`         | Builder     | GitHub issue that triggered the build                          |
+| `PR_URL`            | Reviewers   | GitHub PR to review                                            |
+| `SPEC_PATH`         | Builder     | Path to `openspec/changes/<change-name>/` inside the container |
+
+### What is not a secret
+
+The following are not secrets and may appear in logs:
+
+- `REPO_URL`: the GitHub URL of the target repository
+- `ISSUE_URL`: the GitHub issue URL triggering the build
+- `PR_URL`: the PR URL (Reviewers only)
+- `SPEC_PATH`: path to the OpenSpec change inside the container
+- `GITHUB_ORG`, `HYDRA_PROJECT_NUMBER`: organisation metadata

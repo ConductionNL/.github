@@ -283,7 +283,7 @@ See shared spec: `api-patterns/spec.md#requirement-url-structure` for URL conven
 See shared spec: `api-patterns/spec.md#requirement-cors-support` for CORS requirements.
 ```
 
-Shared specs live in `hydra/openspec/specs/` (company-wide, maintained by Conduction). Check that directory for the shared specs that exist today; the list grows as cross-app specs are added. Company-wide architectural decisions (NL Design System, API conventions, security, i18n) are ADRs under `hydra/openspec/architecture/`, listed publicly on [Architecture decisions](../WayOfWork/architecture-decisions.md). How the company-wide and per-app layers relate is on [Spec-driven development](../WayOfWork/spec-driven-development.md#where-specs-and-decisions-live).
+Shared specs live in `hydra/openspec/specs/` (company-wide, maintained by Conduction). Check that directory for the shared specs that exist today; the list grows as cross-app specs are added. Company-wide architectural decisions (NL Design System, API conventions, security, i18n) are ADRs under `hydra/openspec/architecture/`, listed publicly on [Architecture decisions](../WayOfWork/architecture-decisions.md). How the company-wide and per-app layers relate is on [The code factory](../WayOfWork/spec-driven-development.md#where-specs-and-decisions-live).
 
 ## Cross-Referencing Requirements
 
