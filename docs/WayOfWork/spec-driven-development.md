@@ -88,7 +88,7 @@ While an agent builds, it checks only the lines it touched. That keeps the loop 
 | Before the push | `composer check:strict`: `php -l`, PHP_CodeSniffer, PHPMD, Psalm, PHPStan and the complete PHPUnit suite. Then `npm run lint` | The developer's machine, once per pull request |
 | On the merge | Everything the app enables: PHPUnit, Newman, Playwright, axe-core, the Hydra gates, supply-chain checks | PHP 8.3 and 8.4, times every Nextcloud version the app declares, on PostgreSQL |
 | Every night | The same full run for every app, whether anyone touched it or not | `development` of every app, at 03:00 UTC |
-| Before a release | The full suite again, on the pull request that promotes `development` to `beta`, then `beta` to `main` | The release candidate |
+| Before a release | The full suite again, on the release branch | `stableX.Y`, or on apps that have not moved yet, the pull requests from `development` to `beta` to `main` |
 
 A red result at any of these moments is fixed first, before new work lands. The step-by-step version, with the full test matrix, is on [Development pipeline](development-pipeline.md).
 

@@ -17,7 +17,8 @@ We follow Scrum with two-week sprints. Here's the recurring rhythm:
 | **Retrospective & Sprint Planning** | Monday 09:00                | Review last sprint on Miro (what went well / could be better), then plan the next sprint |
 | **Standup**                         | Daily 10:00 (except Monday) | Quick round: what are you working on, any blockers?                                      |
 | **Report-out**                      | Daily 16:30 (except Friday) | Written in Slack #general — what you did, any impediments                                |
-| **Sprint Review & Presentations**   | Friday (every 2 weeks)      | Demo your work to the team, followed by a borrel                                         |
+| **Sprint Review & Presentations**   | Friday (every 2 weeks)      | Demo your work to the team                                                               |
+| **Borrel**                          | Friday (every 2 weeks), after the sprint review | Drinks with the team to close the sprint |
 
 **Office attendance:** at least one day per week in the office. If you're scheduled for the office and can't make it, notify before the workday starts.
 
@@ -88,16 +89,18 @@ We estimate complexity, not time. Story points measure how hard something is —
 ## Code Development
 
 1. Developers can pick up unassigned issues in "Selected for Development"
-2. After completion and code merge to `development` branch:
+2. After completion and code merge to `main`:
    - Status changes to "Review"
-   - Tester can test from the beta channel (merges to `beta` trigger a beta build)
+   - Tester can test the prerelease that the merge produces
 3. After successful testing, completed issues are:
    - Presented to Product Owner during sprint review (Friday)
-   - Released to `main` on Monday morning following successful review (triggers a stable release)
+   - Released from the app's `stableX.Y` branch, following Nextcloud's branch model
 
-### PR Labels for Versioning
+Apps move to this model one at a time. On an app that still uses `development`, step 2 merges to `development`, testers use the beta channel, and the release goes to `main` on the Monday after the review.
 
-Every pull request should be labeled with `major`, `minor`, or `patch` to control the version bump. If no label is set, it defaults to `patch`. See the [Release Process](./release-process) for full details on branching, versioning, and deployment.
+### Versioning
+
+On the Nextcloud model, the version is the one committed in `appinfo/info.xml` on the release branch. On apps that still use `development`, label every pull request `major`, `minor` or `patch` to control the version bump; without a label it defaults to `patch`. See the [Release process](release-process.md) for full details on branching, versioning, and deployment.
 
 ## Sprint Closure
 

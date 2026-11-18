@@ -63,7 +63,7 @@ A person reviews every pull request before it merges. Changes built by the [Hydr
 
 ### 5. Merge into the integration branch
 
-The integration branch is where finished work collects before a release. For most apps that is `development`. Apps that moved to the Nextcloud branch model integrate on `main`, with `stableX.Y` branches for releases. [Release process](release-process.md) describes both models.
+The integration branch is where finished work collects before a release. We follow Nextcloud's convention, so that is `main`, with a `stableX.Y` branch per release line. Apps move over one at a time, and those that have not moved yet still integrate on `development`. [Release process](release-process.md) describes both.
 
 The push that a merge creates runs the full lane with the complete matrix. A red result there is fixed forward, or the merge is reverted, before anything else lands.
 
