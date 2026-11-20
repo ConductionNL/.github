@@ -191,6 +191,9 @@ jobs:
             --exclude='/.nextcloud' \
             --exclude='/docker' \
             --exclude='/docker-compose.yml' \
+            --exclude='/Dockerfile' \
+            --exclude='/.dockerignore' \
+            --exclude='/charts' \
             --exclude='/docs' \
             --exclude='/website' \
             --exclude='/node_modules' \
