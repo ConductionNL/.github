@@ -258,7 +258,6 @@ jobs:
             --exclude='/coverage.txt' \
             --exclude='/signing-key.key' \
             --exclude='/signing-cert.crt' \
-            --exclude='/openapi.json' \
             --exclude='/*_ANALYSIS.md' \
             --exclude='/*_FIX.md' \
             --exclude='/*_SUMMARY.md' \
