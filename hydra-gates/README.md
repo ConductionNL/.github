@@ -192,6 +192,20 @@ can typehint it under PHPUnit without the OpenRegister app installed:
 | `RegisterSlugResolverInterface.php` | interface | finds the slug a register answers to on this instance |
 | `RegisterSlugResolution.php` | **final class** | the value `resolve()` returns |
 | `EmailLinkReaderInterface.php` | interface | reads the Nextcloud Mail messages linked to an object |
+| `ObjectFileReaderInterface.php` | interface | reads the files attached to an object |
+| `ObjectSaveOptions.php` | class | where and how `saveObject()` stores an object |
+| `BulkSaveOptions.php` | class | where and how `saveObjects()` stores a batch |
+| `ObjectFindOptions.php` | class | register, schema, extend, files, render and audit of a read |
+| `ObjectDeletion.php` | class | the object `deleteObject()` removes, and how |
+| `ObjectPatch.php` | class | the partial data `patchObject()` merges |
+| `LockRequest.php` | class | the lock `lockObject()` takes |
+| `UnlockRequest.php` | class | the lock `unlockObject()` releases |
+| `ObjectValidationVerdict.php` | class | the answer of `validateObject()` |
+| `ObjectFindTarget.php` | class | the register and schema scope the values above carry |
+| `SaveActor.php` | class | who a save acts as |
+| `SavePolicy.php` | class | events, validation and insert-only choices of a save |
+| `BulkBatchDefaults.php` | class | the batch defaults of a bulk save |
+| `LockRunStep.php` | class | the flow run step that takes a lock |
 
 Each file is a byte-for-byte copy of the same file in openregister's
 `lib/Contract/`. No namespace rewrite, no header, no index. Gate 67 fails the
@@ -207,6 +221,20 @@ local checkout with an older release in `vendor/` keeps reporting it as "NOT
 shipped" until the lock moves. `RegisterSlugResolution` and `RegisterSlugResolverInterface`
 landed in openregister#3571, here in #739, and first shipped in v1.18.0. `EmailLinkReaderInterface`
 first shipped in v1.19.0, so an openregister lock on v1.18.0 still fails gate 67 locally.
+
+The thirteen value classes (`ObjectSaveOptions` to `LockRunStep` above) are the
+values `ObjectServiceInterface` names in its signatures, published by
+openregister's task 7.2 so the contract is self-contained. openregister keeps
+their old names, `OCA\OpenRegister\Kernel\Contracts\Value\<Name>`, as
+deprecated subclasses, so values built under the old name are still accepted.
+A test double that `implements ObjectServiceInterface` (or extends
+openregister's `ObjectService`) must type those parameters with the published
+name or wider; one typed with only the old Kernel name is narrower and fatals at
+class load. Typing it `ObjectSaveOptions|PublishedObjectSaveOptions` (old name
+or published name) loads against both the old and the new contract, because PHP
+matches a union member by name without loading the other class.
+`ObjectFileReaderInterface.php` was in openregister's `lib/Contract/` but not
+here, which kept gate 67 red until it shipped.
 
 They are **not** autoloaded. This package used to declare
 
@@ -226,7 +254,7 @@ A consumer that needs these contracts requires them from its own test
 bootstrap, behind a guard:
 
 ```php
-foreach (['ObjectEntityInterface', 'ObjectServiceInterface', 'RegisterSlugResolution', 'RegisterSlugResolverInterface', 'EmailLinkReaderInterface'] as $contract) {
+foreach (['ObjectEntityInterface', 'ObjectServiceInterface', 'RegisterSlugResolution', 'RegisterSlugResolverInterface', 'EmailLinkReaderInterface', 'ObjectFileReaderInterface', 'ObjectFindTarget', 'SaveActor', 'SavePolicy', 'BulkBatchDefaults', 'LockRunStep', 'ObjectSaveOptions', 'BulkSaveOptions', 'LockRequest', 'UnlockRequest', 'ObjectFindOptions', 'ObjectDeletion', 'ObjectPatch', 'ObjectValidationVerdict'] as $contract) {
 	$fqcn = '\\OCA\\OpenRegister\\Contract\\' . $contract;
 	if (interface_exists($fqcn) === false && class_exists($fqcn) === false) {
 		$shipped = __DIR__ . '/../vendor/conduction/hydra-gates/hydra-gates/contracts/' . $contract . '.php';
@@ -277,6 +305,20 @@ the autoloader is precisely the defect this change removed.
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/RegisterSlugResolverInterface.php" />
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/RegisterSlugResolution.php" />
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/EmailLinkReaderInterface.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectFileReaderInterface.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectFindTarget.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/SaveActor.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/SavePolicy.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/BulkBatchDefaults.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/LockRunStep.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectSaveOptions.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/BulkSaveOptions.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/LockRequest.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/UnlockRequest.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectFindOptions.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectDeletion.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectPatch.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectValidationVerdict.php" />
 </stubs>
 ```
 
