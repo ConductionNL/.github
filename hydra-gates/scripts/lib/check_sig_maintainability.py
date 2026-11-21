@@ -201,6 +201,17 @@ def stars_of(kind, share, index=None):
 
 
 LIMITS = band_limits(4)
+
+
+def star_bands():
+    """Every star level of every check, for readers that show the thresholds next to a value.
+    Shares are the maximum share above each bound; independence is a minimum share."""
+    bands = {prop: {"bounds": list(BOUNDS[prop]), **{str(lvl): list(caps) for lvl, caps in STAR_BANDS[prop].items()}}
+             for prop in BOUNDS}
+    bands["duplication"] = {str(lvl): cap for lvl, cap in STAR_BANDS["duplication"].items()}
+    bands["component_independence"] = {str(lvl): cap for lvl, cap in INDEPENDENCE_BANDS.items()}
+    bands["component_entanglement"] = {str(lvl): cap for lvl, cap in ENTANGLEMENT_BANDS.items()}
+    return bands
 DUPLICATION_LIMIT = STAR_BANDS["duplication"][4]
 INDEPENDENCE_MIN = INDEPENDENCE_BANDS[4]
 ENTANGLEMENT_LIMIT = ENTANGLEMENT_BANDS[4]
@@ -1351,6 +1362,7 @@ def build_report(app, lizard, jscpd, profile_name=DEFAULT_PROFILE, reader=None):
         if report["structure"][JS_STRUCTURE]:
             report["structure"][JS_STRUCTURE]["graph"] = source
     report["rating"] = rating_estimate(report)
+    report["bands"] = star_bands()
     return report
 
 
