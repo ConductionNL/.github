@@ -857,5 +857,82 @@ class ControlPlaneSchemasCarryNoDemoData(unittest.TestCase):
             self.assertIn("must carry none", output)
 
 
+
+class AccessRulesSurviveTheDemoImport(unittest.TestCase):
+    """The demo import is forced, so the mock's rules replace the real ones.
+
+    humaniq's mock carried 71 schema definitions without their
+    `authorization` blocks and a register entry without the register's
+    HR-only default. Loading demo data opened every HR-only schema.
+    """
+
+    _AUTH = {"read": ["hr", {"group": "authenticated", "match": {"userId": "$userId"}}], "create": ["hr"]}
+    _REGISTER_AUTH = {"read": ["hr"], "create": ["hr"], "update": ["hr"], "delete": ["hr"]}
+
+    def _app_with_rules(self, root: Path) -> None:
+        _write(
+            root,
+            "lib/Settings/widget_register.json",
+            {
+                "x-openregister": {"type": "application", "app": "widget"},
+                "components": {
+                    "registers": {"widget": {"schemas": ["Payslip"], "authorization": self._REGISTER_AUTH}},
+                    "schemas": {
+                        "Payslip": _schema(
+                            {"gross": {"type": "number", "authorization": {"read": ["hr"]}}},
+                            slug="Payslip",
+                            authorization=self._AUTH,
+                        )
+                    },
+                },
+            },
+        )
+
+    def _generate(self, root: Path, existing: dict | None) -> dict:
+        out = root / "lib" / "Settings" / "widget_mock_register.json"
+        if existing is not None:
+            out.write_text(json.dumps(existing), encoding="utf-8")
+        args = ["generate_mock_register.py", str(root)] + (["--keep"] if existing is not None else [])
+        with contextlib.redirect_stdout(io.StringIO()):
+            gmr.main(args)
+        return json.loads(out.read_text(encoding="utf-8"))
+
+    def test_the_register_entry_keeps_the_register_rules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_with_rules(root)
+
+            mock = self._generate(root, None)
+
+            self.assertEqual(mock["components"]["registers"]["widget"]["authorization"], self._REGISTER_AUTH)
+            # Control: an app without a schemas block in its mock still gets none.
+            self.assertNotIn("schemas", mock["components"])
+
+    def test_a_carried_schema_is_rebuilt_with_its_rules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_with_rules(root)
+            stale = {
+                "x-openregister": {"type": "mock", "app": "widget"},
+                "info": {"version": "1.4.0"},
+                "components": {
+                    "registers": {"widget": {"slug": "widget"}},
+                    "schemas": {"Payslip": _schema({"gross": {"type": "number"}}, slug="Payslip")},
+                    "objects": [],
+                },
+            }
+
+            mock = self._generate(root, stale)
+
+            payslip = mock["components"]["schemas"]["Payslip"]
+            # 🔴 THE ASSERTION THAT FAILS UNDER THE OLD BEHAVIOUR: the stale copy
+            # had no rules, and nothing put them back.
+            self.assertEqual(payslip["authorization"], self._AUTH)
+            self.assertEqual(payslip["properties"]["gross"]["authorization"], {"read": ["hr"]})
+            self.assertEqual(mock["info"]["version"], "1.4.0")
+            self.assertEqual(len(mock["components"]["objects"]), 3)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
