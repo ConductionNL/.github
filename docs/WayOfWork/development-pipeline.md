@@ -179,7 +179,7 @@ Read from `quality.yml` and from the apps' own `code-quality.yml` callers. "Opt-
 | PHP | 8.3 and 8.4 for PHPUnit; 8.3 for lint and static analysis | `php-test-versions`, `php-version` |
 | Nextcloud | Every stable branch from the app's declared minimum to its declared maximum | Derived from `appinfo/info.xml` |
 | Single-server jobs | Newman, Playwright and the coverage guard run on the newest of those branches | Derived |
-| Database | PostgreSQL 16 for every app. OpenRegister, launchpad and keepiq also run PHPUnit on MySQL 8.4 and SQLite, since 18 November 2026; MariaDB (11.4; 12.3 on Nextcloud 35) is opt-in too. The first listed database gets the full matrix, each further one a single leg on the primary PHP and the newest Nextcloud | `database`, `database-test-matrix` |
+| Database | PostgreSQL 16 for every app. OpenRegister, launchpad and keepiq have also listed MySQL 8.4 and SQLite since 18 November 2026; MariaDB (11.4; 12.3 on Nextcloud 35) is opt-in too. The first listed database gets the full matrix with the test suite. Each further one gets a single install-only leg on the primary PHP and the newest Nextcloud: a real database server, a Nextcloud install and the app's migrations through `occ app:enable`, with no test suite | `database`, `database-test-matrix` |
 
 Because the Nextcloud range is derived from `info.xml`, the versions an app claims to support and the versions it is tested on cannot drift apart. An app may override the range, and a gate then requires the override to agree with `info.xml`.
 

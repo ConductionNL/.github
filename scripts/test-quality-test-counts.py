@@ -94,6 +94,8 @@ MUTATIONS = [
      "playwright-agrees-with-gate", "the copied parser drifts from check_e2e_skips.py on what executed"),
     ("compute", "if missing:", "if False:",
      "cell-null-leg", "a leg recorded without counts is dropped from the cell"),
+    ("phpunit", 'total -= len(json.loads(os.environ.get("EXTRA_LEGS") or "[]"))', "pass",
+     "phpunit-extra-database-legs", "install-only database legs counted as legs that owe a count"),
 ]
 
 
@@ -220,6 +222,18 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
     got = read_counts(d) if proc.returncode == 0 else {}
     check("phpunit-no-junit", got == {"leg": "PHP 8.4", "run": None, "total": 2},
           f"want run null with total 2, got exit {proc.returncode} {got}\n{proc.stderr}")
+
+    # Install-only extra database legs record nothing, so a counted leg must
+    # not expect them: 6 legs in the job, 2 of them extra, 4 to count.
+    extra = json.dumps([{"php-version": "8.3", "nextcloud-ref": "stable34", "database": db, "extra-database": True}
+                        for db in ("mysql", "mariadb")])
+    d = r.case_dir("phpunit-extra-database-legs")
+    out = d / "test-counts" / "phpunit-leg.json"
+    proc = r.run("phpunit", d, [str(FIXTURES / "phpunit-10.5-junit.xml")],
+                 {"LEG": "PHP 8.3", "TOTAL": "6", "EXTRA_LEGS": extra, "OUT": str(out)})
+    got = read_counts(d) if proc.returncode == 0 else {}
+    check("phpunit-extra-database-legs", got.get("total") == 4,
+          f"want total 4 (6 legs minus 2 install-only), got exit {proc.returncode} {got}\n{proc.stderr}")
 
     # ── Newman ─────────────────────────────────────────────────────────────
     def newman(case: str, exports: int, ran: str) -> tuple[int, dict, str]:
