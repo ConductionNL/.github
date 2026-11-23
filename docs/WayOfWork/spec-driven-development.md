@@ -1,43 +1,122 @@
 ---
 id: spec-driven-development
-title: Spec-driven development
-sidebar_label: Spec-driven development
+title: The code factory
+sidebar_label: The code factory
 sidebar_position: 2
-description: How Conduction goes from idea to merged code through OpenSpec, and how company-wide decisions, app decisions and specs relate.
+description: How Conduction builds software with AI agents it does not trust, by harnessing them with context written before the code and tests that run after it.
 ---
 
-# Spec-driven development
+# The code factory
 
-We write down what we are building before we build it. Every change starts as a set of structured files in the app's repository. Those files stay next to the code, so the next person, or the next agent session, can see why the code is the way it is.
+Most of our code is written by AI agents. We do not trust that code, and we never trusted code from a new intern either. An intern gets a brief, a mentor, a style guide and a reviewer. Our agents get the same, in a form a machine can check.
 
-## The four stages
+This page shows how the pieces fit together. Each piece has its own page, linked from here.
 
-Each stage feeds the next. Discovery becomes specs, specs become software, and software is checked against the specs that produced it.
+## The loop
 
 ```mermaid
-flowchart LR
-  A["<b>1 · Obtain</b><br/>Discover requirements"]
-  B["<b>2 · Specify</b><br/>Write structured specs"]
-  C["<b>3 · Build</b><br/>Implement by assembly"]:::accent
-  D["<b>4 · Validate</b><br/>Verify against specs"]
-  A --> B --> C --> D
+flowchart TD
+  U["1 · Users<br/>ask for a feature"] --> D["2 · Define<br/>spec, ADR, screen"]
+  D --> B["3 · Build<br/>Hydra agents"]:::accent
+  B --> V["4 · Verify<br/>gates and tests"]
+  V --> H["5 · Developer<br/>decides and merges"]
+  H --> R["Release"]
+  R --> U
+  V -.-> L["6 · Learn<br/>memory, skills, gates"]
+  H -.-> L
+  L -.-> D
   classDef accent fill:#F36C21,stroke:#F36C21,color:#fff;
 ```
 
-- **Obtain.** Requirements come from issues, tenders, user feedback and research. The output is a shared picture of what to build.
-- **Specify.** The change gets a proposal, delta specs, a design and a task list.
-- **Build.** We assemble the change from the platform's building blocks and write the tests with it.
-- **Validate.** Tests, gates and a verify pass check the result against the spec. How that runs, step by step, is on [Development pipeline](development-pipeline.md).
+1. **Demand.** Users ask for features from inside every app. The request lands as a GitHub issue that names the widget it came from. See [Users are the moat](../strategy/users-are-the-moat.md).
+2. **Define.** Before anyone writes code, we write down what it must do. That is a spec with scenarios, a decision record, a capability row and a drawn screen. This page covers it below.
+3. **Build.** Hydra's agents turn the spec into a pull request, tests included. See [Hydra](../hydra/README.md).
+4. **Verify.** Gates, test suites and review agents check the pull request against the definition. See [Development pipeline](development-pipeline.md).
+5. **Decide.** A developer reads the result and merges it, or sends it back.
+6. **Learn.** What the checks catch and what the developer corrects flows back, as a memory, a sharper skill or a new gate. The next change starts with it. See [The learning loop](../hydra/learning-loop.md).
+
+## Why we do not trust the model
+
+A language model writes plausible code. Plausible code compiles, reads well and is wrong often enough to matter. It invents a function that does not exist. It adds an authorization check that nothing calls. It writes a test that passes whatever the code does.
+
+We have seen each of these in our own pull requests. Telling the model to be careful did not stop them. Two things did:
+
+- **Context before the code.** The agent works from a written definition, not from a prompt. It knows what to build, which decisions bind it and what the screen looks like.
+- **Tests after the code.** A machine checks the result against that same definition. Nobody has to take the agent's word for it.
+
+A developer sits between the two. The agents do the typing. The developer owns the decisions and the merge.
+
+## Defining first is test-driven development
+
+Every requirement in a spec carries scenarios in GIVEN/WHEN/THEN form (ADR-038). A scenario is a test case written before the code exists. Gate 19 fails a pull request when a new scenario has no end-to-end test that cites it.
+
+The other definitions work the same way:
+
+| We define | Before the code, it says | After the code, it checks |
+| --- | --- | --- |
+| A **spec** | What the app must do, as scenarios | Each scenario has a Playwright test (gate 19) |
+| An **ADR** | Which architecture choices bind every app | Gates enforce the mechanical ones, review agents read the rest |
+| A **capability** | Which feature we have, compared with other products | The matrix shows whether it is in production, in build or only requested |
+| A **screen** | What the page looks like, drawn on a board | The built page is compared with the board |
+
+So the tests exist before the implementation, which is the whole point of test-driven development. We only changed who writes the implementation.
+
+## Spec references give accountability
+
+Every changed method carries a `@spec` tag that points at the requirement it implements. Gate 16 fails a pull request when a changed method has none. A method that implements no requirement must say why, with `@spec exclude <reason>`.
+
+```mermaid
+flowchart LR
+  I["Issue<br/>#123"] --> S["Spec<br/>requirement + scenarios"]
+  S --> C["Code<br/>@spec tag per method"]
+  S --> T["Test<br/>cites the scenario"]
+  C --> P["Pull request<br/>Closes #123"]
+  T --> P
+  P --> M["Merge commit<br/>(#123)"]
+```
+
+Pick any line of code and you can walk back to the requirement, the issue and the person who asked for it. You can walk forward too: from a requirement to the code and the tests that prove it. When a reviewer asks why a method exists, the answer is in the file.
+
+Artifacts an agent creates carry a mark that says so (ADR-088). A reader can always tell agent work from human work.
+
+## Strict at the end of the cycle
+
+While an agent builds, it checks only the lines it touched. That keeps the loop fast. At the end of a cycle, the whole app is held to the full standard, at four moments:
+
+| Moment | What runs | On what |
+| --- | --- | --- |
+| Before the push | `composer check:strict`: `php -l`, PHP_CodeSniffer, PHPMD, Psalm, PHPStan and the complete PHPUnit suite. Then `npm run lint` | The developer's machine, once per pull request |
+| On the merge | Everything the app enables: PHPUnit, Newman, Playwright, axe-core, the Hydra gates, supply-chain checks | PHP 8.3 and 8.4, times every Nextcloud version the app declares, on PostgreSQL |
+| Every night | The same full run for every app, whether anyone touched it or not | Every app's integration branch, at 03:00 UTC |
+| Before a release | The full suite again, on the release branch | `stableX.Y`, or on apps that have not moved yet, the pull requests from `development` to `beta` to `main` |
+
+A red result at any of these moments is fixed first, before new work lands. The step-by-step version, with the full test matrix, is on [Development pipeline](development-pipeline.md).
+
+The results are public:
+
+- [App health](../hydra/operations/app-health.md) shows the live status of every app on every branch.
+- [Quality matrix](../hydra/operations/quality-scores.mdx) shows each app's component checker score, its maintainability rating and every gate.
+
+## The developer in the middle
+
+The agents never decide what to build, and they never merge on their own authority. The developer does four things the factory cannot:
+
+- **Chooses.** Which request becomes a spec, and which decision becomes an ADR.
+- **Answers.** Agents batch their open questions and ask them once, at the start. Measured in September 2026, 260 questions asked mid-run stopped sessions for 37 hours in total. Now an unattended run makes the call and writes its assumption in the pull request.
+- **Merges.** A Hydra pull request waits for a human approval. In a developer's own agent session, the agent may merge on local green, but only on that developer's standing order.
+- **Corrects.** A correction goes into memory or a skill, so the next session starts with it. Repeating it in chat helps only the current session.
 
 ## Where specs and decisions live
 
-There are three layers. Each fact has one home, and the other layers link to it instead of copying it.
+Each fact has one home. Other places link to it instead of copying it.
 
 | Layer | Where | What it holds |
 | --- | --- | --- |
-| Company-wide decisions | Hydra, `openspec/architecture/` | The ADRs every app follows. Public index: [Architecture decisions](architecture-decisions.md). |
+| Company-wide decisions | Hydra, `openspec/architecture/` | More than 110 ADRs every app follows. Public index: [Architecture decisions](architecture-decisions.md). |
 | Company-wide specs | Hydra, `openspec/specs/` | Capabilities shared by several apps, such as i18n, the app manifest and fleet-wide consumption of audit trail, RBAC and tenancy. |
 | App decisions and specs | Each app, `openspec/` | `architecture/` for decisions that apply to that app only, `specs/` for what the app does now, `changes/` for work in flight. |
+| Capabilities | Each app, `openspec/parity/capabilities.json` | Every feature, linked to its specs, compared with the products a customer would otherwise buy. |
+| Screens | Design system, on [identity.conduction.nl/screens](https://identity.conduction.nl/screens/) | Drawn boards for every page. For layout and look, the board wins over the spec, and the spec is amended to match. |
 
 Hydra is our internal pipeline repository. It is private, which is why the ADRs have a public index on this site.
 

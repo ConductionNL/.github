@@ -1,3 +1,4 @@
+test_analyse_dependencies.py	0
 test_build_effective_manifest.js	0
 test_check_admin_router.py	0
 test_check_apphost_autoload_prelude.py	0
@@ -71,6 +72,7 @@ test_check_unsafe_auth_resolver.py	0
 test_check_visual_coverage.py	2
 test_checker_patterns_match_documented_shapes.py	1
 test_controller_resolver.py	0
+test_deptrac_tools.py	0
 test_detect_redundant_controllers.py	0
 test_diff_schema_strictness.js	1
 test_exclusion_reason.py	1
@@ -140,6 +142,7 @@ test_manifest_scope_filter.js	0
 test_or_abstraction_exceptions.sh	2
 test_or_abstraction_pdok.sh	1
 test_php_template_scope.py	0
+test_rate_component_views.py	0
 test_shipped_contracts_documented.py	0
 test_sig_file_floor.py	15
 test_source_scope.py	0

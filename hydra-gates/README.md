@@ -192,6 +192,20 @@ can typehint it under PHPUnit without the OpenRegister app installed:
 | `RegisterSlugResolverInterface.php` | interface | finds the slug a register answers to on this instance |
 | `RegisterSlugResolution.php` | **final class** | the value `resolve()` returns |
 | `EmailLinkReaderInterface.php` | interface | reads the Nextcloud Mail messages linked to an object |
+| `ObjectFileReaderInterface.php` | interface | reads the files attached to an object |
+| `ObjectSaveOptions.php` | class | where and how `saveObject()` stores an object |
+| `BulkSaveOptions.php` | class | where and how `saveObjects()` stores a batch |
+| `ObjectFindOptions.php` | class | register, schema, extend, files, render and audit of a read |
+| `ObjectDeletion.php` | class | the object `deleteObject()` removes, and how |
+| `ObjectPatch.php` | class | the partial data `patchObject()` merges |
+| `LockRequest.php` | class | the lock `lockObject()` takes |
+| `UnlockRequest.php` | class | the lock `unlockObject()` releases |
+| `ObjectValidationVerdict.php` | class | the answer of `validateObject()` |
+| `ObjectFindTarget.php` | class | the register and schema scope the values above carry |
+| `SaveActor.php` | class | who a save acts as |
+| `SavePolicy.php` | class | events, validation and insert-only choices of a save |
+| `BulkBatchDefaults.php` | class | the batch defaults of a bulk save |
+| `LockRunStep.php` | class | the flow run step that takes a lock |
 
 Each file is a byte-for-byte copy of the same file in openregister's
 `lib/Contract/`. No namespace rewrite, no header, no index. Gate 67 fails the
@@ -207,6 +221,20 @@ local checkout with an older release in `vendor/` keeps reporting it as "NOT
 shipped" until the lock moves. `RegisterSlugResolution` and `RegisterSlugResolverInterface`
 landed in openregister#3571, here in #739, and first shipped in v1.18.0. `EmailLinkReaderInterface`
 first shipped in v1.19.0, so an openregister lock on v1.18.0 still fails gate 67 locally.
+
+The thirteen value classes (`ObjectSaveOptions` to `LockRunStep` above) are the
+values `ObjectServiceInterface` names in its signatures, published by
+openregister's task 7.2 so the contract is self-contained. openregister keeps
+their old names, `OCA\OpenRegister\Kernel\Contracts\Value\<Name>`, as
+deprecated subclasses, so values built under the old name are still accepted.
+A test double that `implements ObjectServiceInterface` (or extends
+openregister's `ObjectService`) must type those parameters with the published
+name or wider; one typed with only the old Kernel name is narrower and fatals at
+class load. Typing it `ObjectSaveOptions|PublishedObjectSaveOptions` (old name
+or published name) loads against both the old and the new contract, because PHP
+matches a union member by name without loading the other class.
+`ObjectFileReaderInterface.php` was in openregister's `lib/Contract/` but not
+here, which kept gate 67 red until it shipped.
 
 They are **not** autoloaded. This package used to declare
 
@@ -226,7 +254,7 @@ A consumer that needs these contracts requires them from its own test
 bootstrap, behind a guard:
 
 ```php
-foreach (['ObjectEntityInterface', 'ObjectServiceInterface', 'RegisterSlugResolution', 'RegisterSlugResolverInterface', 'EmailLinkReaderInterface'] as $contract) {
+foreach (['ObjectEntityInterface', 'ObjectServiceInterface', 'RegisterSlugResolution', 'RegisterSlugResolverInterface', 'EmailLinkReaderInterface', 'ObjectFileReaderInterface', 'ObjectFindTarget', 'SaveActor', 'SavePolicy', 'BulkBatchDefaults', 'LockRunStep', 'ObjectSaveOptions', 'BulkSaveOptions', 'LockRequest', 'UnlockRequest', 'ObjectFindOptions', 'ObjectDeletion', 'ObjectPatch', 'ObjectValidationVerdict'] as $contract) {
 	$fqcn = '\\OCA\\OpenRegister\\Contract\\' . $contract;
 	if (interface_exists($fqcn) === false && class_exists($fqcn) === false) {
 		$shipped = __DIR__ . '/../vendor/conduction/hydra-gates/hydra-gates/contracts/' . $contract . '.php';
@@ -277,6 +305,20 @@ the autoloader is precisely the defect this change removed.
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/RegisterSlugResolverInterface.php" />
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/RegisterSlugResolution.php" />
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/EmailLinkReaderInterface.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectFileReaderInterface.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectFindTarget.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/SaveActor.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/SavePolicy.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/BulkBatchDefaults.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/LockRunStep.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectSaveOptions.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/BulkSaveOptions.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/LockRequest.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/UnlockRequest.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectFindOptions.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectDeletion.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectPatch.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectValidationVerdict.php" />
 </stubs>
 ```
 
@@ -798,6 +840,62 @@ The reason must be at least 20 characters and sit at docblock-tag position.
 only thing gate 5 reports, so accepting it would empty the gate completely.
 gate 9 (semantic-auth) still owns whether the declared posture matches the
 method body.
+
+---
+
+## Dependency and modularity analysis (tools, not gates)
+
+Next to gate 122's scorer (`scripts/lib/check_sig_maintainability.py`) the
+package ships four tools that measure how a Nextcloud app's PHP backend hangs
+together. They import the scorer from the same directory and reuse its own
+dependency graph, line count, `structure()` and `rating_estimate()`. No gate
+runs them and they never fail a build. Every number they print is an estimate
+on the scorer's 0.5 to 5.5 scale, not an official rating.
+
+A Nextcloud app sorts its classes by kind: controllers in `lib/Controller/`,
+mappers in `lib/Db/`. So a directory under `lib/` is a layer, not a component.
+These tools measure the backend both ways: per directory, and per functional
+area, as declared in the app's `sigrid.components.yaml` (a `components:` block
+of include patterns).
+
+| Tool | What it measures |
+|---|---|
+| `analyse_dependencies.py` | Hidden code, communication lines and violation degree for the directory view and the functional view; layering (references going down, level or up between entry points, services, persistence and shared types); cycles (Tarjan) and the largest cyclic set; per area the exposed code and the pairs that reference each other both ways |
+| `rate_component_views.py` | The estimated modularity rating under five component definitions: A the backend as one component, B every directory under `lib/`, C the functional areas, D as C with a foundation merged in, E as D without the foundation's references to other areas (a simulation). Also the exposed code by kind of file and by area, and per rating the largest exposed share and violation degree that still earn it |
+| `deptrac_areas.py` | A deptrac config with one layer per functional area, in which every area may use the shared area and nothing else |
+| `deptrac_summary.py` | A deptrac JSON report counted per layer pair: occurrences and distinct class pairs |
+
+```
+L=vendor/conduction/hydra-gates/hydra-gates/scripts/lib   # or hydra-gates/scripts/lib in this repo
+
+python3 $L/analyse_dependencies.py . --out /tmp/deps        # add --rev REV to measure an older commit
+python3 $L/check_sig_maintainability.py report . --json /tmp/base.json
+python3 $L/rate_component_views.py . --report /tmp/base.json --json /tmp/views.json
+#   --foundation NAME and --merge NAME[,NAME] pick the merge of view D (default Kernel and Core)
+python3 $L/deptrac_areas.py . --out deptrac-areas.yaml      # --check exits 1 when the file is stale
+bash $L/deptrac.sh . layers                                 # the generic layering rules
+bash $L/deptrac.sh . deptrac-areas.yaml                     # the functional areas
+```
+
+The app root is the first argument. The components file defaults to
+`<app>/sigrid.components.yaml`; `--components FILE` points elsewhere. An app
+without one still gets the directory view, the layering, the cycles, and views
+A and B. The functional view and views C, D and E are skipped, and the output
+says so.
+
+deptrac is not a dependency of this package. An app that wants the second
+reading installs it with
+[bamarni/composer-bin-plugin](https://github.com/bamarni/composer-bin-plugin)
+in `vendor-bin/deptrac/composer.json`:
+
+```json
+{ "require-dev": { "deptrac/deptrac": "^4.7" } }
+```
+
+and runs `composer --working-dir=vendor-bin/deptrac install`. `deptrac.sh`
+looks for `<app>/vendor-bin/deptrac/vendor/bin/deptrac`; `DEPTRAC=/path`
+overrides it. `scripts/lib/deptrac/layers.yaml` encodes the same layer rule as
+`analyse_dependencies.py`, and a test keeps the two in step.
 
 ---
 

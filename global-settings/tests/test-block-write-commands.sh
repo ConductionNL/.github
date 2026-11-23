@@ -634,6 +634,45 @@ done
 add_ask "order v2.7.3: two asks"             "rm build.log && npm install"
 add_ask "order v2.7.3: three asks"           "gh pr create --title t --body b; docker compose up -d && echo x > out.txt"
 
+# ── date -s: only the arguments of `date` itself count ────────────────────────
+# Another command's `-s` / `--set` on the same line (curl -s, sort -s, grep -s)
+# is not a clock change. Every real `date -s` / `--set` form stays hard-denied.
+add_allow "date: plain"                                  "date"
+add_allow "date: -u +%s"                                 "date -u +%s"
+add_allow "date: +%F"                                    "date +%F"
+add_allow "date: curl -s before it"                      "curl -s x; date -u"
+add_allow "date: curl -s -o, date, docker exec tail"     "curl -s -o /dev/null http://x/; date -u +%FT%T; docker exec c sh -c 'tail -n 4 f'"
+add_allow "date: grep -s after it"                       "date -u; grep -s x f"
+add_allow "date: sort -s after a pipe"                   "ls | sort -s"
+add_allow "date: piped into a -s command"                "date -u | sort -s"
+add_allow "date: quoted ; in -d is not the end"          "date -d 'a;b' +%s"
+add_deny  "date: -s quoted value"                        'date -s "2020-01-01"'
+add_deny  "date: --set="                                 'date --set="2020-01-01"'
+add_deny  "date: --set <value>"                          "date --set 2020-01-01"
+add_deny  "date: -u -s"                                  "date -u -s 2020-01-01"
+add_deny  "date: after ;"                                "foo; date -s x"
+add_deny  "date: after &&"                               "true && date -s x"
+add_deny  "date: after a pipe"                           "echo x | date -s x"
+add_deny  "date: after a harmless date"                  "date -u; date -s x"
+add_deny  "date: after curl -s"                          "curl -s x; date -s x"
+add_deny  "date: -s behind a quoted ;"                   "date -d 'a;b' -s now"
+# A redirection, an escape or an open quote does not end the inspected segment.
+add_allow "date: redirection then ; then curl -s"        "date -u 2>/dev/null; curl -s x"
+add_allow "date: 2>&1 piped into sort -s"                "date -u 2>&1 | sort -s"
+add_deny  "date: -s behind 2>&1"                         "date -u 2>&1 -s 2020-01-01"
+add_deny  "date: -s behind &>"                           "date -u &>/dev/null -s 2020-01-01"
+add_deny  "date: -s behind >|"                           'date >|/tmp/x -s 2020-01-01'
+add_deny  "date: -s behind an escaped ;"                 'date +a\;b -s 2020-01-01'
+add_deny  "date: -s behind an escaped \""                'date +\" -s 2020-01-01'
+add_deny  "date: -s behind an escaped '"                 "date +\\' -s 2020-01-01"
+add_deny  "date: -s inside an unclosed quote"            'date -d "a -s now'
+# A substitution can hold its own separator; with one on the line the whole line counts.
+add_deny  "date: -s behind a \$( ; ) substitution"       'date $(echo +%F; true) -s 2020-01-01'
+add_deny  "date: -s behind a backtick substitution"      'date `echo +%F; true` -s 2020-01-01'
+add_deny  "date: -s behind a \$( | ) substitution"       'date $(echo a | cat) -s 2020-01-01'
+add_deny  "date: -s behind a process substitution"       'date <(echo a; echo b) -s 2020-01-01'
+add_allow "date: substitution on the line, no -s"        'date -d "$(echo now)" +%s; curl x'
+
 # ── v2.7.3 git push: `push` must end the word ─────────────────────────────────
 add_allow "push v2.7.3: git push-notes is another command" "git push-notes"
 add_allow "push v2.7.3: -C repo push-notes (asks, no deny)" "git -C repo push-notes"

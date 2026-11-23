@@ -3,7 +3,7 @@ id: release-process
 title: Release Process
 sidebar_label: Release Process
 sidebar_position: 4
-description: How we version, branch, build, and release our Nextcloud apps
+description: How we branch, version, build and release our Nextcloud apps, following Nextcloud's own branch model
 keywords:
   - release
   - deployment
@@ -19,9 +19,42 @@ keywords:
 
 This document describes how we version, build, and release our Nextcloud apps. All release workflows are centralized in the [Conduction/.github](https://github.com/ConductionNL/.github) repository and shared across all app repositories.
 
-## Branch Model
+## Branch model
 
-We use a three-tier branch model. Code flows upward through the tiers, each with increasing stability guarantees.
+We follow Nextcloud's own convention (ADR-122). `main` is the development branch. Each minor version gets a `stableX.Y` branch, and releases come from there.
+
+```mermaid
+flowchart LR
+  F["feature/*<br/>bugfix/*"] --> M["main<br/>X.Y.0-dev"]:::accent
+  M -- "cut at release candidate" --> S["stableX.Y"]
+  M -. "/backport to stableX.Y" .-> S
+  S --> R["RC, final<br/>and patches"]
+  classDef accent fill:#F36C21,stroke:#F36C21,color:#fff;
+```
+
+- **Work lands on `main`.** Its `appinfo/info.xml` carries the next version as `X.Y.0-dev`. A push to `main` makes a GitHub prerelease `X.Y.0-dev.<timestamp>`, with no App Store upload.
+- **Betas come from `main`** until the line is cut, as `X.Y.Z-beta.N`.
+- **Each minor line gets a `stableX.Y` branch** when it reaches release candidate. Release candidates, finals and patches come from that branch only.
+- **Fixes land on `main` first.** Comment `/backport to stableX.Y` on the merged pull request. The backport workflow cherry-picks the commits and opens a pull request into the stable branch. Nothing is merged upward.
+- **The version is committed.** A release ships exactly the version in the branch's `info.xml`, and the tag must match it. To release, raise the version with a `release/vX.Y.Z` pull request on the stable branch first. PR labels play no part.
+
+### Branch rules
+
+| Target branch | Allowed source branches | What happens on merge |
+| --- | --- | --- |
+| `main` | `feature/*`, `bugfix/*` and other work branches | GitHub prerelease, no App Store upload |
+| `stableX.Y` | `backport/*`, `release/v*`, `hotfix/*`, `dependabot/*` | Release candidates and releases for that line |
+| `development`, `beta` | None. Both are locked on an app that has moved | |
+
+The centralized **branch-protection** workflow enforces these rules and blocks pull requests from other branches.
+
+### Moving an app over
+
+Apps move to this model one at a time. OpenRegister moved first, on 9 November 2026. An app that has moved sets `branch-model: main` in its release and branch-protection callers, and is listed under `main-branch` in [`fleet-apps.json`](https://github.com/ConductionNL/.github/blob/main/fleet-apps.json). Its `development` and `beta` branches are locked, their last commit is tagged, and they are deleted after 30 days.
+
+### Apps that have not moved yet
+
+Until an app moves, it keeps the older three-tier model. Code flows upward through the tiers:
 
 ```
 feature/* ─┐
@@ -31,33 +64,15 @@ hotfix/*  ─┘        │              │        │
                No builds      (nightly)   (App Store)
 ```
 
-### Branch Rules
-
 | Target branch | Allowed source branches             | What happens on merge                                 |
 | ------------- | ----------------------------------- | ----------------------------------------------------- |
-| `development` | `feature/*`, `bugfix/*`, `hotfix/*` | Nothing — no builds triggered                         |
+| `development` | `feature/*`, `bugfix/*`, `hotfix/*` | Nothing, no builds triggered                          |
 | `beta`        | `development`, `hotfix/*`, `main`   | Beta release built and pushed as nightly to App Store |
 | `main`        | `beta`, `hotfix/*`                  | Stable release built and pushed to App Store          |
 
-These rules are enforced by the centralized **branch-protection** workflow. PRs from disallowed branches are blocked automatically.
+Hotfix branches (`hotfix/*`) may target `beta` and `main` directly, for critical production fixes only. They get the same review and CI as any other pull request. After a hotfix merges to `main`, open a pull request from `main` to `beta` to keep the branches in sync.
 
-### The Nextcloud branch model
-
-Apps are moving to the branch model Nextcloud uses for its own apps, one app at a time. OpenRegister moved first. An app on this model sets `branch-model: main` in its release caller.
-
-- Work lands on `main`. A push to `main` makes a GitHub prerelease, with no App Store upload.
-- Each minor line gets a `stableX.Y` branch. Release candidates, finals and patches come from that branch only.
-- Fixes land on `main` first and are backported to `stableX.Y` with the backport workflow. Nothing is merged upward.
-
-Check the app's own workflows to see which model it uses. The three-tier model above applies until an app has moved.
-
-### Hotfixes
-
-Hotfix branches (`hotfix/*`) can target both `beta` and `main` directly, bypassing the normal development flow. Use these only for critical production fixes that cannot wait for the regular development cycle.
-
-**The same branch protection rules apply to hotfixes.** A hotfix PR to `main` still requires 2 reviewers and passing CI. A hotfix PR to `beta` requires 1 reviewer and passing CI. There are no exceptions — the human-in-the-loop review is always enforced.
-
-After merging a hotfix to `main`, create a backport PR from `main` → `beta` to keep the branches in sync.
+The rest of this page, from versioning onwards, describes this older model. On the Nextcloud model, the version comes from `info.xml`, as described above.
 
 ## Versioning
 

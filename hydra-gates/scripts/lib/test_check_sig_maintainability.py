@@ -21,8 +21,14 @@
        a change with no measured source file is exit 4;
        a base with no merge base is exit 3.
   4. REPORT: the shares are code-weighted and compared with the 4-star limits.
-  5. STRUCTURE: PHP and Python dependencies, the component root, and the
-     violation degree on the examples in SIG's Guidance for Producers.
+  5. STRUCTURE: PHP, Python and JS/TS/Vue dependencies, the component root, and the
+     violation degree on the examples in SIG's Guidance for Producers. Python
+     imports resolve only within the project's own packages, PHP is measured
+     under the PSR-4 autoload roots, and JS/TS/Vue comes from a regex import
+     graph (or dependency-cruiser, when asked for). The analysis scope file's
+     components:, component_base_dirs and component_depth define the
+     components; a single component leaves independence and entanglement
+     unrated, with a warning.
   6. PROFILES: four-star is the v18.1 guidance; five-star is the derived
      5-star band, stricter than four-star on every check; a share between the
      two passes four-star and misses five-star; every report row carries the
@@ -48,6 +54,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -126,6 +133,11 @@ class Units(unittest.TestCase):
         vue = ("<!--\n  SPDX-License-Identifier: EUPL-1.2\n  - copyright\n-->\n<template>\n"
                "\t<!-- one line -->\n\t<div />\n\t<!-- open\n\tclose --> <span />\n</template>\n")
         self.assertEqual(sig.code_lines(vue, "vue"), {5, 7, 9, 10})
+
+    def test_php_attributes_are_code_and_hash_lines_are_comments(self):
+        php = "<?php\nclass A {\n    #[NoAdminRequired]\n    # a comment\n    #comment\n    public function f() {}\n}\n"
+        self.assertEqual(sig.code_lines(php, "php"), {1, 2, 3, 6, 7})
+        self.assertEqual(sig.code_lines("#[not an attribute]\nx = 1\n", "python"), {2})
 
     def test_python_self_and_cls_are_not_parameters(self):
         src = "class K:\n    def m(self, x, y):\n        return x\n\n    @classmethod\n    def c(cls, x):\n        return x\n\ndef f(self_like, b):\n    return b\n"
@@ -427,6 +439,25 @@ class Report(unittest.TestCase):
         self.assertIn("[gate-122] sig-maintainability: report: 2 unit(s) in 1 file(s), languages php", out)
         self.assertIn("| php | 2 |", out)
 
+    def test_jscpd_runs_with_a_raised_node_heap(self):
+        with mock.patch.dict(os.environ, {"NODE_OPTIONS": "--no-warnings"}):
+            self.assertEqual(sig.jscpd_env()["NODE_OPTIONS"], "--no-warnings --max-old-space-size=8192")
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(sig.jscpd_env()["NODE_OPTIONS"], "--max-old-space-size=8192")
+        seen = {}
+        real = subprocess.run
+
+        def spy(cmd, *a, **kw):
+            if cmd and cmd[0] == JSCPD:
+                seen["env"] = kw.get("env")
+            return real(cmd, *a, **kw)
+        repo = Repo()
+        self.addCleanup(repo.close)
+        repo.write("lib/A.php", php_class("A", [php_method("a")]))
+        with mock.patch.object(sig.subprocess, "run", spy):
+            sig.run_jscpd(repo.dir, JSCPD, ["lib/A.php"])
+        self.assertIn("--max-old-space-size=8192", seen["env"]["NODE_OPTIONS"])
+
     def test_duplication_counts_every_later_copy_of_six_code_lines(self):
         block = lambda tag: php_method("copy", lines=1, tag=tag).replace("        return 0;", DUP_BLOCK + "        return 0;")
         self.repo.write("lib/Service/A.php", php_class("A", [block("a")]))
@@ -615,16 +646,70 @@ class Structure(unittest.TestCase):
         self.assertEqual(comp("lib/Service/X1.php"), "Service")
         self.assertEqual(comp("lib/AppInfo.php"), "(root)")
 
-    def test_components_from_scope_reads_top_level_directories(self):
+    def scope_components(self, text):
         with tempfile.TemporaryDirectory() as app:
             with open(os.path.join(app, "sigrid.yaml"), "w") as fh:
-                fh.write('component_base_dirs: [""]\n')
-            self.assertTrue(sig.sigrid_yaml_top_level_components(app))
-            with open(os.path.join(app, "sigrid.yaml"), "w") as fh:
-                fh.write("component_base_dirs: [lib]\n")
-            self.assertFalse(sig.sigrid_yaml_top_level_components(app))
-        self.assertEqual(sig.top_level_component_of("lib/Service/A.php"), "lib")
-        self.assertEqual(sig.top_level_component_of("index.php"), "Root files")
+                fh.write(text)
+            definition = sig.scope_file_components(app)
+        return definition, sig.scope_component_factory(definition)[1] if definition else None
+
+    def test_scope_file_component_base_dirs(self):
+        definition, comp = self.scope_components('model: "2026"\ncomponent_base_dirs: [""]  # top level\n')
+        self.assertEqual(definition, {"component_base_dirs": [""]})
+        self.assertEqual(comp("lib/Service/A.php"), "lib")
+        self.assertEqual(comp("index.php"), "Root files")
+        _d, comp = self.scope_components('component_base_dirs:\n  - "my-component"\n  - ""\nexclude:\n  - ".*/x/.*"\n')
+        self.assertEqual(comp("my-component/my-sub-component-a/a.py"), "my-component/my-sub-component-a")
+        self.assertEqual(comp("my-component/b.py"), "my-component")
+        self.assertEqual(comp("other-component/c.py"), "other-component")
+        _d, comp = self.scope_components("component_base_dirs: [lib]\n")
+        self.assertEqual(comp("lib/Service/A.php"), "lib/Service")
+        self.assertEqual(comp("src/main.js"), "src")
+
+    def test_scope_file_component_depth(self):
+        definition, comp = self.scope_components("component_depth: 2\n")
+        self.assertEqual(definition, {"component_depth": 2})
+        self.assertEqual(comp("src/openzaak/utils/a.py"), "src/openzaak")
+        self.assertEqual(comp("src/manage.py"), "src")
+        self.assertEqual(comp("setup.py"), "Root files")
+
+    def test_scope_file_components_list(self):
+        _d, comp = self.scope_components(
+            "components:\n  - name: North\n    include:\n      - \".*/my-sub-component-a/.*\"\n"
+            "      - \".*/my-sub-component-b/.*\"\n    exclude:\n      - \".*/b[.]py\"\n"
+            "  - name: South\n    include:\n      - \".*/other-component/.*\"\n      - \".*/b[.]py\"\n"
+            "component_depth: 1\n")
+        self.assertEqual(comp("my-sub-component-a/a.py"), "North")
+        self.assertEqual(comp("my-sub-component-b/b.py"), "South")
+        self.assertEqual(comp("other-component/c.py"), "South")
+        self.assertEqual(comp("elsewhere/d.py"), sig.UNASSIGNED)
+        self.assertEqual(self.scope_components("model: \"2026\"\n"), (None, None))
+
+    def test_one_component_leaves_independence_and_entanglement_unrated(self):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        repo.write("sigrid.yaml", 'component_base_dirs: [""]\n')
+        repo.write("lib/Service/A.php", "<?php\nnamespace OCA\\Fx\\Service;\nuse OCA\\Fx\\Db\\Thing;\nclass A { public function f(Thing $t): void {} }\n")
+        repo.write("lib/Db/Thing.php", "<?php\nnamespace OCA\\Fx\\Db;\nclass Thing {}\n")
+        repo.commit("app")
+        self.addCleanup(setattr, sig, "COMPONENTS_FROM_SCOPE", False)
+        sig.COMPONENTS_FROM_SCOPE = True
+        report = sig.build_report(repo.dir, LIZARD, None)
+        php = report["structure"]["php"]
+        self.assertEqual(php["components"].keys(), {"lib"})
+        self.assertIn("one component", php["warning"])
+        self.assertEqual((php["component_independence"]["stars"], php["component_independence"]["ok"]), (None, None))
+        self.assertIsNone(php["component_entanglement"]["stars"])
+        self.assertNotIn("php component_independence", [label for label, _ok in sig.checks_of(report)])
+        self.assertEqual(report["rating"]["properties"]["component_independence"]["languages"], {})
+        self.assertEqual(report["rating"]["properties"]["component_entanglement"]["languages"], {})
+        self.assertIn("Warning (php):", sig.markdown(report))
+
+        sig.COMPONENTS_FROM_SCOPE = False
+        php = sig.build_report(repo.dir, LIZARD, None)["structure"]["php"]
+        self.assertEqual(php["components"].keys(), {"Service", "Db"})
+        self.assertNotIn("warning", php)
+        self.assertIsNotNone(php["component_independence"]["stars"])
 
     def test_component_root_in_a_python_service_and_modules_outside_it(self):
         files = ["src/__init__.py", "src/api/main.py", "src/api/routers/a.py", "src/api/routers/b.py",
@@ -671,6 +756,121 @@ class Structure(unittest.TestCase):
             self.assertEqual(deps["src/api/routers/documents.py"], {"src/api/utils/crypto.py"})
         finally:
             repo.close()
+
+    def test_python_imports_resolve_only_within_the_project_packages(self):
+        repo = Repo()
+        try:
+            repo.write("src/openzaak/__init__.py", "")
+            repo.write("src/openzaak/query/__init__.py", "")
+            repo.write("src/openzaak/query/typing.py", "Alias = int\n")
+            repo.write("src/openzaak/query/django.py", "x = 1\n")
+            repo.write("src/openzaak/utils.py", "def f():\n    return 1\n")
+            repo.write("src/openzaak/views.py", "import typing\nfrom django.db import models\n"
+                       "from typing import Any\nimport openzaak.utils\nfrom openzaak.query import typing as t\n")
+            py = ["src/openzaak/__init__.py", "src/openzaak/query/__init__.py", "src/openzaak/query/typing.py",
+                  "src/openzaak/query/django.py", "src/openzaak/utils.py", "src/openzaak/views.py"]
+            deps = sig.python_dependencies(repo.dir, py)
+            self.assertEqual(deps["src/openzaak/views.py"], {"src/openzaak/utils.py", "src/openzaak/query/typing.py"})
+
+            repo.write("src/openzaak/plain.py", "import typing\nimport django\n")
+            deps = sig.python_dependencies(repo.dir, py + ["src/openzaak/plain.py"])
+            self.assertEqual(deps["src/openzaak/plain.py"], set())
+        finally:
+            repo.close()
+
+    def test_php_structure_follows_the_psr4_autoload_roots(self):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        repo.write("composer.json", json.dumps({
+            "autoload": {"psr-4": {"OWC\\PDC\\Base\\": "./src/Base"}},
+            "autoload-dev": {"psr-4": {"OWC\\PDC\\Base\\Tests\\": "./tests"}}}))
+        repo.write("src/Base/Foundation/Plugin.php",
+                   "<?php\nnamespace OWC\\PDC\\Base\\Foundation;\nuse OWC\\PDC\\Base\\Models\\Item;\n"
+                   "class Plugin { public function f(Item $i): void {} }\n")
+        repo.write("src/Base/Models/Item.php", "<?php\nnamespace OWC\\PDC\\Base\\Models;\nclass Item {}\n")
+        repo.write("pdc-base.php", "<?php\nrequire 'autoloader.php';\n")
+        repo.commit("plugin")
+        self.assertEqual(sig.php_source_roots(repo.dir, {}), ["src/Base/"])
+        report = sig.build_report(repo.dir, LIZARD, None)
+        php = report["structure"]["php"]
+        self.assertEqual(php["modules"], 2)
+        self.assertEqual(php["component_root"], "src/Base")
+
+    def test_php_source_roots_fall_back_to_lib_then_src(self):
+        with tempfile.TemporaryDirectory() as app:
+            self.assertEqual(sig.php_source_roots(app, {"lib/A.php": "php", "src/B.php": "php"}), ["lib/"])
+            self.assertEqual(sig.php_source_roots(app, {"src/B.php": "php"}), ["src/"])
+            with open(os.path.join(app, "composer.json"), "w") as fh:
+                json.dump({"autoload": {"psr-4": {"A\\": ["lib/", "extra"], "B\\": ""}}}, fh)
+            self.assertEqual(sig.php_source_roots(app, {}), ["", "extra/", "lib/"])
+
+    def js_tree(self, repo):
+        repo.write("package.json", "{}\n")
+        repo.write("src/main.js", "import Vue from 'vue'\nimport App from './App.vue'\nimport router from './router'\n"
+                   "// import { gone } from './store/gone'\nnew Vue({ router, render: h => h(App) })\n")
+        repo.write("src/App.vue", "<template>\n  <div>import x from './nowhere'</div>\n</template>\n"
+                   "<script>\nimport { useItems } from '@/store/items'\nexport default { setup: () => useItems() }\n"
+                   "</script>\n")
+        repo.write("src/router/index.ts", "import type { Route } from '../types'\n"
+                   "const Page = () => import('../views/Page.vue')\nexport default [Page]\n")
+        repo.write("src/types.ts", "export type Route = string\n")
+        repo.write("src/store/items.js", "const api = require('../services/api.js')\nexport const useItems = () => api\n")
+        repo.write("src/services/api.ts", "export * from './http'\nexport const api = 1\n")
+        repo.write("src/services/http.ts", "export const get = 1\n")
+        repo.write("src/views/Page.vue", "<script setup>\nimport { get } from '../services/http'\n</script>\n")
+        repo.write("src/store/gone.js", "export const gone = 1\n")
+        repo.commit("js")
+
+    def test_js_ts_vue_import_graph(self):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        self.js_tree(repo)
+        files = {f: lg for f, lg in sig.production_files(repo.dir, sig.Scope(repo.dir)).items() if lg in sig.JS_LANGS}
+        deps = sig.js_dependencies_regex(repo.dir, files)
+        self.assertEqual(deps["src/main.js"], {"src/App.vue", "src/router/index.ts"})
+        self.assertEqual(deps["src/App.vue"], {"src/store/items.js"})
+        self.assertEqual(deps["src/router/index.ts"], {"src/views/Page.vue"})
+        self.assertEqual(deps["src/store/items.js"], {"src/services/api.ts"})
+        self.assertEqual(deps["src/services/api.ts"], {"src/services/http.ts"})
+        self.assertEqual(deps["src/views/Page.vue"], {"src/services/http.ts"})
+
+    def test_a_report_carries_js_ts_vue_structure(self):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        self.js_tree(repo)
+        with mock.patch.dict(os.environ, {sig.JS_GRAPH_ENV: ""}):
+            report = sig.build_report(repo.dir, LIZARD, None)
+        js = report["structure"][sig.JS_STRUCTURE]
+        self.assertEqual((js["modules"], js["component_root"], js["graph"]), (9, "src", "regex"))
+        self.assertEqual(js["components"].keys(), {"(root)", "router", "store", "services", "views"})
+        self.assertIn("component_independence", js)
+        self.assertIn(f"{sig.JS_STRUCTURE} structure (9 modules", sig.markdown(report))
+        self.assertIn(sig.JS_STRUCTURE, report["rating"]["properties"]["module_coupling"]["languages"])
+
+    def test_dependency_cruiser_graph_when_asked_for(self):
+        repo = Repo()
+        self.addCleanup(repo.close)
+        self.js_tree(repo)
+        bin_dir = tempfile.mkdtemp(prefix="gate122-bin-")
+        self.addCleanup(shutil.rmtree, bin_dir, True)
+        fake = os.path.join(bin_dir, "depcruise")
+        with open(fake, "w") as fh:
+            fh.write("#!/bin/sh\ncat <<'JSON'\n" + json.dumps({"modules": [
+                {"source": "src/main.js", "dependencies": [
+                    {"resolved": "src/App.vue", "dependencyTypes": ["local", "import"]},
+                    {"resolved": "src/types.ts", "dependencyTypes": ["local", "type-only"]},
+                    {"resolved": "vue", "dependencyTypes": ["npm"]}]}]}) + "\nJSON\n")
+        os.chmod(fake, 0o755)
+        files = {f: lg for f, lg in sig.production_files(repo.dir, sig.Scope(repo.dir)).items() if lg in sig.JS_LANGS}
+        env = {"PATH": bin_dir + os.pathsep + os.environ["PATH"], sig.JS_GRAPH_ENV: "depcruise"}
+        with mock.patch.dict(os.environ, env):
+            deps, source = sig.js_dependencies(repo.dir, files)
+        self.assertEqual(source, "dependency-cruiser")
+        self.assertEqual(deps["src/main.js"], {"src/App.vue"})
+        with mock.patch.dict(os.environ, {sig.JS_GRAPH_ENV: "depcruise", "PATH": bin_dir}):
+            os.remove(fake)
+            _deps, source = sig.js_dependencies(repo.dir, files)
+        self.assertEqual(source, "regex")
 
 
 def rated_report(langs, structure=None):

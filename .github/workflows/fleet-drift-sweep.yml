@@ -1,5 +1,6 @@
-# Fleet drift sweep — re-run every app's Code Quality against `development`,
-# in full, once a day.
+# Fleet drift sweep — re-run every app's Code Quality on its integration
+# branch, in full, once a day: `main` for the `main-branch` apps in
+# fleet-apps.json (ADR-122), `development` for the rest.
 #
 # ══════════════════════════════════════════════════════════════════════════
 # WHY THIS EXISTS: A GREEN BADGE IS A VERDICT ABOUT A MOMENT, NOT A STATE
@@ -101,9 +102,9 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Branch to measure (default: development)"
+        description: "Branch to measure on every app (default: each app's integration branch, main for the main-branch apps in fleet-apps.json, development for the rest)"
         required: false
-        default: development
+        default: ""
 
 permissions:
   contents: read
@@ -115,6 +116,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       apps: ${{ steps.apps.outputs.apps }}
+      main_apps: ${{ steps.apps.outputs.main_apps }}
       count: ${{ steps.apps.outputs.count }}
       started: ${{ steps.window.outputs.started }}
 
@@ -155,7 +157,11 @@ jobs:
             echo "::error::fleet-apps.json lists no apps to sweep. A sweep over an empty list exits 0 and proves nothing."
             exit 1
           fi
+          # Apps on branch model main (ADR-122) integrate on `main`; their
+          # `development` is locked, so measuring it would report a frozen tree.
+          MAIN_APPS=$(jq -r '(."main-branch" // [])[]' fleet-apps.json | tr '\n' ' ')
           echo "apps=${APPS}" >> "$GITHUB_OUTPUT"
+          echo "main_apps=${MAIN_APPS}" >> "$GITHUB_OUTPUT"
           echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
           echo "Sweeping ${COUNT} app(s): ${APPS}"
 
@@ -174,9 +180,19 @@ jobs:
       - name: Dispatch Code Quality on every app
         env:
           GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
-          REF: ${{ inputs.ref || 'development' }}
+          REF_OVERRIDE: ${{ inputs.ref }}
+          MAIN_APPS: ${{ steps.apps.outputs.main_apps }}
         run: |
           set -uo pipefail
+
+          # The branch to measure for one app: the dispatch input when given,
+          # else the app's integration branch.
+          ref_for() {
+            if [ -n "${REF_OVERRIDE}" ]; then echo "${REF_OVERRIDE}"
+            elif [[ " ${MAIN_APPS} " == *" $1 "* ]]; then echo main
+            else echo development
+            fi
+          }
 
           APPS="${{ steps.apps.outputs.apps }}"
           EXPECTED="${{ steps.apps.outputs.count }}"
@@ -184,9 +200,10 @@ jobs:
           FAILED=""
 
           for app in ${APPS}; do
+            REF=$(ref_for "${app}")
             # --ref is the entire reason this workflow is centralised. Without
-            # it the run would land on the repo's default branch, which is
-            # `main` for ten of these apps.
+            # it the run would land on the repo's default branch, which is not
+            # the integration branch for every app.
             if gh workflow run code-quality.yml \
                  --repo "ConductionNL/${app}" \
                  --ref "${REF}" 2>/tmp/err; then
@@ -274,7 +291,8 @@ jobs:
       - name: Wait for every dispatched run, then report
         env:
           GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
-          REF: ${{ inputs.ref || 'development' }}
+          REF_OVERRIDE: ${{ inputs.ref }}
+          MAIN_APPS: ${{ needs.sweep.outputs.main_apps }}
           APPS: ${{ needs.sweep.outputs.apps }}
           STARTED: ${{ needs.sweep.outputs.started }}
         run: |
@@ -292,8 +310,17 @@ jobs:
           # `created_at >= STARTED` is what makes this THIS sweep's verdict:
           # without it an app whose dispatch silently failed would be reported
           # with a stale run's conclusion.
+          # Same rule as the dispatch step: the run must be found on the
+          # branch it was dispatched on.
+          ref_for() {
+            if [ -n "${REF_OVERRIDE}" ]; then echo "${REF_OVERRIDE}"
+            elif [[ " ${MAIN_APPS} " == *" $1 "* ]]; then echo main
+            else echo development
+            fi
+          }
+
           find_run() {
-            gh api "repos/ConductionNL/$1/actions/workflows/code-quality.yml/runs?branch=${REF}&event=workflow_dispatch&per_page=10" \
+            gh api "repos/ConductionNL/$1/actions/workflows/code-quality.yml/runs?branch=$(ref_for "$1")&event=workflow_dispatch&per_page=10" \
               --jq "[.workflow_runs[] | select(.created_at >= \"${STARTED}\")] | sort_by(.created_at) | last | \"\(.status)|\(.conclusion)|\(.html_url)\"" 2>/dev/null
           }
 
@@ -338,12 +365,12 @@ jobs:
 
           RED=""
           {
-            echo "### Fleet drift sweep — verdicts on \`${REF}\`"
+            echo "### Fleet drift sweep — verdicts on each app's integration branch"
             echo ""
             echo "Runs started at ${STARTED}, measured against TODAY's gates."
             echo ""
-            echo "| App | Verdict |"
-            echo "| --- | --- |"
+            echo "| App | Branch | Verdict |"
+            echo "| --- | --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
 
           for app in ${APPS}; do
@@ -357,11 +384,11 @@ jobs:
             # exists to answer "which apps are red under TODAY's gates", and an
             # answer that only renders is an answer no script can consume.
             if [ -n "${u}" ]; then
-              echo "| [\`${app}\`](${u}) | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| [\`${app}\`](${u}) | \`$(ref_for "${app}")\` | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
             else
-              echo "| \`${app}\` | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| \`${app}\` | \`$(ref_for "${app}")\` | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
             fi
-            echo "VERDICT: ${app} | ${v} | ${u:-no-url}"
+            echo "VERDICT: ${app} | $(ref_for "${app}") | ${v} | ${u:-no-url}"
           done
 
           echo ""
@@ -369,7 +396,7 @@ jobs:
           # no-run are each a missing verdict, and a missing verdict is the
           # thing this whole workflow exists to make visible.
           if [ -n "${RED// /}" ]; then
-            echo "::error::not green on ${REF}:${RED}"
+            echo "::error::not green on their integration branch:${RED}"
             {
               echo ""
               echo "**Not green:**${RED}"
@@ -379,7 +406,7 @@ jobs:
             exit 1
           fi
 
-          echo "Every swept app is green on ${REF} under today's gates."
+          echo "Every swept app is green on its integration branch under today's gates."
           {
             echo ""
             echo "Every swept app is green under today's gates."

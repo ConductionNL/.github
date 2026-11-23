@@ -2,7 +2,7 @@
 
 These commands drive the [OpenSpec flow](../WayOfWork/spec-driven-development.md#the-openspec-flow). They are Claude Code skills, maintained in Hydra's `.claude/skills/` and shared with every app workspace. The `openspec` CLI, listed at the bottom of this page, is the separate terminal tool underneath them.
 
-Where the change folders, specs and ADRs live is on [Spec-driven development](../WayOfWork/spec-driven-development.md#where-specs-and-decisions-live).
+Where the change folders, specs and ADRs live is on [The code factory](../WayOfWork/spec-driven-development.md#where-specs-and-decisions-live).
 
 ---
 

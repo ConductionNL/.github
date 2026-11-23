@@ -10,7 +10,7 @@ description: The company-wide architecture decision records (ADRs) every Conduct
 
 Company-wide architecture decision records (ADRs) apply to every Conduction app. This page lists them by number, so a product page can cite "ADR-083" and a reader can look it up here.
 
-The ADR files live in our internal Hydra repository, under `openspec/architecture/`. That repository is private, so this page is the public index. How ADRs relate to specs is on [Spec-driven development](spec-driven-development.md#where-specs-and-decisions-live).
+The ADR files live in our internal Hydra repository, under `openspec/architecture/`. That repository is private, so this page is the public index. How ADRs relate to specs is on [The code factory](spec-driven-development.md#where-specs-and-decisions-live).
 
 ## How to read the status column
 

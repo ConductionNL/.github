@@ -205,7 +205,7 @@ A shared slot pool (`/tmp/hydra-slots/`) limits all containers to **5 concurrent
 
 The post-review `Builder (fix)` container was removed by `openspec/changes/no-loop-review-pipeline` — reviewers now own fix authority.
 
-Builds use Opus (better quality, separate rate limit pool on Max). Reviews and fixes use Sonnet. Quality checks (PHPCS, Psalm, PHPStan, ESLint) and browser tests (Playwright) run as host processes — no Claude tokens, no slots consumed.
+Every persona defaults to Sonnet (`agents/<persona>/config.yaml`). Quality checks (PHPCS, Psalm, PHPStan, ESLint) and browser tests (Playwright) run as host processes — no Claude tokens, no slots consumed.
 
 `cron-hydra.sh` (legacy, manual) and the supervisor (continuous daemon) share the same pool. If all slots are busy, new work is deferred to the next cycle.
 
@@ -306,6 +306,26 @@ Generate specs from existing issues, enabling: Issue → Spec → Build → Revi
 - Feature requests from users
 - Audit findings that need code changes
 - Manual observations that should become specs
+
+## After the merge
+
+Once a person merges the pull request, `scripts/run-archive.sh` closes out the change:
+
+1. **Sync specs.** The delta specs move into the app's `openspec/specs/`, which always describes what the app does today.
+2. **Keep the scenarios.** The acceptance criteria become reusable `TS-NNN-*.md` files in `test-scenarios/`. `/test-functional`, `/test-app` and `/test-scenario-run` pick them up, so every archived change grows the regression library.
+3. **Update the changelog.** Completed tasks land under the current version, in Keep a Changelog format.
+4. **Archive.** The change moves to `openspec/changes/archive/YYYY-MM-DD-<name>/`.
+
+## Traceability
+
+Every line of code traces back to its spec in two independent ways:
+
+```
+code line → git blame → commit "feat: add columns (#82)" → PR "Closes #82" → issue #82 → spec
+code line → @spec openspec/changes/kanban-mvp/tasks.md#task-1 → spec
+```
+
+The builder adds `@spec` tags to the file, the class and each method. Code touched by several changes carries several tags. Gate 16 fails a changed method without one. Branches are named `feature/<issue>/<change-name>`, every commit carries `(#<issue>)`, and every pull request body starts with `Closes #<issue>`.
 
 ## Cron Schedule
 
