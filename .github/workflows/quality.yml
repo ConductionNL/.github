@@ -182,7 +182,12 @@ on:
         type: string
         default: "[]"
       database-test-matrix:
-        description: "JSON array of databases for the PHPUnit job, e.g. '[\"pgsql\", \"mysql\", \"mariadb\"]'; entries from pgsql, mysql, mariadb, sqlite, no duplicates. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. The FIRST entry is the primary database: it gets the full (or PR-reduced) PHP x Nextcloud matrix with the test suite, coverage and, when enabled, the coverage guard. Every further entry gets exactly ONE install-only leg, named `..., <database>, install only)`, on the primary php-version and the newest Nextcloud branch, on pull requests and pushes alike: a real database server, a Nextcloud install on it, and the app's migrations through `occ app:enable`, and NO test suite, coverage or test counts. A portability bug such as a migration one backend rejects fails that leg; repeating the suite per backend only costs runner time. `mariadb` starts a real MariaDB server (11.4; 12.3 on the Nextcloud 35 leg) rather than reusing MySQL 8.4: Doctrine DBAL quotes identifiers per platform keyword list, so a MariaDB-only reserved word (e.g. a `row_number` column) passes on mysql and fails on MariaDB. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this option is inert until an app opts in."
+        description: "JSON array of databases to run PHPUnit against, e.g. '[\"pgsql\", \"mysql\", \"mariadb\", \"sqlite\"]'. Every listed database gets the full PHP x Nextcloud matrix with the test suite. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. `mariadb` starts a real MariaDB server (11.4; 12.3 on the Nextcloud 35 leg) rather than reusing MySQL 8.4: Doctrine DBAL quotes identifiers per platform keyword list, so a MariaDB-only reserved word (e.g. a `row_number` column) passes on mysql and fails on MariaDB. For a database that only needs its install and migrations checked, use database-install-matrix instead. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this option is inert until an app opts in."
+        required: false
+        type: string
+        default: "[]"
+      database-install-matrix:
+        description: "JSON array of databases that get ONE install-only leg each in the PHPUnit job, e.g. '[\"mariadb\"]'; entries from pgsql, mysql, mariadb, sqlite, no duplicates. Such a leg runs on the primary php-version and the newest Nextcloud branch, on pull requests (also when reduce-pr-matrix applies) and pushes alike: a real database server, a Nextcloud install on it and the app's migrations through `occ app:enable`, and NO test suite, coverage or test counts. Its check is named `PHPUnit (PHP x, NC y, <database>, install only)`. A migration one backend rejects fails that leg in minutes, without running the whole suite again per backend. A database may not also be a full-suite database (listed in database-test-matrix, or the `database` input when that list is empty): the nextcloud-matrix job turns red on such an entry, on an unknown value or on a duplicate. DEFAULT IS EMPTY: no install-only legs."
         required: false
         type: string
         default: "[]"
@@ -3309,9 +3314,10 @@ jobs:
   #                  have to answer by reading three files.
   #
   # Plus `database-extra-legs`, which is not about the Nextcloud range: the
-  # PHPUnit `include:` list for every database-test-matrix entry after the
-  # first (see the step that writes it). It lives here because it needs
-  # `single-server`, and because expressions cannot slice an array.
+  # PHPUnit `include:` list with one install-only leg per
+  # database-install-matrix entry (see the step that writes it). It lives
+  # here because it needs `single-server`, and because building and
+  # validating a list of objects is not something expressions can do.
   #
   # Those four jobs used to read `fromJSON(inputs.nextcloud-test-refs)[0]`, and
   # the fleet's convention of writing the newest version first is what made that
@@ -3669,77 +3675,102 @@ jobs:
           sys.exit(1 if hard else 0)
           PY
 
-      # ── ONE LEG PER EXTRA DATABASE, NOT ONE PHP x NEXTCLOUD SET ────────────
+      # ── ONE INSTALL-ONLY LEG PER database-install-matrix ENTRY ─────────────
       #
-      # database-test-matrix: the FIRST entry is the phpunit job's `database`
-      # dimension and gets the full (or PR-reduced) matrix. Every further entry
-      # becomes exactly one `include:` leg on the primary PHP and the newest
-      # Nextcloud branch, on pull requests and pushes alike. Database
-      # portability bugs (a migration using a word one backend reserves) show
-      # on any single leg, so repeating the PHP x Nextcloud spread per backend
-      # would buy runner time and no signal.
+      # database-test-matrix is the phpunit job's `database` dimension: every
+      # database listed there gets the full (or PR-reduced) PHP x Nextcloud
+      # matrix with the test suite, exactly as before this step existed.
       #
-      # Each extra leg sets `extra-database: true`, a key the regular legs do
-      # not have. On such a leg the phpunit job installs Nextcloud on that
-      # database and runs the app's migrations through `occ app:enable`, and
-      # stops there: no test suite, no coverage, no test counts (see the
-      # "INSTALL ONLY" note on the phpunit job). An include entry
-      # whose `database` differs from the one primary value cannot merge into
-      # an existing combination without overwriting it, so it always becomes
-      # a new leg.
+      # database-install-matrix is separate. Each entry becomes exactly one
+      # `include:` leg on the primary PHP and the newest Nextcloud branch, on
+      # pull requests and pushes alike. The include legs match the reduced
+      # PR pair, so reduce-pr-matrix keeps them; a broken migration must show
+      # on the pull request that brings it. Database portability bugs of the
+      # migration kind (a column named with a word one backend reserves) fail
+      # `occ app:enable` on any single leg, so the suite is not repeated.
       #
-      # Unset ("[]", or only empty strings, as the phpunit `database:` line
-      # treats them) writes "[]": no extra legs. Written BEFORE any non-zero
-      # exit, like the resolve step above: a bad value turns this job red,
-      # which the Quality Report reads, while the phpunit matrix still expands.
-      - name: Resolve the extra database legs
+      # Each such leg sets `extra-database: true`, a key the regular legs do
+      # not have. On it the phpunit job installs Nextcloud on that database
+      # and runs the app's migrations through `occ app:enable`, and stops
+      # there: no test suite, no coverage, no test counts (see the "INSTALL
+      # ONLY" note on the phpunit job). An include entry whose `database`
+      # differs from every value of the `database` dimension cannot merge
+      # into an existing combination, so it always becomes a new leg. One
+      # that EQUALS a full-suite database would merge into that leg and turn
+      # it install-only, which is one reason such an entry is refused.
+      #
+      # With database-install-matrix unset ("[]") this writes "[]" and exits
+      # 0 without reading database-test-matrix, so a caller that does not use
+      # it sees no change. Written BEFORE any non-zero exit, like the resolve
+      # step above: a bad value turns this job red, which the Quality Report
+      # reads, while the phpunit matrix still expands (without install legs).
+      - name: Resolve the install-only database legs
         id: database-legs
         if: ${{ !cancelled() }}
         env:
-          DB_MATRIX: ${{ inputs.database-test-matrix }}
+          INSTALL_MATRIX: ${{ inputs.database-install-matrix }}
+          TEST_MATRIX: ${{ inputs.database-test-matrix }}
+          DATABASE: ${{ inputs.database }}
           PHP_VERSION: ${{ inputs.php-version }}
           SINGLE: ${{ steps.resolve.outputs.single-server }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
+          python3 - <<'PYEOF'
           import json, os, sys
 
           ALLOWED = ("pgsql", "mysql", "mariadb", "sqlite")
-          raw    = os.environ["DB_MATRIX"].strip() or "[]"
-          php    = os.environ["PHP_VERSION"].strip()
-          single = os.environ["SINGLE"].strip()
+          raw    = os.environ.get("INSTALL_MATRIX", "").strip() or "[]"
+          php    = os.environ.get("PHP_VERSION", "").strip()
+          single = os.environ.get("SINGLE", "").strip()
 
           problems, legs = [], []
           try:
               dbs = json.loads(raw)
           except json.JSONDecodeError as exc:
               dbs = None
-              problems.append(f"database-test-matrix is not valid JSON ({exc}): {raw!r}")
+              problems.append(f"database-install-matrix is not valid JSON ({exc}): {raw!r}")
           if dbs is not None and not isinstance(dbs, list):
-              problems.append(f"database-test-matrix is not a JSON array: {raw!r}")
+              problems.append(f"database-install-matrix is not a JSON array: {raw!r}")
               dbs = None
 
-          if dbs and not all(v == "" for v in dbs):
+          if dbs:
               bad = [v for v in dbs if v not in ALLOWED]
               if bad:
-                  problems.append(f"database-test-matrix has unsupported entries {bad!r}; allowed: {', '.join(ALLOWED)}.")
+                  problems.append(f"database-install-matrix has unsupported entries {bad!r}; allowed: {', '.join(ALLOWED)}.")
               dupes = sorted({v for v in dbs if isinstance(v, str) and dbs.count(v) > 1})
               if dupes:
-                  problems.append(f"database-test-matrix lists {dupes!r} more than once.")
+                  problems.append(f"database-install-matrix lists {dupes!r} more than once.")
+
+              # The full-suite databases, decided the way the phpunit job's
+              # `database:` line decides them: database-test-matrix when it
+              # joins to a non-empty string, else the single `database` input.
+              try:
+                  tests = json.loads(os.environ.get("TEST_MATRIX", "").strip() or "[]")
+              except json.JSONDecodeError:
+                  tests = None
+              if not isinstance(tests, list):
+                  problems.append("database-test-matrix is not a JSON array, so database-install-matrix cannot be checked against it.")
+              else:
+                  full = [str(v) for v in tests] if ",".join(str(v) for v in tests) != "" else [os.environ.get("DATABASE", "").strip()]
+                  both = sorted({v for v in dbs if isinstance(v, str) and v in full})
+                  if both:
+                      source = "database-test-matrix" if ",".join(str(v) for v in tests) != "" else "the `database` input"
+                      problems.append(f"database-install-matrix lists {both!r}, which already run the full test suite through {source}; an install-only leg on the same database proves nothing. Remove it from one of the two.")
+
               if not single:
-                  problems.append("no newest Nextcloud branch was resolved, so the extra database legs have no server to run on.")
+                  problems.append("no newest Nextcloud branch was resolved, so the install-only database legs have no server to run on.")
               if not problems:
                   legs = [{"php-version": php, "nextcloud-ref": single, "database": db, "extra-database": True}
-                          for db in dbs[1:]]
+                          for db in dbs]
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
               fh.write(f"extra-legs={json.dumps(legs)}\n")
 
           for problem in problems:
               print(f"::error::{problem}")
-          print(f"extra database legs = {json.dumps(legs)}")
+          print(f"install-only database legs = {json.dumps(legs)}")
           sys.exit(1 if problems else 0)
-          PY
+          PYEOF
 
   phpunit:
     # NOT gated on php-quality — deliberately. `php-quality` is a matrix job, so
@@ -3810,10 +3841,10 @@ jobs:
     # being trusted while broken is a verdict nobody notices is missing.
     if: ${{ !cancelled() && needs.route.outputs.heavy != 'false' && inputs.enable-php && inputs.enable-phpunit && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    # ── INSTALL ONLY ON AN EXTRA DATABASE LEG ───────────────────────────────
+    # ── INSTALL ONLY ON A database-install-matrix LEG ───────────────────────
     #
-    # A leg with `matrix.extra-database == true` (every database-test-matrix
-    # entry after the first, built by the nextcloud-matrix job) installs
+    # A leg with `matrix.extra-database == true` (one per
+    # database-install-matrix entry, built by the nextcloud-matrix job) installs
     # Nextcloud on that database server, composer-installs the app and runs
     # its migrations through `occ app:enable`, then ends. Everything after
     # "Install app dependencies and enable app" is skipped on it: the test
@@ -3821,7 +3852,8 @@ jobs:
     # a leg exists for, a migration one backend rejects (MariaDB >= 10.7
     # reserves `row_number`), fails `app:enable` before any test runs, while
     # the suite takes far longer and can be red for reasons that have nothing
-    # to do with the database; it already runs in full on the primary one.
+    # to do with the database; it runs in full on the database-test-matrix
+    # databases.
     #
     # The name says so with a suffix that only that leg gets. For every other
     # leg `matrix.extra-database` is unset, the expression yields '' and the
@@ -3900,10 +3932,10 @@ jobs:
       # mariadb:12.3 and every other leg gets mariadb:11.4, the LTS line common
       # to all of them. Reserved-word lists only grow, so the newer server is
       # the stricter one. When a new Nextcloud major changes the recommended
-      # version, add its branch to this expression. MariaDB as a further
-      # database-test-matrix entry is one leg on the newest Nextcloud branch,
-      # so an app gets exactly one of the two versions; only as the first
-      # entry does it run on every branch, and get both.
+      # version, add its branch to this expression. MariaDB in
+      # database-install-matrix is one leg on the newest Nextcloud branch, so
+      # an app gets exactly one of the two versions; in database-test-matrix
+      # it runs on every branch, and gets both.
       #
       # Port 3306 is shared with `mysql` on purpose: only one of the two starts
       # on any leg. The image has no default HEALTHCHECK; healthcheck.sh is its
@@ -3948,9 +3980,9 @@ jobs:
         # AND IT IS THE ONLY REDUCTION THAT KEEPS THE COVERAGE GUARD ALIVE.
         # The `Measure merge-base coverage` step below runs on exactly one leg:
         # `matrix.php-version == inputs.php-version && matrix.nextcloud-ref ==
-        # needs.nextcloud-matrix.outputs.single-server` on the primary database
-        # (`matrix.extra-database != true`). The reduced matrix is
-        # that pair and nothing else, so the guard still has its leg. Reducing
+        # needs.nextcloud-matrix.outputs.single-server` (per database, and not
+        # on an install-only leg: `matrix.extra-database != true`). The reduced
+        # matrix is that pair and nothing else, so the guard still has its leg. Reducing
         # to any OTHER combination — the declared floor, say — would have left
         # that condition unsatisfiable and the coverage ratchet would simply
         # never have run on a pull request, silently and with nothing red.
@@ -3963,15 +3995,13 @@ jobs:
         # and an empty vector does not skip a job — it DELETES it from the run,
         # with no row, no annotation and no trace. Measured on this repo's
         # self-test for frontend-checks: 19 jobs instead of 21.
-        #
-        # When an app opts in, only the FIRST entry is this dimension, always a
-        # one-element vector (`format('["{0}"]', …)` cannot yield an empty
-        # array), so the job can never be deleted by it. Every further entry
-        # is one install-only leg in `include:` below, built by the
-        # nextcloud-matrix job (INSTALL ONLY, at the top of this job).
-        database: ${{ join(fromJSON(inputs.database-test-matrix), ',') != '' && fromJSON(format('["{0}"]', fromJSON(inputs.database-test-matrix)[0])) || fromJSON(format('["{0}"]', inputs.database)) }}
-        # "[]" for every caller without extra databases, which adds nothing.
-        # `|| '[]'` covers an output that was never written.
+        database: ${{ join(fromJSON(inputs.database-test-matrix), ',') != '' && fromJSON(inputs.database-test-matrix) || fromJSON(format('["{0}"]', inputs.database)) }}
+        # One install-only leg per database-install-matrix entry, built by the
+        # nextcloud-matrix job (INSTALL ONLY, at the top of this job). Each
+        # leg's php-version and nextcloud-ref are the reduced PR pair, so these
+        # legs run on a reduced pull request too. "[]" for every caller
+        # without database-install-matrix, which adds nothing. `|| '[]'`
+        # covers an output that was never written.
         include: ${{ fromJSON(needs.nextcloud-matrix.outputs.database-extra-legs || '[]') }}
       fail-fast: false
 
@@ -4245,8 +4275,8 @@ jobs:
           cd ../../
           php occ app:enable ${{ inputs.app-name }}
 
-      # Not on an extra database leg (see INSTALL ONLY on this job): this only
-      # checks that a suite exists to run, and the primary legs check the same
+      # Not on an install-only leg (see INSTALL ONLY on this job): this only
+      # checks that a suite exists to run, and the full-suite legs check the same
       # checkout. A red here on an install-only leg would be a duplicate that
       # says nothing about the database.
       - name: Validate test infrastructure
@@ -4660,10 +4690,10 @@ jobs:
       # carries the matrix size as `total`, so the report job knows how many
       # legs to expect.
       #
-      # An extra database leg runs no suite (INSTALL ONLY on this job), so it
+      # An install-only leg runs no suite (INSTALL ONLY on this job), so it
       # records nothing, and `total` counts the legs that do: the matrix size
-      # minus the extra database legs. Expressions have no arithmetic, so the
-      # program subtracts; with no extra legs the list is empty and `total`
+      # minus the install-only legs. Expressions have no arithmetic, so the
+      # program subtracts; with no install-only legs the list is empty and `total`
       # is the matrix size, as it always was.
       - name: Record test counts
         id: test-counts-phpunit
