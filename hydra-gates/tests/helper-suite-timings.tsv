@@ -46,6 +46,7 @@ test_check_npm_supply_chain_config.sh	1
 test_check_openregister_dependency_shape.py	0
 test_check_orphan_auth.py	1
 test_check_orphaned_write_capability.py	0
+test_check_perf_budget.py	0
 test_check_phantom_cross_app_rpc.py	0
 test_check_procedure_code.py	0
 test_check_public_endpoint_throttling.py	0
@@ -90,6 +91,7 @@ test_gate120_register_version_scope.sh	20
 test_gate121_register_auth_dialect_scope.sh	15
 test_gate122_sig_maintainability_scope.sh	16
 test_gate123_sig_floor_scope.sh	15
+test_gate124_perf_budget.sh	60
 test_gate16_spec_coverage_scope.sh	38
 test_gate19_coverage_credibility.sh	4
 test_gate67_contract_parity_scope.sh	3

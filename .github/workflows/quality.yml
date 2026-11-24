@@ -4922,6 +4922,30 @@ jobs:
       - name: Install Newman
         run: npm install -g newman
 
+      # THE REQUEST BUDGET (hydra ADR-124). Every request in every collection
+      # asserts its response time: 100 ms on the nightly sweep (a dispatch or a
+      # schedule), 300 ms on pull requests and pushes, whose runners are shared
+      # and slower. The assertion is injected here, at collection level, so no
+      # app edits its requests by hand. Exceptions live in the app's
+      # tests/performance/budget.json, each with a reason and an expiry.
+      - name: Checkout the request budget helper
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          repository: ConductionNL/.github
+          ref: ${{ inputs.hydra-gates-ref }}
+          path: gates
+          sparse-checkout: hydra-gates/scripts/lib
+
+      - name: Assert the request budget helper exists at the pinned ref
+        env:
+          GATES_REF: ${{ inputs.hydra-gates-ref }}
+        run: |
+          if [ ! -f gates/hydra-gates/scripts/lib/check_perf_budget.py ]; then
+            echo "::error::hydra-gates-ref '${GATES_REF}' ships no check_perf_budget.py, so no request could be held to the ADR-124 budget. Drop the hydra-gates-ref pin (the default is main)." >&2
+            exit 1
+          fi
+
       - name: Validate Newman collections
         run: |
           cd server/apps/${{ inputs.app-name }}
@@ -5061,10 +5085,20 @@ jobs:
               continue
             fi
             echo ""
-            echo "=== Running: ${collection#./} ==="
+            echo "=== Running: ${collection#./} (request budget ${PERF_API_BUDGET_MS} ms) ==="
             RAN=$((RAN + 1))
-            eval newman run "\"$collection\"" $ENV_ARGS --reporters cli,json --reporter-json-export "\"$RUNNER_TEMP/newman-json/$RAN.json\"" || FAIL=1
+            # The copy carries the budget test; it runs from this directory, so
+            # file references in the collection resolve as before.
+            BUDGETED="$RUNNER_TEMP/newman-budgeted/$RAN.postman_collection.json"
+            if ! python3 "$PERF_HELPER" inject "$collection" "$BUDGETED" --budget-file "$PERF_BUDGET_FILE"; then
+              echo "::error::Could not add the request budget to ${collection#./}, so it was not run." >&2
+              FAIL=1
+              continue
+            fi
+            eval newman run "\"$BUDGETED\"" $ENV_ARGS --reporters cli,json --reporter-json-export "\"$RUNNER_TEMP/newman-json/$RAN.json\"" || FAIL=1
           done < <(find . -name '*.postman_collection.json' -print0 | sort -z)
+          # Per-request times, slowest first. Every row when one is over budget.
+          python3 "$PERF_HELPER" report "$RUNNER_TEMP"/newman-json/*.json || true
           # How many exports to expect, so a collection that left none is
           # counted as missing instead of silently dropped from the sum.
           echo "$RAN" > "$RUNNER_TEMP/newman-ran"
@@ -5082,9 +5116,14 @@ jobs:
             exit 1
           fi
           if [ "$FAIL" -ne 0 ]; then
-            echo "::error::One or more Newman collections failed."
+            echo "::error::One or more Newman collections failed. A [budget] assertion is a request over the ADR-124 budget; the time table above names each one."
             exit 1
           fi
+        env:
+          PERF_HELPER: ${{ github.workspace }}/gates/hydra-gates/scripts/lib/check_perf_budget.py
+          PERF_BUDGET_FILE: ${{ github.workspace }}/server/apps/${{ inputs.app-name }}/tests/performance/budget.json
+          # The real target on the nightly sweep, three times it elsewhere.
+          PERF_API_BUDGET_MS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '100' || '300' }}
 
       - name: Show Nextcloud log on failure
         if: failure()
@@ -6409,6 +6448,11 @@ jobs:
           NC_ADMIN_USER: admin
           NC_ADMIN_PASS: admin
           COLLECT_COVERAGE: ${{ inputs.enable-playwright-coverage }}
+          # The page budget (hydra ADR-124), read by
+          # @conduction/nextcloud-vue/testing/performance: the real 300 ms on
+          # the nightly sweep, 1000 ms on pull requests and pushes.
+          PERF_PAGE_BUDGET_MS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '300' || '1000' }}
+          PERF_API_BUDGET_MS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '100' || '300' }}
           # Which shard this leg is, for the app's own config. `globalTimeout`
           # is per Playwright process, so per shard, and only the app knows
           # what budget a shard of its suite needs. 1 of 1 when not sharded.

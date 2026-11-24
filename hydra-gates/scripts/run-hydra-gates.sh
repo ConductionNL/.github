@@ -13980,6 +13980,63 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# gate-124: perf-budget
+#
+# Speed is a test (hydra ADR-124): every API request answers within 100 ms and
+# every main page is usable within 300 ms, warm; CI uses three times that. The
+# budget only bites where it is wired, so this gate fails an app that has:
+#   - no tests/performance/budget.json listing its main pages, or one that is
+#     invalid, names another app id, or carries an exception without a reason,
+#     past its expiry, or more than 92 days ahead;
+#   - no Playwright spec under tests/ calling definePerformanceSpec from
+#     @conduction/nextcloud-vue/testing/performance;
+#   - Postman collections that do not run through the shared quality.yml with
+#     enable-newman: true, or a workflow that runs `newman run` itself. The
+#     shared workflow is what injects the request budget.
+# NOT APPLICABLE without appinfo/info.xml. Repo-wide, not diff-scoped: the
+# declaration is one file and either exists or does not.
+# ---------------------------------------------------------------------------
+_pb_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-perf-budget.log
+: > "${_pb_log}"
+_pb_helper="${SCRIPT_DIR}/lib/check_perf_budget.py"
+if [ ! -f "${_pb_helper}" ]; then
+    _skip 124 "perf-budget" wiring "check_perf_budget.py not found at ${_pb_helper}, so no budget was checked by this run."
+elif ! command -v python3 > /dev/null 2>&1; then
+    _skip 124 "perf-budget" wiring "python3 is not on PATH, so no budget was checked by this run."
+else
+    set +e
+    python3 "${_pb_helper}" check . > "${_pb_log}" 2>&1
+    _pb_rc=$?
+    set +e
+    _pb_why=$(tail -3 "${_pb_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-240)
+    case "${_pb_rc}" in
+        0)
+            if _helper_finished "${_pb_log}" '^\[gate-124\] perf-budget: checked [0-9]+ page'; then
+                grep -E '^\[gate-124\] perf-budget: checked' "${_pb_log}"
+                _pass 124 "perf-budget"
+            else
+                _skip 124 "perf-budget" wiring "check_perf_budget.py exited 0 without its census line, so nothing is verified by this run. Checker output: ${_pb_why:-<empty>}. See ${_pb_log}."
+            fi
+            ;;
+        1)
+            if _helper_finished "${_pb_log}" '^\[gate-124\] perf-budget: FAIL: [0-9]+ finding'; then
+                grep -E '^  [^ ]' "${_pb_log}" 2>/dev/null
+                _pb_n=$(sed -n 's/^\[gate-124\] perf-budget: FAIL: \([0-9]*\) finding.*/\1/p' "${_pb_log}" | tail -1)
+                _fail 124 "perf-budget" "${_pb_n:-1} finding(s): the app's speed budget is not declared or not wired (ADR-124). Each is named above. See ${_pb_log}"
+            else
+                _skip 124 "perf-budget" wiring "check_perf_budget.py exited 1 without its FAIL summary, so it did not finish and nothing is verified by this run. Checker output: ${_pb_why:-<empty>}. See ${_pb_log}."
+            fi
+            ;;
+        4)
+            _skip 124 "perf-budget" na "$(tail -1 "${_pb_log}" 2>/dev/null | sed 's/^\[gate-124\] perf-budget: //' | cut -c1-240)"
+            ;;
+        *)
+            _skip 124 "perf-budget" wiring "check_perf_budget.py exited ${_pb_rc} without a verdict, so nothing is verified by this run. Checker output: ${_pb_why:-<empty>}. See ${_pb_log}."
+            ;;
+    esac
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
