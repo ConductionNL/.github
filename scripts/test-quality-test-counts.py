@@ -121,6 +121,12 @@ MUTATIONS = [
      "legs-test-matrix-not-array", "a non-array database-test-matrix read as a list"),
     ("legs", "if not single:", "if False:",
      "legs-no-single-server", "install-only legs emitted with no Nextcloud branch to run on"),
+    ("legs", "except json.JSONDecodeError as exc:", "except ImportError as exc:",
+     "legs-install-invalid-json", "an invalid database-install-matrix crashes the step before extra-legs is written"),
+    ("legs", "if dbs is not None and not isinstance(dbs, list):", "if isinstance(dbs, str):",
+     "legs-install-object", "a JSON object database-install-matrix read as an empty list"),
+    ("legs", "except json.JSONDecodeError:", "except ImportError:",
+     "legs-test-matrix-invalid-json", "an invalid database-test-matrix crashes the step before extra-legs is written"),
 ]
 
 
@@ -306,8 +312,9 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
     # A database in both lists would merge into its full-suite leg through
     # `include:`. Refused, and no legs are written.
     code, got, log = legs("legs-overlap", {"INSTALL_MATRIX": '["mysql"]', "TEST_MATRIX": '["pgsql", "mysql"]'})
-    check("legs-overlap", code == 1 and got == [] and "already run the full test suite" in log,
-          f"want exit 1, [] and the overlap error, got exit {code}, {got}\n{log}")
+    check("legs-overlap", code == 1 and got == []
+          and "already run the full test suite through database-test-matrix" in log,
+          f"want exit 1, [] and the overlap error naming database-test-matrix, got exit {code}, {got}\n{log}")
 
     # Every other refusal: exit 1, still `extra-legs=[]` (written before the
     # exit, so the phpunit matrix expands without install legs), and the
@@ -323,6 +330,8 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
         ("legs-install-string", {"INSTALL_MATRIX": '"mariadb"'}, "database-install-matrix is not a JSON array"),
         ("legs-install-object", {"INSTALL_MATRIX": '{}'}, "database-install-matrix is not a JSON array"),
         ("legs-test-matrix-not-array", {"INSTALL_MATRIX": '["mariadb"]', "TEST_MATRIX": '"pgsql"'},
+         "database-test-matrix is not a JSON array"),
+        ("legs-test-matrix-invalid-json", {"INSTALL_MATRIX": '["mariadb"]', "TEST_MATRIX": '["pgsql"'},
          "database-test-matrix is not a JSON array"),
         ("legs-no-single-server", {"INSTALL_MATRIX": '["mariadb"]', "SINGLE": ""}, "no newest Nextcloud branch was resolved"),
     ]
