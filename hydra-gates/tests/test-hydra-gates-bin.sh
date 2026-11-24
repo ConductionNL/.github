@@ -77,6 +77,12 @@ cat > appinfo/info.xml <<'XML'
 <?xml version="1.0"?>
 <info><id>fixture</id><name>Fixture</name><version>1.0.0</version></info>
 XML
+# gate-124 (perf-budget) is repo-wide, not diff-scoped, like gate-93: an app
+# with appinfo/info.xml and no speed budget fails it whatever the diff, which
+# would break this fixture's whole-run verdicts. Ship a valid budget and spec.
+mkdir -p "${FIX}/tests/performance"
+printf '{"app":"fixture","pages":[{"name":"home","path":"/apps/fixture/"}]}\n' > "${FIX}/tests/performance/budget.json"
+printf "import { definePerformanceSpec } from '@conduction/nextcloud-vue/testing/performance'\\ndefinePerformanceSpec()\\n" > "${FIX}/tests/performance/budget.spec.ts"
 
 # A compliant file: SPDX tags present, no debug helpers.
 cat > lib/Clean.php <<'PHP'
@@ -625,6 +631,12 @@ cat > appinfo/info.xml <<'XML'
 <?xml version="1.0"?>
 <info><id>fixture</id><name>Fixture</name><version>1.0.0</version></info>
 XML
+# gate-124 (perf-budget) is repo-wide, not diff-scoped, like gate-93: an app
+# with appinfo/info.xml and no speed budget fails it whatever the diff, which
+# would break this fixture's whole-run verdicts. Ship a valid budget and spec.
+mkdir -p "${SECFIX}/tests/performance"
+printf '{"app":"fixture","pages":[{"name":"home","path":"/apps/fixture/"}]}\n' > "${SECFIX}/tests/performance/budget.json"
+printf "import { definePerformanceSpec } from '@conduction/nextcloud-vue/testing/performance'\\ndefinePerformanceSpec()\\n" > "${SECFIX}/tests/performance/budget.spec.ts"
 git add -A
 git commit -qm "base"
 SEC_BASE="$(git rev-parse HEAD)"
@@ -796,6 +808,12 @@ cat > appinfo/info.xml <<'XML'
 <?xml version="1.0"?>
 <info><id>pushfix</id><name>Pushfix</name><version>1.0.0</version></info>
 XML
+# gate-124 (perf-budget) is repo-wide, not diff-scoped, like gate-93: an app
+# with appinfo/info.xml and no speed budget fails it whatever the diff, which
+# would break this fixture's whole-run verdicts. Ship a valid budget and spec.
+mkdir -p "${PUSHFIX}/tests/performance"
+printf '{"app":"pushfix","pages":[{"name":"home","path":"/apps/pushfix/"}]}\n' > "${PUSHFIX}/tests/performance/budget.json"
+printf "import { definePerformanceSpec } from '@conduction/nextcloud-vue/testing/performance'\\ndefinePerformanceSpec()\\n" > "${PUSHFIX}/tests/performance/budget.spec.ts"
 cat > lib/Clean.php <<'PHP'
 <?php
 /**
