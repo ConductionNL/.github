@@ -97,6 +97,12 @@ _mkrepo() {
         git config user.email "ci@example.invalid"
         git config user.name "gate28 test"
         printf '<?xml version="1.0"?>\n<info><id>fixture</id><version>1.0.0</version></info>\n' > appinfo/info.xml
+        # gate-124 (perf-budget) is repo-wide, not diff-scoped, like gate-93: an app
+        # with appinfo/info.xml and no speed budget fails it whatever the diff, which
+        # would break this fixture's whole-run verdicts. Ship a valid budget and spec.
+        mkdir -p "./tests/performance"
+        printf '{"app":"fixture","pages":[{"name":"home","path":"/apps/fixture/"}]}\n' > "./tests/performance/budget.json"
+        printf "import { definePerformanceSpec } from '@conduction/nextcloud-vue/testing/performance'\\ndefinePerformanceSpec()\\n" > "./tests/performance/budget.spec.ts"
         # gate-65 (coding-standard-adoption) is deliberately NOT diff-scoped:
         # it judges the repo's standing configuration, so it fires on this
         # fixture too. Two assertions below require the whole run to end

@@ -68,6 +68,12 @@ done
 
 printf '<?xml version="1.0"?>\n<info>\n <id>leaf</id>\n</info>\n' \
     > "${_app}/appinfo/info.xml"
+# gate-124 (perf-budget) is repo-wide, not diff-scoped, like gate-93: an app
+# with appinfo/info.xml and no speed budget fails it whatever the diff, which
+# would break this fixture's whole-run verdicts. Ship a valid budget and spec.
+mkdir -p "${_app}/tests/performance"
+printf '{"app":"leaf","pages":[{"name":"home","path":"/apps/leaf/"}]}\n' > "${_app}/tests/performance/budget.json"
+printf "import { definePerformanceSpec } from '@conduction/nextcloud-vue/testing/performance'\\ndefinePerformanceSpec()\\n" > "${_app}/tests/performance/budget.spec.ts"
 printf '{"name":"leaf","menu":[{"label":"Dashboard","icon":"ViewDashboardOutline","route":"home"}]}\n' \
     > "${_app}/src/manifest.json"
 

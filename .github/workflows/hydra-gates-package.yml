@@ -232,6 +232,12 @@ jobs:
           <?xml version="1.0"?>
           <info><id>fixture</id><name>Fixture</name><version>1.0.0</version></info>
           XML
+          # gate-124 (perf-budget) is repo-wide, not diff-scoped: an app with
+          # appinfo/info.xml and no speed budget fails it whatever the diff,
+          # which would add a third failure to the count asserted below.
+          mkdir -p tests/performance
+          printf '{"app":"fixture","pages":[{"name":"home","path":"/apps/fixture/"}]}\n' > tests/performance/budget.json
+          printf "import { definePerformanceSpec } from '@conduction/nextcloud-vue/testing/performance'\\ndefinePerformanceSpec()\\n" > tests/performance/budget.spec.ts
           cat > lib/Clean.php <<'PHP'
           <?php
           /**
