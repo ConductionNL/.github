@@ -714,7 +714,7 @@ on:
         type: boolean
         default: false
       reduce-pr-base-branches:
-        description: "JSON array of base branches whose pull requests reduce-pr-matrix applies to, matched exactly against github.base_ref. Default '[\"development\"]', the fleet's development line. A repo that develops on another branch lists it here, e.g. '[\"main\"]' for an app whose mainline is main and whose release line is a stableX.Y branch; PRs into the release line keep the full matrix unless that branch is listed too. Has no effect unless reduce-pr-matrix is true."
+        description: "JSON array of base branches whose pull requests reduce-pr-matrix applies to, matched against github.base_ref case-insensitively, as GitHub expressions compare strings; must be a JSON array of branch names, since contains() on a plain string does a substring match. Default '[\"development\"]', the fleet's development line. A repo that develops on another branch lists it here, e.g. '[\"main\"]' for an app whose mainline is main and whose release line is a stableX.Y branch; PRs into the release line keep the full matrix unless that branch is listed too. Has no effect unless reduce-pr-matrix is true."
         required: false
         type: string
         default: '["development"]'
@@ -3964,8 +3964,10 @@ jobs:
         # full product still runs on every push to a default branch, so the
         # declared range is exercised on every merge and on the release PR into
         # beta — breadth moves from per-commit to per-merge, it is not dropped.
-        # `contains()` on an array matches whole elements, never substrings,
-        # and is evaluated last: on a push base_ref is empty and the
+        # `contains()` on an array matches whole elements (case-insensitively,
+        # like every GitHub expression string comparison), never substrings,
+        # which is why the input must be a JSON array: on a plain string it
+        # does a substring match. It is evaluated last: on a push base_ref is empty and the
         # event_name test has already made the whole condition false.
         php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && contains(fromJSON(inputs.reduce-pr-base-branches), github.base_ref)) && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
         # DERIVED from appinfo/info.xml by the `nextcloud-matrix` job, not read
