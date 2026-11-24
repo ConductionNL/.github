@@ -182,7 +182,12 @@ on:
         type: string
         default: "[]"
       database-test-matrix:
-        description: "JSON array of databases to run PHPUnit against, e.g. '[\"pgsql\", \"mysql\", \"sqlite\"]'. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this change is inert until an app opts in."
+        description: "JSON array of databases to run PHPUnit against, e.g. '[\"pgsql\", \"mysql\", \"mariadb\", \"sqlite\"]'. Every listed database gets the full PHP x Nextcloud matrix with the test suite. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. `mariadb` starts a real MariaDB server (11.4; 12.3 on the Nextcloud 35 leg) rather than reusing MySQL 8.4: Doctrine DBAL quotes identifiers per platform keyword list, so a MariaDB-only reserved word (e.g. a `row_number` column) passes on mysql and fails on MariaDB. For a database that only needs its install and migrations checked, use database-install-matrix instead. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this option is inert until an app opts in."
+        required: false
+        type: string
+        default: "[]"
+      database-install-matrix:
+        description: "JSON array of databases that get ONE install-only leg each in the PHPUnit job, e.g. '[\"mariadb\"]'; entries from pgsql, mysql, mariadb, sqlite, no duplicates. Such a leg runs on the primary php-version and the newest Nextcloud branch, on pull requests (also when reduce-pr-matrix applies) and pushes alike: a real database server, a Nextcloud install on it and the app's migrations through `occ app:enable`, and NO test suite, coverage or test counts. Its check is named `PHPUnit (PHP x, NC y, <database>, install only)`. A migration one backend rejects fails that leg in minutes, without running the whole suite again per backend. A database may not also be a full-suite database (listed in database-test-matrix, or the `database` input when that list is empty): the nextcloud-matrix job turns red on such an entry, on an unknown value or on a duplicate. DEFAULT IS EMPTY: no install-only legs."
         required: false
         type: string
         default: "[]"
@@ -704,10 +709,15 @@ on:
         type: boolean
         default: false
       reduce-pr-matrix:
-        description: "On a pull_request event, run PHPUnit on the PRIMARY php-version against the NEWEST declared Nextcloud only, instead of the full php-test-versions x declared-range product. OPT-IN, default false. The full matrix still runs on every push to a default branch, so the declared range is exercised on every merge and on the release PR into beta — breadth moves from per-commit to per-merge, it is not dropped. The reasoning is that version-drift does not appear between two commits an hour apart; it appears when a dependency or a Nextcloud minor moves, and a push-time matrix catches that just as well at a fraction of the queue cost. Measured: 6 legs at ~2.2 min each, of which ~46s is the test suite and ~85s is container init, two checkouts and a Nextcloud install repeated per leg."
+        description: "On a pull_request event into one of the branches listed in reduce-pr-base-branches (default: development), run PHPUnit on the PRIMARY php-version against the NEWEST declared Nextcloud only, instead of the full php-test-versions x declared-range product. OPT-IN, default false. The full matrix still runs on every push to a default branch, so the declared range is exercised on every merge and on the release PR into beta — breadth moves from per-commit to per-merge, it is not dropped. The reasoning is that version-drift does not appear between two commits an hour apart; it appears when a dependency or a Nextcloud minor moves, and a push-time matrix catches that just as well at a fraction of the queue cost. Measured: 6 legs at ~2.2 min each, of which ~46s is the test suite and ~85s is container init, two checkouts and a Nextcloud install repeated per leg."
         required: false
         type: boolean
         default: false
+      reduce-pr-base-branches:
+        description: "JSON array of base branches whose pull requests reduce-pr-matrix applies to, matched against github.base_ref case-insensitively, as GitHub expressions compare strings; must be a JSON array of branch names, since contains() on a plain string does a substring match. Default '[\"development\"]', the fleet's development line. A repo that develops on another branch lists it here, e.g. '[\"main\"]' for an app whose mainline is main and whose release line is a stableX.Y branch; PRs into the release line keep the full matrix unless that branch is listed too. Has no effect unless reduce-pr-matrix is true."
+        required: false
+        type: string
+        default: '["development"]'
 
 concurrency:
   # KEYED BY EVENT AS WELL AS REF, so a deliberately-requested run is not
@@ -3303,6 +3313,12 @@ jobs:
   #                  "where did this range come from" is never a question you
   #                  have to answer by reading three files.
   #
+  # Plus `database-extra-legs`, which is not about the Nextcloud range: the
+  # PHPUnit `include:` list with one install-only leg per
+  # database-install-matrix entry (see the step that writes it). It lives
+  # here because it needs `single-server`, and because building and
+  # validating a list of objects is not something expressions can do.
+  #
   # Those four jobs used to read `fromJSON(inputs.nextcloud-test-refs)[0]`, and
   # the fleet's convention of writing the newest version first is what made that
   # correct. The action's `branches` output is OLDEST-FIRST — measured in its
@@ -3333,6 +3349,7 @@ jobs:
       branches: ${{ steps.resolve.outputs.branches }}
       single-server: ${{ steps.resolve.outputs.single-server }}
       source: ${{ steps.resolve.outputs.source }}
+      database-extra-legs: ${{ steps.database-legs.outputs.extra-legs }}
     steps:
       - name: Checkout the app manifest
         uses: actions/checkout@v4
@@ -3658,6 +3675,103 @@ jobs:
           sys.exit(1 if hard else 0)
           PY
 
+      # ── ONE INSTALL-ONLY LEG PER database-install-matrix ENTRY ─────────────
+      #
+      # database-test-matrix is the phpunit job's `database` dimension: every
+      # database listed there gets the full (or PR-reduced) PHP x Nextcloud
+      # matrix with the test suite, exactly as before this step existed.
+      #
+      # database-install-matrix is separate. Each entry becomes exactly one
+      # `include:` leg on the primary PHP and the newest Nextcloud branch, on
+      # pull requests and pushes alike. The include legs match the reduced
+      # PR pair, so reduce-pr-matrix keeps them; a broken migration must show
+      # on the pull request that brings it. Database portability bugs of the
+      # migration kind (a column named with a word one backend reserves) fail
+      # `occ app:enable` on any single leg, so the suite is not repeated.
+      #
+      # Each such leg sets `extra-database: true`, a key the regular legs do
+      # not have. On it the phpunit job installs Nextcloud on that database
+      # and runs the app's migrations through `occ app:enable`, and stops
+      # there: no test suite, no coverage, no test counts (see the "INSTALL
+      # ONLY" note on the phpunit job). An include entry whose `database`
+      # differs from every value of the `database` dimension cannot merge
+      # into an existing combination, so it always becomes a new leg. One
+      # that EQUALS a full-suite database would merge into that leg and turn
+      # it install-only, which is one reason such an entry is refused.
+      #
+      # With database-install-matrix unset ("[]") this writes "[]" and exits
+      # 0 without reading database-test-matrix, so a caller that does not use
+      # it sees no change. Written BEFORE any non-zero exit, like the resolve
+      # step above: a bad value turns this job red, which the Quality Report
+      # reads, while the phpunit matrix still expands (without install legs).
+      - name: Resolve the install-only database legs
+        id: database-legs
+        if: ${{ !cancelled() }}
+        env:
+          INSTALL_MATRIX: ${{ inputs.database-install-matrix }}
+          TEST_MATRIX: ${{ inputs.database-test-matrix }}
+          DATABASE: ${{ inputs.database }}
+          PHP_VERSION: ${{ inputs.php-version }}
+          SINGLE: ${{ steps.resolve.outputs.single-server }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import json, os, sys
+
+          ALLOWED = ("pgsql", "mysql", "mariadb", "sqlite")
+          raw    = os.environ.get("INSTALL_MATRIX", "").strip() or "[]"
+          php    = os.environ.get("PHP_VERSION", "").strip()
+          single = os.environ.get("SINGLE", "").strip()
+
+          problems, legs = [], []
+          try:
+              dbs = json.loads(raw)
+          except json.JSONDecodeError as exc:
+              dbs = None
+              problems.append(f"database-install-matrix is not valid JSON ({exc}): {raw!r}")
+          if dbs is not None and not isinstance(dbs, list):
+              problems.append(f"database-install-matrix is not a JSON array: {raw!r}")
+              dbs = None
+
+          if dbs:
+              bad = [v for v in dbs if v not in ALLOWED]
+              if bad:
+                  problems.append(f"database-install-matrix has unsupported entries {bad!r}; allowed: {', '.join(ALLOWED)}.")
+              dupes = sorted({v for v in dbs if isinstance(v, str) and dbs.count(v) > 1})
+              if dupes:
+                  problems.append(f"database-install-matrix lists {dupes!r} more than once.")
+
+              # The full-suite databases, decided the way the phpunit job's
+              # `database:` line decides them: database-test-matrix when it
+              # joins to a non-empty string, else the single `database` input.
+              try:
+                  tests = json.loads(os.environ.get("TEST_MATRIX", "").strip() or "[]")
+              except json.JSONDecodeError:
+                  tests = None
+              if not isinstance(tests, list):
+                  problems.append("database-test-matrix is not a JSON array, so database-install-matrix cannot be checked against it.")
+              else:
+                  full = [str(v) for v in tests] if ",".join(str(v) for v in tests) != "" else [os.environ.get("DATABASE", "").strip()]
+                  both = sorted({v for v in dbs if isinstance(v, str) and v in full})
+                  if both:
+                      source = "database-test-matrix" if ",".join(str(v) for v in tests) != "" else "the `database` input"
+                      problems.append(f"database-install-matrix lists {both!r}, which already run the full test suite through {source}; an install-only leg on the same database proves nothing. Remove it from one of the two.")
+
+              if not single:
+                  problems.append("no newest Nextcloud branch was resolved, so the install-only database legs have no server to run on.")
+              if not problems:
+                  legs = [{"php-version": php, "nextcloud-ref": single, "database": db, "extra-database": True}
+                          for db in dbs]
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"extra-legs={json.dumps(legs)}\n")
+
+          for problem in problems:
+              print(f"::error::{problem}")
+          print(f"install-only database legs = {json.dumps(legs)}")
+          sys.exit(1 if problems else 0)
+          PYEOF
+
   phpunit:
     # NOT gated on php-quality — deliberately. `php-quality` is a matrix job, so
     # its result is 'failure' if ANY leg fails, including phpmd (complexity/mess
@@ -3727,7 +3841,24 @@ jobs:
     # being trusted while broken is a verdict nobody notices is missing.
     if: ${{ !cancelled() && needs.route.outputs.heavy != 'false' && inputs.enable-php && inputs.enable-phpunit && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }})"
+    # ── INSTALL ONLY ON A database-install-matrix LEG ───────────────────────
+    #
+    # A leg with `matrix.extra-database == true` (one per
+    # database-install-matrix entry, built by the nextcloud-matrix job) installs
+    # Nextcloud on that database server, composer-installs the app and runs
+    # its migrations through `occ app:enable`, then ends. Everything after
+    # "Install app dependencies and enable app" is skipped on it: the test
+    # infrastructure check, the suite, coverage and test counts. The bug such
+    # a leg exists for, a migration one backend rejects (MariaDB >= 10.7
+    # reserves `row_number`), fails `app:enable` before any test runs, while
+    # the suite takes far longer and can be red for reasons that have nothing
+    # to do with the database; it runs in full on the database-test-matrix
+    # databases.
+    #
+    # The name says so with a suffix that only that leg gets. For every other
+    # leg `matrix.extra-database` is unset, the expression yields '' and the
+    # name stays byte-identical, which matters for required checks.
+    name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }}${{ matrix.extra-database && ', install only' || '' }})"
     # `nextcloud-matrix` is a REAL edge, unlike `security`: this job's matrix
     # dimension and its coverage-guard steps both read that job's outputs.
     # `!cancelled()` in the `if:` above still suppresses the implicit success(),
@@ -3757,9 +3888,9 @@ jobs:
       contents: read
 
     # A service whose `image` evaluates to an empty string is not started, which
-    # is how one job definition serves several backends. Both are keyed off
+    # is how one job definition serves several backends. All three are keyed off
     # matrix.database rather than inputs.database so a multi-database matrix
-    # starts the right container per leg.
+    # starts the right container per leg, and at most one of them per leg.
     services:
       postgres:
         image: ${{ matrix.database == 'pgsql' && 'postgres:16' || '' }}
@@ -3788,14 +3919,57 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+      # A REAL MariaDB server, not the mysql leg under another name. Doctrine
+      # DBAL quotes identifiers against the keyword list of the PLATFORM it
+      # detects, and MariaDB reserves words MySQL 8.4 does not: openregister
+      # shipped a migration with a column `row_number`, reserved on MariaDB
+      # >= 10.7 and left unquoted there, so `occ app:enable` failed on real
+      # MariaDB only while every mysql leg stayed green (openregister#4909).
+      #
+      # Version per leg, from the Nextcloud admin manual's system requirements:
+      # NC 32-34 list MariaDB 10.6 / 10.11 / 11.4 (/ 11.8), NC 35 lists 10.11 /
+      # 11.4 / 11.8 / 12.3 with 12.3 recommended. So the stable35 leg gets
+      # mariadb:12.3 and every other leg gets mariadb:11.4, the LTS line common
+      # to all of them. Reserved-word lists only grow, so the newer server is
+      # the stricter one. When a new Nextcloud major changes the recommended
+      # version, add its branch to this expression. MariaDB in
+      # database-install-matrix is one leg on the newest Nextcloud branch, so
+      # an app gets exactly one of the two versions; in database-test-matrix
+      # it runs on every branch, and gets both.
+      #
+      # Port 3306 is shared with `mysql` on purpose: only one of the two starts
+      # on any leg. The image has no default HEALTHCHECK; healthcheck.sh is its
+      # documented probe, and its user is created on first init, which a fresh
+      # service container always runs.
+      mariadb:
+        image: ${{ matrix.database == 'mariadb' && (matrix.nextcloud-ref == 'stable35' && 'mariadb:12.3' || 'mariadb:11.4') || '' }}
+        env:
+          MARIADB_ROOT_PASSWORD: nextcloud
+          MARIADB_USER: nextcloud
+          MARIADB_PASSWORD: nextcloud
+          MARIADB_DATABASE: nextcloud
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
 
     strategy:
       matrix:
-        # REDUCED ON PULL REQUESTS when the caller sets reduce-pr-matrix. The
+        # REDUCED ON PULL REQUESTS when the caller sets reduce-pr-matrix, and
+        # only on a PR whose base is listed in reduce-pr-base-branches (default
+        # ["development"]; a repo developing on `main` lists "main"). The
         # full product still runs on every push to a default branch, so the
         # declared range is exercised on every merge and on the release PR into
         # beta — breadth moves from per-commit to per-merge, it is not dropped.
-        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && github.base_ref == 'development') && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
+        # `contains()` on an array matches whole elements (case-insensitively,
+        # like every GitHub expression string comparison), never substrings,
+        # which is why the input must be a JSON array: on a plain string it
+        # does a substring match. It is evaluated last: on a push base_ref is empty and the
+        # event_name test has already made the whole condition false.
+        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && contains(fromJSON(inputs.reduce-pr-base-branches), github.base_ref)) && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
         # DERIVED from appinfo/info.xml by the `nextcloud-matrix` job, not read
         # from an input any more. The `needs:` edge below is what makes this
         # expression resolvable; without it the matrix evaluates to nothing and
@@ -3808,12 +3982,13 @@ jobs:
         # AND IT IS THE ONLY REDUCTION THAT KEEPS THE COVERAGE GUARD ALIVE.
         # The `Measure merge-base coverage` step below runs on exactly one leg:
         # `matrix.php-version == inputs.php-version && matrix.nextcloud-ref ==
-        # needs.nextcloud-matrix.outputs.single-server`. The reduced matrix is
-        # that pair and nothing else, so the guard still has its leg. Reducing
+        # needs.nextcloud-matrix.outputs.single-server` (per database, and not
+        # on an install-only leg: `matrix.extra-database != true`). The reduced
+        # matrix is that pair and nothing else, so the guard still has its leg. Reducing
         # to any OTHER combination — the declared floor, say — would have left
         # that condition unsatisfiable and the coverage ratchet would simply
         # never have run on a pull request, silently and with nothing red.
-        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && github.base_ref == 'development') && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
+        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && contains(fromJSON(inputs.reduce-pr-base-branches), github.base_ref)) && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
         # An empty database-test-matrix collapses to the single `database`
         # input, which is what every caller uses today — so the matrix keeps
         # exactly its current dimensions until an app opts in. Routed through
@@ -3823,6 +3998,13 @@ jobs:
         # with no row, no annotation and no trace. Measured on this repo's
         # self-test for frontend-checks: 19 jobs instead of 21.
         database: ${{ join(fromJSON(inputs.database-test-matrix), ',') != '' && fromJSON(inputs.database-test-matrix) || fromJSON(format('["{0}"]', inputs.database)) }}
+        # One install-only leg per database-install-matrix entry, built by the
+        # nextcloud-matrix job (INSTALL ONLY, at the top of this job). Each
+        # leg's php-version and nextcloud-ref are the reduced PR pair, so these
+        # legs run on a reduced pull request too. "[]" for every caller
+        # without database-install-matrix, which adds nothing. `|| '[]'`
+        # covers an output that was never written.
+        include: ${{ fromJSON(needs.nextcloud-matrix.outputs.database-extra-legs || '[]') }}
       fail-fast: false
 
     steps:
@@ -4095,7 +4277,12 @@ jobs:
           cd ../../
           php occ app:enable ${{ inputs.app-name }}
 
+      # Not on an install-only leg (see INSTALL ONLY on this job): this only
+      # checks that a suite exists to run, and the full-suite legs check the same
+      # checkout. A red here on an install-only leg would be a duplicate that
+      # says nothing about the database.
       - name: Validate test infrastructure
+        if: matrix.extra-database != true
         run: |
           cd server/apps/${{ inputs.app-name }}
           if [ ! -f phpunit.xml ] && [ ! -f phpunit-unit.xml ]; then
@@ -4109,6 +4296,7 @@ jobs:
           echo "PHPUnit infrastructure validated."
 
       - name: Run PHPUnit tests
+        if: matrix.extra-database != true
         run: |
           cd server/apps/${{ inputs.app-name }}
           ./vendor/bin/phpunit \
@@ -4197,7 +4385,7 @@ jobs:
       #   old logic -> b233af99  (no phpunit at that commit -> hard failure)
       #   new logic -> 27027b32  (merge-base of a92d8707 and 986730b8)
       - name: Measure merge-base coverage
-        if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server }}
+        if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server && matrix.extra-database != true }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -4325,7 +4513,7 @@ jobs:
       # sets enable-coverage-guard was updated before this workflow changed, so
       # this should never fire; if it does, the repository is the thing to fix.
       - name: Guard coverage baseline
-        if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server
+        if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server && matrix.extra-database != true
         env:
           # Through `env:`, never interpolated into the script body. A branch
           # name is attacker-controlled text and git permits a double quote in
@@ -4479,7 +4667,7 @@ jobs:
           fi
 
       - name: Upload coverage artifact
-        if: always() && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server
+        if: always() && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server && matrix.extra-database != true
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -4503,14 +4691,21 @@ jobs:
       # timeout, a failed upload) is caught the other way round: every file
       # carries the matrix size as `total`, so the report job knows how many
       # legs to expect.
+      #
+      # An install-only leg runs no suite (INSTALL ONLY on this job), so it
+      # records nothing, and `total` counts the legs that do: the matrix size
+      # minus the install-only legs. Expressions have no arithmetic, so the
+      # program subtracts; with no install-only legs the list is empty and `total`
+      # is the matrix size, as it always was.
       - name: Record test counts
         id: test-counts-phpunit
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.extra-database != true }}
         # An annotation for the report: it must never fail the job it counts.
         continue-on-error: true
         env:
           LEG: "PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }}"
           TOTAL: ${{ strategy.job-total }}
+          EXTRA_LEGS: ${{ needs.nextcloud-matrix.outputs.database-extra-legs }}
           OUT: "test-counts/phpunit-${{ matrix.php-version }}-${{ matrix.nextcloud-ref }}-${{ matrix.database }}.json"
         run: |
           mkdir -p test-counts
@@ -4519,11 +4714,16 @@ jobs:
           python3 - "$RUNNER_TEMP/phpunit-junit.xml" <<'PYEOF'
           import json, os, sys
           import xml.etree.ElementTree as ET
+          total = int(os.environ["TOTAL"])
+          try:
+              total -= len(json.loads(os.environ.get("EXTRA_LEGS") or "[]"))
+          except (ValueError, TypeError):
+              pass
           try:
               root = ET.parse(sys.argv[1]).getroot()
           except (OSError, ET.ParseError):
               with open(os.environ["OUT"], "w", encoding="utf-8") as fh:
-                  json.dump({"leg": os.environ["LEG"], "run": None, "total": int(os.environ["TOTAL"])}, fh)
+                  json.dump({"leg": os.environ["LEG"], "run": None, "total": total}, fh)
               print("No readable JUnit report, so this leg is recorded without counts.")
               raise SystemExit(0)
           suites = [s for s in (list(root) if root.tag == "testsuites" else [root]) if s.tag == "testsuite"]
@@ -4538,14 +4738,14 @@ jobs:
           tests, skipped = tally("tests"), tally("skipped")
           failed = tally("failures") + tally("errors")
           counts = {"leg": os.environ["LEG"], "run": tests - skipped, "passed": tests - skipped - failed, "failed": failed, "skipped": skipped,
-                    "total": int(os.environ["TOTAL"])}
+                    "total": total}
           with open(os.environ["OUT"], "w", encoding="utf-8") as fh:
               json.dump(counts, fh)
           print(f"{counts['passed']}/{counts['run']} passed, {skipped} skipped.")
           PYEOF
 
       - name: Upload test counts
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.extra-database != true }}
         # An annotation for the report: it must never fail the job it counts.
         continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -4922,6 +5122,30 @@ jobs:
       - name: Install Newman
         run: npm install -g newman
 
+      # THE REQUEST BUDGET (hydra ADR-124). Every request in every collection
+      # asserts its response time: 100 ms on the nightly sweep (a dispatch or a
+      # schedule), 300 ms on pull requests and pushes, whose runners are shared
+      # and slower. The assertion is injected here, at collection level, so no
+      # app edits its requests by hand. Exceptions live in the app's
+      # tests/performance/budget.json, each with a reason and an expiry.
+      - name: Checkout the request budget helper
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          repository: ConductionNL/.github
+          ref: ${{ inputs.hydra-gates-ref }}
+          path: gates
+          sparse-checkout: hydra-gates/scripts/lib
+
+      - name: Assert the request budget helper exists at the pinned ref
+        env:
+          GATES_REF: ${{ inputs.hydra-gates-ref }}
+        run: |
+          if [ ! -f gates/hydra-gates/scripts/lib/check_perf_budget.py ]; then
+            echo "::error::hydra-gates-ref '${GATES_REF}' ships no check_perf_budget.py, so no request could be held to the ADR-124 budget. Drop the hydra-gates-ref pin (the default is main)." >&2
+            exit 1
+          fi
+
       - name: Validate Newman collections
         run: |
           cd server/apps/${{ inputs.app-name }}
@@ -5061,10 +5285,20 @@ jobs:
               continue
             fi
             echo ""
-            echo "=== Running: ${collection#./} ==="
+            echo "=== Running: ${collection#./} (request budget ${PERF_API_BUDGET_MS} ms) ==="
             RAN=$((RAN + 1))
-            eval newman run "\"$collection\"" $ENV_ARGS --reporters cli,json --reporter-json-export "\"$RUNNER_TEMP/newman-json/$RAN.json\"" || FAIL=1
+            # The copy carries the budget test; it runs from this directory, so
+            # file references in the collection resolve as before.
+            BUDGETED="$RUNNER_TEMP/newman-budgeted/$RAN.postman_collection.json"
+            if ! python3 "$PERF_HELPER" inject "$collection" "$BUDGETED" --budget-file "$PERF_BUDGET_FILE"; then
+              echo "::error::Could not add the request budget to ${collection#./}, so it was not run." >&2
+              FAIL=1
+              continue
+            fi
+            eval newman run "\"$BUDGETED\"" $ENV_ARGS --reporters cli,json --reporter-json-export "\"$RUNNER_TEMP/newman-json/$RAN.json\"" || FAIL=1
           done < <(find . -name '*.postman_collection.json' -print0 | sort -z)
+          # Per-request times, slowest first. Every row when one is over budget.
+          python3 "$PERF_HELPER" report "$RUNNER_TEMP"/newman-json/*.json || true
           # How many exports to expect, so a collection that left none is
           # counted as missing instead of silently dropped from the sum.
           echo "$RAN" > "$RUNNER_TEMP/newman-ran"
@@ -5082,9 +5316,14 @@ jobs:
             exit 1
           fi
           if [ "$FAIL" -ne 0 ]; then
-            echo "::error::One or more Newman collections failed."
+            echo "::error::One or more Newman collections failed. A [budget] assertion is a request over the ADR-124 budget; the time table above names each one."
             exit 1
           fi
+        env:
+          PERF_HELPER: ${{ github.workspace }}/gates/hydra-gates/scripts/lib/check_perf_budget.py
+          PERF_BUDGET_FILE: ${{ github.workspace }}/server/apps/${{ inputs.app-name }}/tests/performance/budget.json
+          # The real target on the nightly sweep, three times it elsewhere.
+          PERF_API_BUDGET_MS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '100' || '300' }}
 
       - name: Show Nextcloud log on failure
         if: failure()
@@ -6409,6 +6648,11 @@ jobs:
           NC_ADMIN_USER: admin
           NC_ADMIN_PASS: admin
           COLLECT_COVERAGE: ${{ inputs.enable-playwright-coverage }}
+          # The page budget (hydra ADR-124), read by
+          # @conduction/nextcloud-vue/testing/performance: the real 300 ms on
+          # the nightly sweep, 1000 ms on pull requests and pushes.
+          PERF_PAGE_BUDGET_MS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '300' || '1000' }}
+          PERF_API_BUDGET_MS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '100' || '300' }}
           # Which shard this leg is, for the app's own config. `globalTimeout`
           # is per Playwright process, so per shard, and only the app knows
           # what budget a shard of its suite needs. 1 of 1 when not sharded.
