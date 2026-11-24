@@ -109,6 +109,18 @@ MUTATIONS = [
      "legs-test-matrix-only", "database-test-matrix entries turned into install-only legs"),
     ("legs", "if both:", "if False:",
      "legs-overlap", "an install-only leg accepted on a database that already runs the full suite"),
+    ("legs", 'else [os.environ.get("DATABASE", "").strip()]', "else []",
+     "legs-overlap-single-database", "the single `database` input left out of the full-suite databases"),
+    ("legs", "if bad:", "if False:",
+     "legs-unsupported", "an install-only leg accepted on a database outside the allow-list"),
+    ("legs", "if dupes:", "if False:",
+     "legs-duplicate", "the same install-only database accepted twice"),
+    ("legs", "if dbs is not None and not isinstance(dbs, list):", "if False:",
+     "legs-install-string", "a non-array database-install-matrix read as a list"),
+    ("legs", "if not isinstance(tests, list):", "if False:",
+     "legs-test-matrix-not-array", "a non-array database-test-matrix read as a list"),
+    ("legs", "if not single:", "if False:",
+     "legs-no-single-server", "install-only legs emitted with no Nextcloud branch to run on"),
 ]
 
 
@@ -296,6 +308,28 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
     code, got, log = legs("legs-overlap", {"INSTALL_MATRIX": '["mysql"]', "TEST_MATRIX": '["pgsql", "mysql"]'})
     check("legs-overlap", code == 1 and got == [] and "already run the full test suite" in log,
           f"want exit 1, [] and the overlap error, got exit {code}, {got}\n{log}")
+
+    # Every other refusal: exit 1, still `extra-legs=[]` (written before the
+    # exit, so the phpunit matrix expands without install legs), and the
+    # error that names the problem. DATABASE is pgsql unless a case says so.
+    refusals = [
+        # No database-test-matrix, so the single `database` input runs the
+        # full suite; an install-only leg on it is the same overlap.
+        ("legs-overlap-single-database", {"INSTALL_MATRIX": '["pgsql"]'},
+         "already run the full test suite through the `database` input"),
+        ("legs-unsupported", {"INSTALL_MATRIX": '["oci"]'}, "unsupported entries ['oci']"),
+        ("legs-duplicate", {"INSTALL_MATRIX": '["mariadb", "mariadb"]'}, "lists ['mariadb'] more than once"),
+        ("legs-install-invalid-json", {"INSTALL_MATRIX": '["mariadb"'}, "database-install-matrix is not valid JSON"),
+        ("legs-install-string", {"INSTALL_MATRIX": '"mariadb"'}, "database-install-matrix is not a JSON array"),
+        ("legs-install-object", {"INSTALL_MATRIX": '{}'}, "database-install-matrix is not a JSON array"),
+        ("legs-test-matrix-not-array", {"INSTALL_MATRIX": '["mariadb"]', "TEST_MATRIX": '"pgsql"'},
+         "database-test-matrix is not a JSON array"),
+        ("legs-no-single-server", {"INSTALL_MATRIX": '["mariadb"]', "SINGLE": ""}, "no newest Nextcloud branch was resolved"),
+    ]
+    for case, env, error in refusals:
+        code, got, log = legs(case, env)
+        check(case, code == 1 and got == [] and error in log,
+              f"want exit 1, [] and {error!r}, got exit {code}, {got}\n{log}")
 
     # ── Newman ─────────────────────────────────────────────────────────────
     def newman(case: str, exports: int, ran: str) -> tuple[int, dict, str]:
