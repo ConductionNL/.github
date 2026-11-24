@@ -890,9 +890,64 @@ jobs:
 
           exit 1
 
+      # A GITHUB APP TOKEN FOR THE TWO STEPS THAT CREATE A REF, WHERE ONE IS SET UP.
+      #
+      # GITHUB_TOKEN cannot be granted the `workflows` permission. For a token
+      # without it, GitHub checks whether a new ref creates or updates a
+      # workflow, and on a large repository whose release line is far behind
+      # the default branch that check times out and fails closed: the bump
+      # branch is rejected ("Unable to determine if workflow can be created or
+      # updated due to timeout") and so is the tag ("403 Resource not
+      # accessible by integration"). Measured on openregister `stable2.1`
+      # (1.1 GB, about 19,900 commits behind `main`): no beta released from
+      # there between 2026-11-12 and 2026-11-24. Differing workflow files
+      # alone are not the trigger; the sibling apps' `beta` has those too
+      # and releases fine. See ConductionNL/.github#956.
+      #
+      # Opt-in per repository: org variable RELEASE_APP_CLIENT_ID plus secret
+      # RELEASE_APP_PRIVATE_KEY. A step `if:` cannot read `secrets`, hence the
+      # env + output gate, the same way HAVE_PAT works further down. Without
+      # them nothing changes: no token is minted and GITHUB_TOKEN is used.
+      - name: Decide the release token
+        id: release_token_gate
+        if: inputs.branch-model != 'main' || inputs.release-type != 'unstable'
+        env:
+          HAVE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY != '' }}
+          CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID }}
+        run: |
+          if [ "${HAVE_KEY}" = "true" ] && [ -n "${CLIENT_ID}" ]; then
+            echo "use_app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "use_app=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No release GitHub App configured for this repository (RELEASE_APP_CLIENT_ID / RELEASE_APP_PRIVATE_KEY). The bump branch and the tag are created with GITHUB_TOKEN."
+          fi
+
+      # Fails soft: a repository can see an org-wide secret without the App
+      # being installed on it. Minting then fails, and the release must still
+      # go out on GITHUB_TOKEN -- but not in silence (next step).
+      - name: Mint the release App token
+        id: release_app
+        if: steps.release_token_gate.outputs.use_app == 'true'
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # No `owner`/`repositories`: the token is scoped to this repository.
+          permission-contents: write
+          permission-workflows: write
+
+      - name: Warn when the release App token could not be minted
+        if: steps.release_app.outcome == 'failure'
+        run: |
+          echo "::warning::RELEASE_APP_CLIENT_ID and RELEASE_APP_PRIVATE_KEY are set, but no App token could be minted for ${GITHUB_REPOSITORY}: the App is not installed on this repository, or the client ID or private key is wrong (see the step above). Falling back to GITHUB_TOKEN, which GitHub may refuse when it creates the bump branch or the tag (ConductionNL/.github#956)."
+
       - name: Commit the version bump
         id: bump
         if: inputs.branch-model != 'main' || inputs.release-type != 'unstable'
+        env:
+          # Empty unless the step above minted one; then the push below uses it.
+          APP_TOKEN: ${{ steps.release_app.outputs.token }}
         run: |
           set -euo pipefail
           CURRENT=$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1)
@@ -990,6 +1045,16 @@ jobs:
             # that run produced, and the tag below has to name a real commit.
             BUMP_SHA=$(git ls-remote origin "refs/heads/$BUMP_BRANCH" | cut -f1)
             echo "::notice::$BUMP_BRANCH already exists at ${BUMP_SHA} — reusing it."
+          elif [ -n "${APP_TOKEN:-}" ]; then
+            # actions/checkout persisted GITHUB_TOKEN as an extraheader, which
+            # would win over the URL credentials; an empty value clears that
+            # list for this one command. The token is masked by the minting
+            # action and git does not print URL credentials.
+            git -c http.https://github.com/.extraheader= push \
+              "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              "HEAD:refs/heads/$BUMP_BRANCH"
+            BUMP_SHA=$(git rev-parse HEAD)
+            echo "Committed ${CURRENT} -> ${{ env.NEW_VERSION }} on $BUMP_BRANCH (pushed with the release App token)"
           else
             git push origin "HEAD:refs/heads/$BUMP_BRANCH"
             BUMP_SHA=$(git rev-parse HEAD)
@@ -1808,6 +1873,9 @@ jobs:
       - name: Create GitHub release
         uses: ncipollo/release-action@v1
         with:
+          # The release creates the tag; same reason as the bump push
+          # (ConductionNL/.github#956). Empty output -> GITHUB_TOKEN, as before.
+          token: ${{ steps.release_app.outputs.token || github.token }}
           tag: v${{ env.NEW_VERSION }}
           # Tag the BUMP commit, not the branch head — that is the tree whose
           # info.xml says ${{ env.NEW_VERSION }}. Falls back to the triggering
