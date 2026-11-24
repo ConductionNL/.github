@@ -12,6 +12,11 @@ the cell. Each one reads a format another project owns, and a misreading is
 silent: Newman's `stats.assertions.pending` looks like a skip count and is 0 at
 the end of every run, so a skipped assertion read as a passed one.
 
+A fifth program decides how many PHPUnit legs owe a count: the nextcloud-matrix
+job's "Resolve the install-only database legs" (`database-legs`). Its list of
+install-only legs is subtracted from the matrix size, so a caller that sets
+only database-test-matrix, or nothing, must get no legs and the full total.
+
 This suite extracts each program from quality.yml by its step `id:` and runs
 THAT, the way run-derive-step.py and test-e2e-shard-partition.py do. There is
 no second copy of the logic to drift. Extraction is strict: a missing id, a
@@ -73,6 +78,10 @@ STEPS = {
     "newman": "test-counts-newman",
     "playwright": "test-counts-playwright",
     "compute": "test-counts",
+    # The nextcloud-matrix job's resolver for database-install-matrix. Its
+    # output is the phpunit job's `include:` list and the EXTRA_LEGS the
+    # phpunit program subtracts, so it decides every leg's `total`.
+    "legs": "database-legs",
 }
 BLOB = re.compile(r"(data:application/zip;base64,)([A-Za-z0-9+/=]+)")
 
@@ -94,6 +103,30 @@ MUTATIONS = [
      "playwright-agrees-with-gate", "the copied parser drifts from check_e2e_skips.py on what executed"),
     ("compute", "if missing:", "if False:",
      "cell-null-leg", "a leg recorded without counts is dropped from the cell"),
+    ("phpunit", 'total -= len(json.loads(os.environ.get("EXTRA_LEGS") or "[]"))', "pass",
+     "phpunit-extra-database-legs", "install-only database legs counted as legs that owe a count"),
+    ("legs", 'os.environ.get("INSTALL_MATRIX", "")', 'os.environ.get("TEST_MATRIX", "")',
+     "legs-test-matrix-only", "database-test-matrix entries turned into install-only legs"),
+    ("legs", "if both:", "if False:",
+     "legs-overlap", "an install-only leg accepted on a database that already runs the full suite"),
+    ("legs", 'else [os.environ.get("DATABASE", "").strip()]', "else []",
+     "legs-overlap-single-database", "the single `database` input left out of the full-suite databases"),
+    ("legs", "if bad:", "if False:",
+     "legs-unsupported", "an install-only leg accepted on a database outside the allow-list"),
+    ("legs", "if dupes:", "if False:",
+     "legs-duplicate", "the same install-only database accepted twice"),
+    ("legs", "if dbs is not None and not isinstance(dbs, list):", "if False:",
+     "legs-install-string", "a non-array database-install-matrix read as a list"),
+    ("legs", "if not isinstance(tests, list):", "if False:",
+     "legs-test-matrix-not-array", "a non-array database-test-matrix read as a list"),
+    ("legs", "if not single:", "if False:",
+     "legs-no-single-server", "install-only legs emitted with no Nextcloud branch to run on"),
+    ("legs", "except json.JSONDecodeError as exc:", "except ImportError as exc:",
+     "legs-install-invalid-json", "an invalid database-install-matrix crashes the step before extra-legs is written"),
+    ("legs", "if dbs is not None and not isinstance(dbs, list):", "if isinstance(dbs, str):",
+     "legs-install-object", "a JSON object database-install-matrix read as an empty list"),
+    ("legs", "except json.JSONDecodeError:", "except ImportError:",
+     "legs-test-matrix-invalid-json", "an invalid database-test-matrix crashes the step before extra-legs is written"),
 ]
 
 
@@ -220,6 +253,92 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
     got = read_counts(d) if proc.returncode == 0 else {}
     check("phpunit-no-junit", got == {"leg": "PHP 8.4", "run": None, "total": 2},
           f"want run null with total 2, got exit {proc.returncode} {got}\n{proc.stderr}")
+
+    # Install-only extra database legs record nothing, so a counted leg must
+    # not expect them: 6 legs in the job, 2 of them extra, 4 to count.
+    extra = json.dumps([{"php-version": "8.3", "nextcloud-ref": "stable34", "database": db, "extra-database": True}
+                        for db in ("mysql", "mariadb")])
+    d = r.case_dir("phpunit-extra-database-legs")
+    out = d / "test-counts" / "phpunit-leg.json"
+    proc = r.run("phpunit", d, [str(FIXTURES / "phpunit-10.5-junit.xml")],
+                 {"LEG": "PHP 8.3", "TOTAL": "6", "EXTRA_LEGS": extra, "OUT": str(out)})
+    got = read_counts(d) if proc.returncode == 0 else {}
+    check("phpunit-extra-database-legs", got.get("total") == 4,
+          f"want total 4 (6 legs minus 2 install-only), got exit {proc.returncode} {got}\n{proc.stderr}")
+
+    # ── database-install-matrix legs, and the `total` they leave ───────────
+    def legs(case: str, env: dict[str, str]) -> tuple[int, object, str]:
+        d = r.case_dir(case)
+        out = d / "github-output"
+        proc = r.run("legs", d, env={"GITHUB_OUTPUT": str(out), "PHP_VERSION": "8.3", "SINGLE": "stable34",
+                                     "DATABASE": "pgsql", **env})
+        value = None
+        if out.is_file():
+            for line in out.read_text(encoding="utf-8").splitlines():
+                if line.startswith("extra-legs="):
+                    value = json.loads(line.partition("=")[2])
+        return proc.returncode, value, proc.stdout + proc.stderr
+
+    def total_after(case: str, extra: object, job_total: int) -> object:
+        d = r.case_dir(case + "-total")
+        out = d / "test-counts" / "phpunit-leg.json"
+        proc = r.run("phpunit", d, [str(FIXTURES / "phpunit-10.5-junit.xml")],
+                     {"LEG": "PHP 8.3", "TOTAL": str(job_total), "EXTRA_LEGS": json.dumps(extra), "OUT": str(out)})
+        return read_counts(d).get("total") if proc.returncode == 0 else f"exit {proc.returncode}"
+
+    # A caller that sets nothing: no legs, and every leg owes a count, as on
+    # main (2 PHP x 3 Nextcloud on pgsql).
+    code, got, log = legs("legs-nothing-set", {})
+    total = total_after("legs-nothing-set", got, 6)
+    check("legs-nothing-set", code == 0 and got == [] and total == 6,
+          f"want exit 0, [] and total 6, got exit {code}, {got}, total {total}\n{log}")
+
+    # A caller that sets only database-test-matrix, as openregister, launchpad
+    # and keepiq do: every listed database runs the full suite, so there are
+    # no install legs and `total` is the whole matrix (2 x 3 x 3 = 18).
+    code, got, log = legs("legs-test-matrix-only", {"TEST_MATRIX": '["pgsql", "mysql", "sqlite"]'})
+    total = total_after("legs-test-matrix-only", got, 18)
+    check("legs-test-matrix-only", code == 0 and got == [] and total == 18,
+          f"want exit 0, [] and total 18, got exit {code}, {got}, total {total}\n{log}")
+
+    # One install-only leg on the primary PHP and newest Nextcloud; the 6
+    # pgsql legs owe a count, the mariadb leg does not (7 - 1).
+    code, got, log = legs("legs-install-one", {"INSTALL_MATRIX": '["mariadb"]'})
+    want = [{"php-version": "8.3", "nextcloud-ref": "stable34", "database": "mariadb", "extra-database": True}]
+    total = total_after("legs-install-one", got, 7)
+    check("legs-install-one", code == 0 and got == want and total == 6,
+          f"want exit 0, {want} and total 6, got exit {code}, {got}, total {total}\n{log}")
+
+    # A database in both lists would merge into its full-suite leg through
+    # `include:`. Refused, and no legs are written.
+    code, got, log = legs("legs-overlap", {"INSTALL_MATRIX": '["mysql"]', "TEST_MATRIX": '["pgsql", "mysql"]'})
+    check("legs-overlap", code == 1 and got == []
+          and "already run the full test suite through database-test-matrix" in log,
+          f"want exit 1, [] and the overlap error naming database-test-matrix, got exit {code}, {got}\n{log}")
+
+    # Every other refusal: exit 1, still `extra-legs=[]` (written before the
+    # exit, so the phpunit matrix expands without install legs), and the
+    # error that names the problem. DATABASE is pgsql unless a case says so.
+    refusals = [
+        # No database-test-matrix, so the single `database` input runs the
+        # full suite; an install-only leg on it is the same overlap.
+        ("legs-overlap-single-database", {"INSTALL_MATRIX": '["pgsql"]'},
+         "already run the full test suite through the `database` input"),
+        ("legs-unsupported", {"INSTALL_MATRIX": '["oci"]'}, "unsupported entries ['oci']"),
+        ("legs-duplicate", {"INSTALL_MATRIX": '["mariadb", "mariadb"]'}, "lists ['mariadb'] more than once"),
+        ("legs-install-invalid-json", {"INSTALL_MATRIX": '["mariadb"'}, "database-install-matrix is not valid JSON"),
+        ("legs-install-string", {"INSTALL_MATRIX": '"mariadb"'}, "database-install-matrix is not a JSON array"),
+        ("legs-install-object", {"INSTALL_MATRIX": '{}'}, "database-install-matrix is not a JSON array"),
+        ("legs-test-matrix-not-array", {"INSTALL_MATRIX": '["mariadb"]', "TEST_MATRIX": '"pgsql"'},
+         "database-test-matrix is not a JSON array"),
+        ("legs-test-matrix-invalid-json", {"INSTALL_MATRIX": '["mariadb"]', "TEST_MATRIX": '["pgsql"'},
+         "database-test-matrix is not a JSON array"),
+        ("legs-no-single-server", {"INSTALL_MATRIX": '["mariadb"]', "SINGLE": ""}, "no newest Nextcloud branch was resolved"),
+    ]
+    for case, env, error in refusals:
+        code, got, log = legs(case, env)
+        check(case, code == 1 and got == [] and error in log,
+              f"want exit 1, [] and {error!r}, got exit {code}, {got}\n{log}")
 
     # ── Newman ─────────────────────────────────────────────────────────────
     def newman(case: str, exports: int, ran: str) -> tuple[int, dict, str]:
@@ -399,7 +518,7 @@ def main() -> int:
         print(f"::error::{case}: {failure}")
     if failures:
         return 1
-    print("OK: the four test-count steps read real PHPUnit, Newman and Playwright output and render every cell as asserted.")
+    print("OK: the four test-count steps read real PHPUnit, Newman and Playwright output and render every cell as asserted, and the install-only leg resolver leaves every total as asserted.")
     return 0
 
 

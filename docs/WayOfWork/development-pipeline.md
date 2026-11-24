@@ -53,7 +53,7 @@ Every app calls one shared workflow, `quality.yml` in [ConductionNL/.github](htt
 | Pull request ready for review | Full | Everything the app enables, including PHPUnit, Newman, Playwright and the Hydra gates. |
 | Push to an integration branch | Full | The same, with the complete PHP and Nextcloud matrix. |
 
-Two options make a ready pull request cheaper, and apps may switch them on. Path filtering skips PHPUnit and Playwright when the diff touches no code. Matrix reduction runs PHPUnit on one PHP version and the newest Nextcloud only. Both apply to pull requests, never to the push after the merge.
+Two options make a ready pull request cheaper, and apps may switch them on. Path filtering skips PHPUnit and Playwright when the diff touches no code. Matrix reduction runs PHPUnit on one PHP version and the newest Nextcloud only, for pull requests into the app's development branch (`development` unless the app lists another in `reduce-pr-base-branches`). Both apply to pull requests, never to the push after the merge.
 
 The Hydra gates judge only the lines the pull request changed (ADR-020).
 
@@ -179,7 +179,7 @@ Read from `quality.yml` and from the apps' own `code-quality.yml` callers. "Opt-
 | PHP | 8.3 and 8.4 for PHPUnit; 8.3 for lint and static analysis | `php-test-versions`, `php-version` |
 | Nextcloud | Every stable branch from the app's declared minimum to its declared maximum | Derived from `appinfo/info.xml` |
 | Single-server jobs | Newman, Playwright and the coverage guard run on the newest of those branches | Derived |
-| Database | PostgreSQL 16 for every app. OpenRegister, launchpad and keepiq also run PHPUnit on MySQL 8.4 and SQLite, since 18 November 2026 | `database`, `database-test-matrix` |
+| Database | PostgreSQL 16 for every app. OpenRegister, launchpad and keepiq also run PHPUnit on MySQL 8.4 and SQLite, since 18 November 2026; MariaDB (11.4; 12.3 on Nextcloud 35) can be listed too. A database in `database-install-matrix` gets a single install-only leg on the primary PHP and the newest Nextcloud: a real database server, a Nextcloud install and the app's migrations through `occ app:enable`, with no test suite | `database`, `database-test-matrix`, `database-install-matrix` |
 
 Because the Nextcloud range is derived from `info.xml`, the versions an app claims to support and the versions it is tested on cannot drift apart. An app may override the range, and a gate then requires the override to agree with `info.xml`.
 
