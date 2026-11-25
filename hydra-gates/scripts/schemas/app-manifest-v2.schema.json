@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.171.0",
+	"version": "2.199.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -97,7 +97,32 @@
 							"type": { "type": "string", "enum": ["info", "config-fields", "choice", "run-action", "summary", "component"], "description": "Built-in step renderer." },
 							"title": { "type": "string" },
 							"body": { "type": "string", "description": "info: explanatory copy." },
-							"note": { "type": "string", "minLength": 1, "description": "choice: a footnote under the options, translated like body." },
+							"note": { "type": "string", "minLength": 1, "description": "choice: a footnote under the options, translated like body. summary: an info card under the rows." },
+							"cancelLabel": { "type": "string", "minLength": 1, "description": "This step's cancel button, translated like body; the wizard's cancel label otherwise." },
+							"submitLabel": { "type": "string", "minLength": 1, "description": "The last step's submit button, translated like body; the wizard's submit label otherwise." },
+							"rows": {
+								"type": "array",
+								"description": "summary, board look: the readiness rows in order. `step` takes that step's recap, otherwise `id` + `title`, done when `doneWhen` (a setup status path, or { path, equals }) holds. `detail` is the line under the title, `detailWhenOpen` replaces it while the row is not done, `link` names the screen to change it on.",
+								"items": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"step": { "type": "string", "minLength": 1 },
+										"id": { "type": "string", "minLength": 1 },
+										"title": { "type": "string", "minLength": 1 },
+										"detail": { "type": "string", "minLength": 1 },
+										"detailWhenOpen": { "type": "string", "minLength": 1 },
+										"doneWhen": {},
+										"readinessItem": { "type": "string", "minLength": 1, "description": "The id of an item in the setup status `readiness` list; the row is done when that item is." },
+										"link": {
+											"type": "object",
+											"additionalProperties": false,
+											"required": ["label", "href"],
+											"properties": { "label": { "type": "string", "minLength": 1 }, "href": { "type": "string", "minLength": 1 } }
+										}
+									}
+								}
+							},
 							"visibleWhen": { "description": "Offer the step only when the setup status says so: a dotted path into the setup status document whose value must be truthy, or { path, equals } for an exact value. Hidden while the status loads.", "oneOf": [ { "type": "string", "minLength": 1 }, { "type": "object", "required": ["path"], "additionalProperties": false, "properties": { "path": { "type": "string", "minLength": 1 }, "equals": {} } } ] },
 							"footnote": { "type": "string", "minLength": 1, "description": "choice: the same footnote under another name; note wins when both are set." },
 							"required": { "type": "boolean", "default": false, "description": "When true the step gates the app until done." },
@@ -127,7 +152,9 @@
 							"multiple": { "type": "boolean", "default": false, "description": "choice: allow multi-select." },
 							"loadAction": { "type": "string", "minLength": 1, "description": "choice with display cards: an actionId each option card loads itself with. Every card except the one whose value is `none` gets its own Load button, which POSTs { dataset: <value> } to /api/setup/action/{loadAction}, spins while it runs and shows the result on that card. A successful load also selects the card. With loadAction the separate run-action step that loaded the picked dataset is no longer needed; manifests that keep it still work." },
 							"requires": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true, "description": "App ids this step needs. When any of them is not installed and enabled, the wizard skips the step and the summary shows it as skipped, naming the missing apps. Setup status then counts the step as not applicable, neither met nor unmet, so it never reopens the wizard or gates the app. This holds for a required step too." },
-							"action": { "type": "string", "description": "run-action: actionId POSTed to /api/setup/action/{action}." },
+							"action": { "type": "string", "description": "run-action: actionId POSTed to /api/setup/action/{action}. config-fields: the step posts its values to that action as the request body instead of to /api/setup/config (setup-wizard-recap-and-repeatable)." },
+							"summaryHint": { "type": "string", "description": "A line under this step's row in the summary recap, through the app's translate (setup-wizard-recap-and-repeatable)." },
+							"summaryEditable": { "type": "boolean", "description": "summary: each recap row gets a Change button that opens its step again (setup-wizard-recap-and-repeatable)." },
 							"onDemand": { "type": "boolean", "default": false, "description": "run-action: the step runs only when the user clicks Run, never automatically, and is never outstanding work (it does not open the wizard or decide where a resumed wizard starts). The summary ticks it only when its action succeeded in the current session and shows it as not run otherwise, whatever the server reports. For destructive steps an app reports as done on purpose so they never auto-run, such as removing example data." },
 							"healthCheck": { "type": "boolean", "default": false, "description": "summary: render a health recap." },
 							"component": { "type": "string", "description": "component: app-registered component name (or use the #step-<id> slot)." }
@@ -386,6 +413,22 @@
 				}
 			}
 		},
+		"features": {
+			"type": "array",
+			"description": "The app's feature toggles (feature-toggles): each `{ key, label, description?, default, failMode? }`. The server's merged map arrives as initial state `features`; `visibleIf.feature` and `visibleWhen.feature` read it. An undeclared key reads as off.",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": ["key", "label"],
+				"properties": {
+					"key": { "type": "string", "minLength": 1, "pattern": "^[a-z][a-z0-9_.-]*$" },
+					"label": { "type": "string", "minLength": 1 },
+					"description": { "type": "string" },
+					"default": { "type": "boolean", "default": false },
+					"failMode": { "type": "string", "enum": ["open", "closed"], "description": "What the toggle reads when the server served no map: open (on) or closed (off). Unset reads the default." }
+				}
+			}
+		},
 		"menu": {
 			"type": "array",
 			"items": { "$ref": "#/$defs/menuItem" },
@@ -452,6 +495,7 @@
 				"schema": { "type": "string", "description": "Remote schema slug the registry serves (e.g. \"case-type-template\", \"application-template\")." },
 				"register": { "type": "string", "description": "Remote register segment, used when the instance's registry_register config is unset or empty." },
 				"localRegister": { "type": "string", "description": "The register an install WRITES into. Defaults to the app id. A schema slug is NOT unique across the fleet (`case`, `task` and `document` exist in several apps at once), so an unscoped write can land in another app's register: an app whose OpenRegister register slug differs from its app id must set this." },
+				"installTarget": { "type": "object", "additionalProperties": false, "required": ["property", "schemas"], "description": "Where inside the local register an install can go (store-install-target), such as a world. An install request may then carry `target`: an id written into `property` on every installed object of `schemas`, after the bundle's signature is checked. Without this block a `target` is refused (400), never ignored.", "properties": { "property": { "type": "string", "description": "The object property that records the target, e.g. \"setting\"." }, "schemas": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "Schema slugs whose installed objects get the target." } } },
 				"installable": { "type": "array", "items": { "type": "string" }, "description": "Schema slugs an install may write. THIS IS A SECURITY BOUNDARY, not a convenience: a registry is somebody else's server, and without the allowlist an item could name any schema the app owns. An absent or empty list refuses EVERY install rather than permitting every install." },
 				"kinds": { "type": "array", "items": { "type": "string" }, "description": "Kind quick-filters (ADR-080 Decision 5). Declared ONCE here, beside the allowlist: the engine returns them in the search response and CnStorePage prefers them over its page config. Defaults to the shared vocabulary when omitted." },
 				"types": { "type": "array", "items": { "type": "string" }, "description": "Shareable configuration type ids this store surfaces (store-over-federated-config). Declaring these makes the store exchange CONFIGURATION rather than rows: an item is a configuration set (`openregister.configset`), a flow (`openregister.flows`), a register with its schemas (`openregister.registers`), or any schema that marked itself `x-openregister-shareable`. Cards come from federated discovery and an install runs through the owning type, so a set arrives as registers, schemas, objects, views, flows, sources and mappings. An app that declares none keeps the remote objects API described by `schema`/`register`, and makes no discovery call at all." },
@@ -618,6 +662,15 @@
 						"where": { "type": "object", "description": "Keep the rows whose fields equal these values; a value may be `@answer.<key>`, another field of the form (object-list-edit-in-place)." },
 						"itemsPath": { "type": "string", "minLength": 1, "description": "Read the options from the list at this path in each row (object-list-edit-in-place)." },
 						"hideWhenEmpty": { "type": "boolean", "description": "Leave the field out while the source gives no options (object-list-edit-in-place)." },
+						"requiresApp": {
+							"type": "string",
+							"minLength": 1,
+							"description": "An app the source lives in. While it is not installed the source is not read and the field is a text input (options-from-requires-app, 2.178.0)."
+						},
+						"missingText": {
+							"type": "string",
+							"description": "The line under that text input while `requiresApp` is missing, translated (options-from-requires-app, 2.178.0)."
+						},
 						"keepFields": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Values of the row each option carries along as `data`, such as a programme's terms url a create form links to (create-form-widget)." }
 					}
 				},
@@ -635,6 +688,15 @@
 						"where": { "type": "object", "description": "Keep the rows whose fields equal these values; a value may be `@answer.<key>`, another field of the form (object-list-edit-in-place)." },
 						"itemsPath": { "type": "string", "minLength": 1, "description": "Read the options from the list at this path in each row (object-list-edit-in-place)." },
 						"hideWhenEmpty": { "type": "boolean", "description": "Leave the field out while the source gives no options (object-list-edit-in-place)." },
+						"requiresApp": {
+							"type": "string",
+							"minLength": 1,
+							"description": "An app the source lives in. While it is not installed the source is not read and the field is a text input (options-from-requires-app, 2.178.0)."
+						},
+						"missingText": {
+							"type": "string",
+							"description": "The line under that text input while `requiresApp` is missing, translated (options-from-requires-app, 2.178.0)."
+						},
 						"keepFields": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Values of the row each option carries along as `data`, such as a programme's terms url a create form links to (create-form-widget)." }
 					}
 				}
@@ -643,10 +705,13 @@
 		"breadcrumbCrumb": {
 			"type": "object",
 			"additionalProperties": false,
-			"required": ["label"],
-			"description": "One breadcrumb crumb (config.breadcrumb).",
+			"anyOf": [{ "required": ["label"] }, { "required": ["parent"] }],
+			"description": "One breadcrumb crumb (config.breadcrumb): a label, or the record's parent (`parent`).",
 			"properties": {
 				"label": { "type": "string", "minLength": 1 },
+				"parent": { "type": "string", "minLength": 1, "description": "A `visibilityContext` entry of the detail page naming the record's parent. The crumb shows that record, linked to its page, and drops out when the record has no parent (detail-parent-crumb). `label` is then the fallback when the parent has no label of its own." },
+				"labelField": { "type": "string", "minLength": 1, "description": "With `parent`: the parent's field (dotted path, e.g. `identifier`) shown as the crumb, else its name or title (detail-parent-crumb)." },
+				"param": { "type": "string", "minLength": 1, "description": "With `parent` and `route`: the route param that carries the parent's id, `id` by default (detail-parent-crumb)." },
 				"route": { "type": "string" },
 				"params": { "type": "object", "additionalProperties": true },
 				"query": { "type": "object", "additionalProperties": true, "description": "Query of the `route` link, such as `{ savedView: 'default:<slug>' }` to land on a view (saved-view-overrides)." },
@@ -933,8 +998,8 @@
 		},
 		"sentinelDeclarativeToken": {
 			"type": "string",
-			"pattern": "^@self\\.[A-Za-z][A-Za-z0-9_]*$|^@ref:[A-Za-z][A-Za-z0-9_./-]*$|^@aggregate:.+$",
-			"description": "Declarative context (OpenRegister direction, resolved server-side): @self.<field> (the object's own field in a cross-object calc), @ref:<path>, @aggregate:<expr>. @ref/@aggregate are first-class members even though currently unused fleet-wide. Mirrors SENTINEL_TOKEN_PATTERNS.declarative."
+			"pattern": "^@self\\.[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_-]*)*$|^@ref:[A-Za-z][A-Za-z0-9_./-]*$|^@aggregate:.+$",
+			"description": "Declarative context (OpenRegister direction, resolved server-side): @self.<field> (the object's own field in a cross-object calc, or a dotted path into @self such as @self.can.update), @ref:<path>, @aggregate:<expr>. @ref/@aggregate are first-class members even though currently unused fleet-wide. Mirrors SENTINEL_TOKEN_PATTERNS.declarative."
 		},
 		"sentinelDeprecatedToken": {
 			"type": "string",
@@ -1321,6 +1386,14 @@
 						"decimals": { "type": "integer", "minimum": 0 }
 					}
 				},
+				"fullNote": {
+					"type": "string",
+					"description": "board-column-capacity: the line under a full column's heading (DqWerkbord \"Vol: een kaart hierheen slepen wordt geweigerd\"), host-translated."
+				},
+				"mergedNote": {
+					"type": "string",
+					"description": "board-column-capacity: the line under a column merged from several rows, with {count} for the rows (DqWerkbord \"Samengevoegd uit 2 zaaktypen: geen limiet\"), host-translated."
+				},
 				"columnLimit": {
 					"type": "integer",
 					"minimum": 0,
@@ -1458,9 +1531,10 @@
 			"anyOf": [
 				{ "required": ["field"] },
 				{ "required": ["text"] },
-				{ "required": ["countFrom"] }
+				{ "required": ["countFrom"] },
+				{ "required": ["endpointSource"] }
 			],
-			"description": "A pill in a detail page header, rendered through CnStatusBadge: from one field of the record (`field`; nothing renders while it is empty), a constant (`text`), or a count of a related list (`countFrom` with `countLabel`; nothing renders at 0, while counting or after a failed count). screens-relation-pages, 2.85.0.",
+			"description": "A pill in a detail page header, rendered through CnStatusBadge: from one field of the record (`field`; nothing renders while it is empty), a constant (`text`), a count of a related list (`countFrom` with `countLabel`; nothing renders at 0, while counting or after a failed count), or a value an endpoint answers (`endpointSource`; detail-pill-from-endpoint). screens-relation-pages, 2.85.0.",
 			"properties": {
 				"field": {
 					"type": "string",
@@ -1486,6 +1560,18 @@
 						"register": { "type": "string", "minLength": 1 },
 						"schema": { "type": "string", "minLength": 1 },
 						"filter": { "type": "object", "additionalProperties": true }
+					}
+				},
+				"endpointSource": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["url"],
+					"description": "detail-pill-from-endpoint: the pill shows the value this endpoint answers at `responsePath` (a string or a number), through `labels`, `colorMap` and `values` as a field pill. For a value the record cannot store, such as a pupil's state today. `url` and `params` take the `@objectId` and `@object.<field>` tokens. Nothing renders while it reads, after a failed read or for an empty value. Used when `field`, `text` and `countFrom` are not set.",
+					"properties": {
+						"url": { "type": "string", "minLength": 1, "description": "App-relative (through generateUrl) or absolute URL." },
+						"method": { "type": "string", "enum": ["GET", "POST"], "default": "GET" },
+						"params": { "type": "object", "additionalProperties": true },
+						"responsePath": { "type": "string", "description": "Dot-path to the value in the response, for example `header.statePill.value`." }
 					}
 				},
 				"resolve": { "type": "object", "additionalProperties": false, "required": ["register", "schema"], "description": "detail-pill-resolve: the field holds the id of a record of this register and schema; the pill shows that record's `labelField` (else its title or name) and keys `colorMap` by it. The raw value shows while the lookup runs and when it finds nothing.", "properties": { "register": { "type": "string", "minLength": 1 }, "schema": { "type": "string", "minLength": 1 }, "labelField": { "type": "string", "minLength": 1 }, "colorField": { "type": "string", "minLength": 1, "description": "pill-color-field: the referenced record's property holding a colour name (an NL Design System hue such as `red` or `blue-light`, or a badge role); the pill takes the tone it maps onto." }, "iconField": { "type": "string", "minLength": 1, "description": "pill-color-field: the referenced record's property holding a registered icon name, shown before the label." } } },
@@ -2115,6 +2201,10 @@
 					"minimum": 1,
 					"description": "Row span (>= 1)."
 				},
+				"headerWrap": {
+					"type": "boolean",
+					"description": "Let the card's header actions drop under a title block that fills the row (DqZaaktypeOverzicht Rechten), instead of squeezing the title."
+				},
 				"headerLink": {
 					"type": "object",
 					"additionalProperties": false,
@@ -2152,6 +2242,10 @@
 					"type": ["boolean", "integer"],
 					"minimum": 1,
 					"description": "Opt-in: hand this placement's height to whatever it renders, so a widget that decides AT RUNTIME it has nothing to show costs no row. `true` sizes purely to content; an integer sizes to content too but caps the height at that many rows (GridStack's maximum, NOT a minimum: content shorter than N rows is as short as it is, content taller is clipped at N). It makes gridHeight advisory for this widget — right for anything whose height is whatever it turned out to be (a banner whose condition is false, a list that came back empty), wrong for anything with a deliberate size. Maps to CnDashboardGrid's per-item `sizeToContent`."
+				},
+				"eager": {
+					"type": "boolean",
+					"description": "On a detail page's body grid, mount this widget on page open instead of when its cell comes within a viewport height of the screen. A grid widget below the first screen waits, so opening a record fetches for the cards in view only; set `eager: true` on a widget whose data another part of the page needs at once. Read off the layout entry or the widget definition. Edit mode, printing and a browser without IntersectionObserver mount every widget at once."
 				},
 				"props": {
 					"type": "object",
@@ -2839,6 +2933,10 @@
 												"type": "string",
 												"description": "Dot-path into the endpoint payload for a SERVER-computed delta percent — wins over the client-side previousField computation."
 											},
+											"noPreviousText": {
+												"type": "string",
+												"description": "Sublabel shown instead of the trend when previousField is set but the previous value is missing, not numeric or 0 (no earlier period to compare with). Translated through the manifest translator. Omitted = no sublabel, as before."
+											},
 											"goodDirection": {
 												"type": "string",
 												"enum": ["up", "down"],
@@ -3314,7 +3412,7 @@
 				},
 				"type": {
 					"type": "string",
-					"enum": ["handler", "open-modal", "open-page", "navigate", "object-op", "export", "open-form", "refresh", "api-call", "agent", "run-node", "toggle"],
+					"enum": ["handler", "open-modal", "open-page", "navigate", "object-op", "export", "open-form", "refresh", "api-call", "agent", "run-node", "toggle", "object-action"],
 					"default": "handler",
 					"description": "Action behaviour discriminator. Defaults to 'handler' when omitted (back-compat with v1.3.0). handler: calls a registry function; open-modal: opens a modal by target id; open-page: navigates to a named route; navigate: navigates to a URL; object-op: dispatches a declarative mutation (patch | delete | create) of an OpenRegister object via the shared object store; export: opens the shared CnMassExportDialog export launcher configured via entities[]/formats[] — the confirm payload ({format, entity?}) routes to the action's `handler` in the manifest actions map (the app's export service does the download). open-form (#91 Wave 3): CnActionButtons opens a schema-driven create dialog (CnAdvancedFormDialog) for the action's register/schema, saves + toasts + refreshes + optionally navigates to onSuccessRoute. refresh (#91 Wave 3): bumps the page-level cn:page:refresh event-bus signal so every endpoint-bound widget refetches. api-call (#91 Wave 3): POST/PUT the token-interpolated url with payload/params (JSON body, payload resolves @-tokens recursively at any depth) + success/error toast + auto page-refresh (unless refresh:false); confirm gating is surface-consumed intent (object-op precedent); download:true requests a binary blob and triggers a browser file download instead (auto-refresh defaults to OFF in that mode). agent (hermiq#41): run a governed hermiq agent against the page object — POSTs { register, schema, objectId, resultField?, skill?, prompt? } to /apps/hermiq/api/agents/{agent}/run-on-object (object-RBAC-scoped; dispatches the governed AgentRunRequestedEvent). register/schema/objectId default to the page's @register/@schema/@objectId object context. A first-class companion to api-call (which remains the fallback for a bespoke body); hermiq is NOT hard-required — an app-level 404 surfaces a graceful 'agent runtime unavailable' toast. toggle (#91 Wave 3): a stateful two-way state button rendered by CnActionButtons (GET stateSource on mount, optimistic write on click) — NOT dispatchable through dispatchAction. object-op declares mutation INTENT only — authority is enforced server-side by OpenRegister RBAC (ADR-022/ADR-023); authorization-shaped fields have no client-side effect and are not accepted here."
 				},
@@ -3381,6 +3479,11 @@
 					"type": "boolean",
 					"default": false,
 					"description": "open-form: open the properties-and-JSON table (CnAdvancedFormDialog) instead of the plain form. The plain form is the default because a header button is aimed at someone filing a record, not at inspecting its schema."
+				},
+				"menu": {
+					"type": "boolean",
+					"default": false,
+					"description": "Bulk actions only: list the action under More in the selection strip and the bulk band instead of as a button of its own, so a band keeps the buttons its board draws on one row. Ignored on other surfaces."
 				},
 				"formTitle": {
 					"type": "string",
@@ -3482,6 +3585,19 @@
 					"type": "string",
 					"description": "export only: pre-translated description shown above the export launcher's pickers."
 				},
+				"resolve": {
+					"type": "object",
+					"required": ["register", "schema"],
+					"additionalProperties": false,
+					"description": "api-call / navigate: look up a record before the action renders and again before it runs (the first OpenRegister object of register/schema matching filter; filter values take the action token grammar, e.g. @objectId). Its fields are @resolved.<path> in url, target and payload. Without a match the action is disabled with `reason` as its title, or hidden with unresolved: hide.",
+					"properties": {
+						"register": { "type": "string", "minLength": 1 },
+						"schema": { "type": "string", "minLength": 1 },
+						"filter": { "type": "object", "additionalProperties": true, "description": "Equality filters, e.g. { \"programme\": \"@objectId\", \"status\": \"open\" }." },
+						"unresolved": { "type": "string", "enum": ["disable", "hide"], "default": "disable" },
+						"reason": { "type": "string", "description": "i18n key / why the action cannot run without a record (its title, and the error when it is pressed anyway)." }
+					}
+				},
 				"url": {
 					"type": "string",
 					"description": "api-call / toggle only: the app endpoint (POST/PUT). App-relative (routed through generateUrl) or absolute (http/https). May interpolate @objectId / @object.<field> / @workspace.<key> / @config.<key> tokens inline, as well as the literal {objectId} brace placeholder (unresolved tokens collapse to empty)."
@@ -3500,6 +3616,14 @@
 					"type": "object",
 					"additionalProperties": true,
 					"description": "Two distinct uses depending on the action's dispatch. (1) api-call / toggle: the JSON request body (legacy — prefer `payload` for anything with nested objects/arrays; ignored when `payload` is set). Values run the shared filter-token grammar ONE level deep (@me, @today±Nd, @workspace.<key>/@config.<key> with a trailing `?` for optional values dropped when unresolved; a required unresolved token skips the call). (2) handler: 'navigate' (index-page row actions, manifestActionDispatch): vue-router params merged OVER the default { id: row[rowKey] }. OMIT it for the ordinary 'open this row's detail page' action — the row id is already injected. String values run the `{field}` ROW-token grammar (NOT the @-token grammar): \"{id}\" resolves to row.id with its type preserved, \"run-{id}\" interpolates as text, and a brace-less \"new\" stays literal (that is what makes a 'New X' action navigate with { id: 'new' }). A token naming a field the row does not carry is dropped with a console.warn — so `id` falls back to the row id — instead of being pushed as a literal %7Bid%7D path segment."
+				},
+				"openResponse": {
+					"description": "api-call only: after a successful call, open the address the answer holds: `true` reads `url`, a string names the field (a dot-path), and `{ field?, newTab? }` also opens it in a new tab. Only an http(s) URL or a server-relative path opens; anything else is ignored (api-call-open-response, 2.179.0).",
+					"oneOf": [
+						{ "type": "boolean" },
+						{ "type": "string", "minLength": 1 },
+						{ "type": "object", "additionalProperties": false, "properties": { "field": { "type": "string", "minLength": 1 }, "newTab": { "type": "boolean" } } }
+					]
 				},
 				"download": {
 					"type": "boolean",
@@ -3621,6 +3745,10 @@
 					"default": false,
 					"description": "Detail page header actions only. Shows the action to instance admins alone, in the last group of the overflow menu. Hides a control and nothing more: the endpoint behind the action still decides who may call it. Ignored on other surfaces."
 				},
+				"action": { "type": "string", "minLength": 1, "description": "object-action: the key of an action OpenRegister declares on the object's schema (`x-openregister-action`), run with POST /api/objects/{register}/{schema}/{id}/actions/{action} (object-actions)." },
+				"inputs": { "type": "object", "description": "object-action: fixed inputs sent with the run; @-tokens resolve (object-actions)." },
+				"disabledWhen": { "$ref": "#/$defs/visibleWhen", "description": "The action stays drawn but disabled while this condition holds (the visibleWhen shape: an endpoint, a source, reader groups, an installed app or a field), with `disabledReason` as the reason (action-disabled-when)." },
+				"disabledReason": { "type": "string", "description": "Why the action is disabled while `disabledWhen` holds, through the app's translate, shown as its tooltip or under it in a menu (action-disabled-when)." },
 				"visibleWhen": {
 					"$ref": "#/$defs/visibleWhen",
 					"description": "#91 Wave 3: an optional predicate gating whether the action renders — the shared banner shape ({ endpoint | source | field, op, value }). The `field`-only LOCAL form evaluates against the page object context (a detail action shown only in the right lifecycle state); endpoint / source forms fetch. Fail-safe: a broken predicate hides the action."
@@ -3747,10 +3875,16 @@
 			"additionalProperties": false,
 			"description": "#91 Wave 3: the shared visibility predicate (the Wave-1 banner shape). THREE modes: `endpoint` (GET a JSON endpoint, `field` dot-paths into the body), `source` (an OpenRegister { register, schema, filter? } query — `field` into the first result, or omit / use @total for the collection total), or LOCAL (neither endpoint nor source — `field` dot-paths into the caller's object context, e.g. a detail-page record). `op` defaults to eq. Evaluation is FAIL-SAFE (any error → hidden).",
 			"properties": {
+				"feature": { "type": "string", "minLength": 1, "description": "A feature toggle the app declares in `features`: a precondition like appInstalled; on its own it is the whole condition (feature-toggles)." },
 				"appInstalled": {
 					"type": "string",
 					"minLength": 1,
 					"description": "Nextcloud app id that must be installed and enabled for the guarded element to show. A PRECONDITION rather than a fourth mode: it is checked before anything else, and on its own it is the whole condition. Combined with endpoint/source/field it gates that mode too, so both must hold. It exists because the menu's `visibleIf` already spoke this word and `visibleWhen` did not, so the same manifest vocabulary meant two different things in two places. Use it on an action that writes into a sibling app, so an install without that app shows no button rather than a form that saves nowhere."
+				},
+				"readerGroups": {
+					"type": "array",
+					"items": { "type": "string", "minLength": 1 },
+					"description": "Nextcloud group ids; the reader must be in at least one of them (2.173.0, visible-when-reader-groups). A PRECONDITION like `appInstalled`: on its own it is the whole condition, next to endpoint/source/field both must hold. Administrators are the `admin` group, so list it to include them. While the reader's groups load, and when the lookup fails, it reads false, so the element stays hidden. It hides a control and is never an authorization decision: the endpoint behind the element keeps its own check."
 				},
 				"endpoint": {
 					"type": "string",
@@ -3980,10 +4114,21 @@
 		},
 		"statsBlockEntry": {
 			"type": "object",
-			"required": ["register", "schema"],
+			"anyOf": [
+				{ "required": ["register", "schema"] },
+				{ "required": ["endpointSource"] }
+			],
 			"additionalProperties": false,
 			"description": "One KPI entry inside a multi-entry stats-block widget (CnStatsBlockWidget `entries[]`). Carries the same source contract as a type:'stat' widget: register + schema + metric + token-resolved filter (@today / @me / @workspace.* and ?-optional clauses), plus per-entry presentation (title, variant, countLabel, format), an optional route deep link, and hideWhenZero. A money value names its currency with currencyField (the page object's field) or currency.",
 			"properties": {
+				"endpointSource": {
+					"$ref": "#/$defs/endpointSource",
+					"description": "stats-block-entry-endpoint (2.194.0): read the entry's value from an app REST endpoint instead of OpenRegister's aggregation (then register and schema may be left out). Entries naming the same endpoint share one request, and each reads its own `valueField`, so one summary endpoint feeds several KPIs."
+				},
+				"valueField": {
+					"type": "string",
+					"description": "With `endpointSource`: the dot-path of the value in the response (after the source's `responsePath`); omitted, the response itself. A value that is not a number shows as no value."
+				},
 				"title": {
 					"type": "string",
 					"description": "KPI title rendered by the inner CnStatsBlock."
@@ -4120,6 +4265,10 @@
 					"type": "array",
 					"uniqueItems": true,
 					"items": { "enum": ["relationRows", "incoming", "files"] }
+				},
+				"overrides": {
+					"type": "object",
+					"description": "Field values every copy starts with, over the source's, such as `{ \"publicationDate\": null }` so a copy is not published with its source. The new name still wins on the name field (index-copy-overrides)."
 				}
 			}
 		},
@@ -4155,8 +4304,8 @@
 				"type": {
 					"type": "string",
 					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "reports",
-						"links", "store", "search", "wiki", "flow", "flows", "flow-detail", "redaction", "custom"],
-					"description": "Page type. Closed enum of 19 supported types. 'redaction' mounts CnRedactionEditor (a record's documents redacted one by one; config.recordId, config.config, config.breadcrumbs, config.recordSource). 'links' mounts CnLinkCardsPage: a page of link cards grouped under captions, declared with config.categories + config.cards ($defs/linkCard). Use it for the pages a short menu leaves out; unlike 'reports' an app may have several. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
+						"links", "connections", "store", "search", "wiki", "flow", "flows", "flow-detail", "redaction", "custom"],
+					"description": "Page type. Closed enum of 20 supported types. 'connections' mounts CnConnectionRegistry: the connections one app declares, as integriq checked them (2.190.0). 'redaction' mounts CnRedactionEditor (a record's documents redacted one by one; config.recordId, config.config, config.breadcrumbs, config.recordSource). 'links' mounts CnLinkCardsPage: a page of link cards grouped under captions, declared with config.categories + config.cards ($defs/linkCard). Use it for the pages a short menu leaves out; unlike 'reports' an app may have several. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
 				},
 				"title": {
 					"type": "string",
@@ -4218,6 +4367,11 @@
 					"default": false,
 					"description": "Detail pages only. Puts the active tab in the address as ?_tab=<id> so a link points at a tab of a record rather than at the record. The underscore prefix keeps it out of resolveQueryFilters(), which reads every other query key as a filter. Refused on any other page type."
 				},
+				"menuEntry": {
+					"type": "string",
+					"minLength": 1,
+					"description": "The id of the menu entry this page marks as current when it has no entry of its own and no entry matches its route (CnAppNav). The Mailbox, reached from Team queue, names Team queue (DqPostvak)."
+				},
 				"listNavigation": {
 					"type": "boolean",
 					"default": false,
@@ -4264,6 +4418,10 @@
 						"follow": {
 							"type": "boolean",
 							"description": "Detail pages: the one Follow control beside the title, with a notifications on/off switch while the user follows and the follower count for a user who may update the record. Omitted means automatic: it shows when the object carries @self.watching. false removes it, and the object read then no longer asks for @self.can."
+						},
+						"permissions": {
+							"type": "boolean",
+							"description": "Detail pages: read the record's rights. The object read asks for @self.can, also with follow: false. While can.update is false the Edit button, the header actions with role edit or update and the inline editors of the data and map widgets are off. A record without can keeps every control. Default false."
 						},
 						"showFollowColumn": {
 							"type": "boolean",
@@ -4332,6 +4490,10 @@
 									}
 								]
 							}
+						},
+						"searchHandler": {
+							"type": "string",
+							"description": "Index pages (self-fetch): the name of a handler in the app's registry that reads a typed search before it is sent. It gets the term and answers `{ search?, filters?, note? }` (or a promise of it): `search` replaces `_search` (none when empty), `filters` are added to the query, and `note` shows above the list while the reading applies, e.g. a phone number becomes a filter on a normalised field with \"Searching by phone number\". `null`, a throw or an unregistered name sends the term as typed. Maps to CnIndexPage `searchHandler`."
 						},
 						"searchInFiles": {
 							"type": "boolean",
@@ -4864,9 +5026,16 @@
 							"description": "type='detail': a field path, read like a `visibleWhen` field, whose value picks the tabs of the page's tabs widgets and their order for this record, e.g. `@context.caseType.tabs` (DqAanbesteding). A non-empty list of tab ids keeps those tabs in that order; otherwise the declared tabs stay, and edit mode shows them all (2.128.0)."
 						},
 						"quickActionsFrom": {
+							"oneOf": [
+								{ "type": "string", "minLength": 1 },
+								{ "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+							],
+							"description": "type='detail': a field path, read like a `visibleWhen` field, whose list of `headerActions` ids picks this record's quick actions in that order, e.g. `@context.caseType.quickActions` (a case type that names the actions its cases need most). Only declared header actions are taken; an id nobody declares, or an action written out in the data, is dropped. An empty or missing list keeps `quickActions` (2.142.0). A list of paths is read in order and the first that names a declared action wins (detail-header-row-from-record)."
+						},
+						"primaryActionFrom": {
 							"type": "string",
 							"minLength": 1,
-							"description": "type='detail': a field path, read like a `visibleWhen` field, whose list of `headerActions` ids picks this record's quick actions in that order, e.g. `@context.caseType.quickActions` (a case type that names the actions its cases need most). Only declared header actions are taken; an id nobody declares, or an action written out in the data, is dropped. An empty or missing list keeps `quickActions` (2.142.0)."
+							"description": "type='detail': a field path, read like a `visibleWhen` field, whose value names the declared header action drawn as this record's primary button, e.g. `@context.caseType.primaryAction`. Only an id of `headerActions` is taken, and only while that action's own `visibleWhen` shows it; otherwise the stage's primary action and `primaryAction` stay (detail-header-row-from-record)."
 						},
 						"sideColumnFrom": {
 							"type": "string",
@@ -5058,6 +5227,23 @@
 						"savedViewsScope": {
 							"type": "string",
 							"description": "type='index': which pages share this page's saved views. By default a view is shared by every page over the same register and schema and by no other, because a view is filters over one schema's fields. Set this to share views across pages over different sources, or to keep two pages over one source apart. Written into the saved view's `query.scope`; views saved before scoping stay visible everywhere. Maps to CnIndexPage `savedViewsScope`."
+						},
+						"deleteDialog": {
+							"type": "object",
+							"additionalProperties": false,
+							"description": "type='index': the words of the single-item delete dialog, each through the app's translate. `message` is the question (`{name}` is the item), `description` a muted line under it saying what else the delete removes. Unset keys keep the defaults. Maps to CnIndexPage `deleteDialog` (index-delete-dialog-texts, 2.180.0).",
+							"properties": {
+								"title": { "type": "string" },
+								"message": { "type": "string" },
+								"description": { "type": "string" }
+							}
+						},
+						"savedViewsShareGroups": {
+							"description": "type='index': which groups a saved view can be shared with. `all` (default) offers every group the sharee API answers, `mine` only the groups the current user is in, an array only the groups it names by id. People can be picked either way. Maps to CnIndexPage `savedViewsShareGroups`.",
+							"oneOf": [
+								{ "type": "string", "enum": ["all", "mine"] },
+								{ "type": "array", "items": { "type": "string" } }
+							]
 						},
 						"defaultSavedViews": {
 							"type": "array",
@@ -5534,6 +5720,18 @@
 							],
 							"description": "type='detail', board look: the meta line on row 2 of the header, after the breadcrumb and a middle dot (screens-detail-page-parity). A field template such as `\"via {channel}\"`: every `{path}` is read from the record, and a line with an empty value is dropped. Maps to CnDetailPage `headerMeta`. type='index' | 'dashboard' | 'settings' (page-header-breadcrumb): the note after the breadcrumb and a middle dot under the title; on an index page `{total}` and `{shown}` are the list's counts."
 						},
+						"headerMetaSource": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": ["url"],
+							"description": "type='index' (index-header-meta-from-endpoint, 2.199.0): an endpoint whose answer at `responsePath` (a string or a number) fills `{source}` in headerMeta, for a line no list count gives (\"Bijgewerkt uit Magister om 07.00, 3 wijzigingen\"). The request grammar of a widget's endpointSource; while it reads, after a failed read or for an empty value the note is left out.",
+							"properties": {
+								"url": { "type": "string", "minLength": 1 },
+								"method": { "type": "string", "enum": ["GET", "POST"], "default": "GET" },
+								"params": { "type": "object", "additionalProperties": true },
+								"responsePath": { "type": "string" }
+							}
+						},
 						"headerMetaCounts": {
 							"type": "object",
 							"description": "type='index' or 'detail': the other lists headerMeta counts, by name. Each is read as one list total and fills `{count:<name>}` in headerMeta (\"{total} contracten bij {count:suppliers} leveranciers\"); while a count loads or when it fails, the note is left out. A count reads a register + schema (with an optional filter) or a named entity source (`{ entitySource: \"organisations\" }`: DqTenant \"een van 6 organisaties op deze omgeving\").",
@@ -5625,6 +5823,15 @@
 								}
 							}
 						},
+						"download": {
+							"type": "boolean",
+							"default": false,
+							"description": "type='dashboard': a \"Download\" button in the header saves the figures of the page's stat tiles (OpenRegister `source`), grouped charts (`dataSource.aggregate.groupBy` count) and object tables as CSV with the header row `widget,label,value`, UTF-8 with a byte order mark. Disabled until the figures are read; a widget whose read fails writes one row with the value `error` (dashboard-download-csv)."
+						},
+						"downloadName": {
+							"type": "string",
+							"description": "type='dashboard' with `download: true`: the file name before `-<yyyy-mm-dd>.csv`; \"dashboard\" when empty."
+						},
 						"kpiRow": {
 							"type": "array",
 							"items": { "type": "string" },
@@ -5638,6 +5845,11 @@
 							],
 							"default": "auto",
 							"description": "type='dashboard': the columns of the `kpiRow` at full width, 2, 3 or 4 (PqLoyaliteit draws eight tiles in two rows of four), or \"auto\" (the default) for as many 200px columns as fit. Maps to CnDashboardPage `kpiColumns`."
+						},
+						"layoutPanel": {
+							"type": "boolean",
+							"default": false,
+							"description": "type='dashboard': an \"Arrange page\" header button that opens a side panel where the user shows, hides and reorders the page's sections, with \"Back to default\" and \"Save layout\" (dashboard-layout-panel, 2.189.0). Stored per user in the app's preferences, as `userLayout`, which this turns on. Maps to CnDashboardPage `layoutPanel`."
 						},
 						"greeting": {
 							"oneOf": [
@@ -6284,6 +6496,27 @@
 					}
 				},
 				{
+					"description": "type='connections' (CnConnectionRegistry, connection-registry-page 2.190.0) lists the connections one app declares, as integriq checked them (register `integriq`, schema `app_connection`), as status cards with status chips, a text filter and three aside cards. `app` filters the list to that app; without it the page reads `?app=` from the route.",
+					"if": { "properties": { "type": { "const": "connections" } }, "required": ["type"] },
+					"then": {
+						"properties": {
+							"config": {
+								"type": "object",
+								"properties": {
+									"app": { "type": "string", "minLength": 1, "description": "The app whose connections are listed (the stored `app` field). Set it, so the page opened without the menu's `?app=` query still lists this app's connections only." },
+									"appName": { "type": "string", "minLength": 1, "description": "i18n key / the app's name in the line under the heading (\"10 of 10 connections that Pipelinq declares\")." },
+									"footnote": { "type": "string", "description": "i18n key / a muted line under the page." },
+									"register": { "type": "string", "minLength": 1, "description": "The register holding the connections. Default `integriq`." },
+									"schema": { "type": "string", "minLength": 1, "description": "The connection schema. Default `app_connection`." },
+									"addUrl": { "type": "string", "minLength": 1, "description": "Target of the primary header button (an app-absolute path or a URL), e.g. integriq's connection page. No button without it." },
+									"addLabel": { "type": "string", "minLength": 1, "description": "i18n key / text of the primary header button. Default \"Add integration\"." },
+									"integriqUrl": { "type": "string", "description": "Target of the \"Open integriq\" link in the aside. Default `/apps/integriq`; empty hides the link." }
+								}
+							}
+						}
+					}
+				},
+				{
 					"description": "type='links' (CnLinkCardsPage) renders config.cards as link cards grouped by config.categories. It MUST declare a non-empty cards list, and every card is a $defs/linkCard, so a card that can go nowhere is refused here and not dropped in silence at render time (link-cards-page).",
 					"if": { "properties": { "type": { "const": "links" } }, "required": ["type"] },
 					"then": {
@@ -6354,6 +6587,7 @@
 			"description": "A visibleIf condition block. Each key is either a reserved specialised condition (appInstalled) or a dot-separated path into manifest.runtime. Values are predicate expressions (scalar for eq shorthand, or operator object). All conditions are combined with implicit AND.",
 			"additionalProperties": true,
 			"properties": {
+				"feature": { "type": "string", "minLength": 1, "description": "A feature toggle the app declares in `features`; the entry renders only while it is on (feature-toggles)." },
 				"appInstalled": {
 					"type": "string",
 					"minLength": 1,
