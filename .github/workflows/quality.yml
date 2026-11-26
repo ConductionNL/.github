@@ -10449,7 +10449,12 @@ jobs:
                   return ""
               legs, missing, expected, crashed, groups = load(suite)
               if not legs:
-                  return ""
+                  # Every shard crashed before it counted a test: no counts
+                  # line, but the shards are still named, one line each.
+                  if not crashed and not groups:
+                      return ""
+                  count = 1 if suite == "playwright" else len(set(groups) | {c["group"] for c in crashed})
+                  return "<br>".join(shard_lines([], crashed, count, groups))
               notes, bullets = [], []
               complete = not missing and len(legs) >= expected and not any(l["not_run"] for l in legs)
               rows = len(legs)
