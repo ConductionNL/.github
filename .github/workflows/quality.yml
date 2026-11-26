@@ -5275,10 +5275,22 @@ jobs:
       # Per database of the coverage leg: every shard's part must be there, a
       # missing one would under-report. On a pull request the shards agree on
       # one merge base, and every shard has a base part or an empty marker.
+      #
+      # The databases are the matrix's, from the inputs, not the ones whose
+      # artifacts happen to be there: a database none of whose shards uploaded
+      # anything is then a missing database, named, and not one nobody checks.
+      #
+      # No coverage leg in the matrix (php-version is not in
+      # php-test-versions, and the matrix is not reduced) means no coverage,
+      # as unsharded: the step says so and merges nothing.
       - name: Merge the shards' coverage
+        id: merge
         env:
           SHARDS: ${{ inputs.phpunit-shards }}
           PRIMARY_DATABASE: ${{ inputs.database }}
+          # The phpunit matrix's own `database` and `php-version` expressions.
+          EXPECTED_DATABASES: ${{ join(fromJSON(inputs.database-test-matrix), ',') != '' && toJSON(fromJSON(inputs.database-test-matrix)) || toJSON(fromJSON(format('["{0}"]', inputs.database))) }}
+          COVERAGE_LEG: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && contains(fromJSON(inputs.reduce-pr-base-branches), github.base_ref)) || contains(fromJSON(inputs.php-test-versions), inputs.php-version) }}
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
@@ -5309,10 +5321,14 @@ jobs:
           echo 'Merged ' . (count($argv) - 2) . " part(s) into {$argv[1]}.\n";
           PHPEOF
 
-          DATABASES="$( { find "$RUNNER_TEMP/coverage" -mindepth 1 -maxdepth 1 -type d -name 'phpunit-coverage-*-shard-*' -printf '%f\n' 2>/dev/null || true; } \
-            | sed -E 's/^phpunit-coverage-(.*)-shard-[0-9]+$/\1/' | sort -u)"
+          if [ "$COVERAGE_LEG" != "true" ]; then
+            echo "::notice::The PHPUnit matrix has no coverage leg (php-version is not in php-test-versions), so there is no coverage to merge or guard, as unsharded."
+            echo "coverage-leg=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          DATABASES="$(jq -r '.[]' <<< "$EXPECTED_DATABASES" | sort -u)"
           if [ -z "$DATABASES" ]; then
-            echo "::error::No shard of the coverage leg uploaded its coverage, so there is no report to merge (see the shards' 'Run PHPUnit tests' step). Refusing to report a coverage check that did not run."
+            echo "::error::No database in the PHPUnit matrix ($EXPECTED_DATABASES), so there is no coverage to merge. Refusing to report a coverage check that did not run."
             exit 1
           fi
           HEAD_SHA="$(git rev-parse HEAD)"
@@ -5358,7 +5374,7 @@ jobs:
       # once per database. The capability probes and the promotion exemption
       # are that step's, and its comments carry the evidence for each.
       - name: Guard coverage baseline
-        if: ${{ inputs.enable-coverage-guard }}
+        if: ${{ inputs.enable-coverage-guard && steps.merge.outputs.coverage-leg != 'false' }}
         env:
           EVENT_NAME: ${{ github.event_name }}
           # Through `env:`, never interpolated: a branch name is attacker text.
