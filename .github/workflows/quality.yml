@@ -4833,12 +4833,14 @@ jobs:
           # THE REMEDY AN ERROR NAMES HAS TO EXIST — the two ways this can fail
           # have different remedies, and the old single message named neither.
           if [ ! -s "$BASE_REPORT" ] && [ ! -e "$RUNNER_TEMP/coverage/base-$SHARD.empty" ]; then
-            if [ "$PLAN" -ne 0 ] && [ "$PLAN" -ne 3 ]; then
-              # The planner's own error above names the cause: the base's
-              # phpunit.xml has no <testsuites>, or its suites select no file.
-              echo "::error::The shard plan could not be made at merge base $MERGE_BASE (exit $PLAN; the planner's error above says why), so this shard has no part of the base suite to measure. Refusing to report a ratchet that did not run."
-            elif [ "$BASE_HAS_RUNNER" = "no" ]; then
+            if [ "$BASE_HAS_RUNNER" = "no" ]; then
               echo "::error::Merge base $MERGE_BASE has no ./vendor/bin/phpunit after composer install — that commit predates this repository's PHPUnit setup, so there is no coverage floor to measure against. Merge the current base branch ($BASE_REF) into this pull request, or rebase it onto a base that carries the test suite. Refusing to report a ratchet that did not run."
+            elif [ "$PLAN" -ne 0 ] && [ "$PLAN" -ne 3 ]; then
+              # The planner's own error above names the cause: the base's
+              # phpunit.xml cannot be read (absent or not XML), has no
+              # <testsuites>, or its suites select no test file. A base without
+              # PHPUnit at all is the branch above, with its own remedy.
+              echo "::error::The shard plan could not be made at merge base $MERGE_BASE (exit $PLAN; the planner's error above says why: its phpunit.xml is unreadable, has no <testsuites>, or selects no test file), so this shard has no part of the base suite to measure. Merge the current base branch ($BASE_REF) into this pull request, or rebase it onto a base whose phpunit.xml selects the test suite; while the base has no test files to measure, set phpunit-shards: 1 on this pull request. Refusing to report a ratchet that did not run."
             else
               echo "::error::PHPUnit is present at merge base $MERGE_BASE but produced no clover report there — the base suite could not run at all (check the PHPUnit output above this line). Refusing to report a ratchet that did not run."
             fi
