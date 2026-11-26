@@ -89,8 +89,22 @@ BLOB = re.compile(r"(data:application/zip;base64,)([A-Za-z0-9+/=]+)")
 MUTATIONS = [
     ("newman", "skipped += skipped_here", 'skipped += int(assertions.get("pending") or 0)',
      "newman-real", "read Newman's in-flight `pending` counter as the skip count"),
-    ("compute", "if len(legs) < expected:", "if False:",
+    ("compute", "if rows < expected:", "if False:",
      "cell-missing-leg", "no comparison against the recorded matrix size"),
+    ("compute", "if n not in numbers:", "if False:",
+     "cell-sharded-missing-shard", "a shard that left no file missing from the lines"),
+    ("compute", "crashed.append(dict(", "missing.append(str(",
+     "playwright-crashed-shard", "a crashed shard left out of the lines"),
+    ("compute", "bullets = shard_lines(legs, crashed, 1)", "pass",
+     "playwright-sharded-failing", "Playwright's failing shards not named"),
+    ("compute", 'failed = [r for r in rows if r.get("shard") and r["failed"]]', "failed = []",
+     "cell-sharded-failing-shard", "a failing shard not named in the cell"),
+    ("compute", 'elif e.get("failures") is not None and e.get("errored") is not None:', "elif False:",
+     "list-one-leg", "a shard's failures and errors read as one number"),
+    ("compute", "raw, legs = legs, by_leg(legs)", "raw = legs",
+     "cell-sharded-green", "a sharded leg's shards read as separate legs"),
+    ("phpunit", 'if os.environ.get("SHARDS"):', "if False:",
+     "phpunit-sharded", "a shard's count recorded without its shard"),
     ("compute", " and len(legs) >= expected and ", " and ",
      "cell-missing-leg", "a leg with no file still reads as a complete matrix"),
     ("playwright", 'tally["skipped" if deliberate(test) else "not_run"] += 1', 'tally["skipped"] += 1',
@@ -460,7 +474,8 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
 
     code, cells, log = compute(r, "cell-missing-shard",
                                {"playwright-shard-1.json": leg("shard 1", 10, 10, total=3)}, {"playwright": "success"})
-    check("cell-missing-shard", cells.get("PLAYWRIGHT_COUNTS") == "10/10 (counts from 1 of 3 shards)",
+    check("cell-missing-shard", cells.get("PLAYWRIGHT_COUNTS")
+          == "10/10 (counts from 1 of 3 shards)<br>3 shards in total:<br>• Shard 2: no test report<br>• Shard 3: no test report",
           f"got {cells.get('PLAYWRIGHT_COUNTS')!r}\n{log}")
 
     code, cells, log = compute(r, "cell-not-run",
@@ -474,6 +489,124 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
                                {"newman": "failure"})
     check("cell-newman-missing-export", cells.get("NEWMAN_COUNTS") == "5/5 (counts from 1 of 2 collections)",
           f"got {cells.get('NEWMAN_COUNTS')!r}\n{log}")
+
+    # ── phpunit-shards: one row per shard, the leg is their sum ───────────
+    d = r.case_dir("phpunit-sharded")
+    out = d / "test-counts" / "phpunit-leg.json"
+    proc = r.run("phpunit", d, [str(FIXTURES / "phpunit-10.5-junit.xml")],
+                 {"LEG": "PHP 8.3, NC stable35, pgsql, shard 2 of 3", "GROUP": "PHP 8.3, NC stable35, pgsql",
+                  "SHARD": "2", "SHARDS": "3", "TOTAL": "3", "OUT": str(out)})
+    got = read_counts(d)
+    check("phpunit-sharded", got.get("group") == "PHP 8.3, NC stable35, pgsql" and got.get("shard") == 2
+          and got.get("shards") == 3 and got.get("run") == phpunit_real.get("run")
+          and got.get("failures") == 1 and got.get("errored") == 0,
+          f"want the counts with group, shard 2 and shards 3, got exit {proc.returncode} {got}\n{proc.stderr}")
+
+    d = r.case_dir("phpunit-sharded-no-junit")
+    out = d / "test-counts" / "phpunit-leg.json"
+    proc = r.run("phpunit", d, [str(d / "absent.xml")],
+                 {"LEG": "PHP 8.3, NC stable35, pgsql, shard 3 of 3", "GROUP": "PHP 8.3, NC stable35, pgsql",
+                  "SHARD": "3", "SHARDS": "3", "TOTAL": "3", "OUT": str(out)})
+    got = read_counts(d)
+    check("phpunit-sharded-no-junit", got.get("run", "x") is None and got.get("shard") == 3,
+          f"want run null on shard 3, got exit {proc.returncode} {got}\n{proc.stderr}")
+
+    shard = lambda n, run, passed, failed=0, of=3, group="PHP 8.3, NC stable35, pgsql": leg(  # noqa: E731
+        f"{group}, shard {n} of {of}", run, passed, failed, total=of, group=group, shard=n, shards=of)
+
+    code, cells, log = compute(r, "cell-sharded-green",
+                               {"phpunit-1.json": shard(1, 100, 100), "phpunit-2.json": shard(2, 150, 150),
+                                "phpunit-3.json": shard(3, 162, 162)},
+                               {"phpunit": "success"})
+    check("cell-sharded-green", cells.get("PHPUNIT_COUNTS") == "412/412",
+          f"want the three shards added up to one leg, got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
+
+    code, cells, log = compute(r, "cell-sharded-failing-shard",
+                               {"phpunit-1.json": shard(1, 100, 100), "phpunit-2.json": shard(2, 150, 147, failed=3),
+                                "phpunit-3.json": shard(3, 162, 162)},
+                               {"phpunit": "failure"})
+    check("cell-sharded-failing-shard", cells.get("PHPUNIT_COUNTS") == "409/412<br>3 shards in total:<br>• Shard 2: 3 failed tests",
+          f"got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
+
+    other = "PHP 8.4, NC stable35, pgsql"
+    code, cells, log = compute(r, "cell-sharded-two-legs",
+                               {"phpunit-a1.json": shard(1, 200, 200, of=2), "phpunit-a2.json": shard(2, 212, 212, of=2),
+                                "phpunit-b1.json": shard(1, 200, 200, of=2, group=other),
+                                "phpunit-b2.json": shard(2, 212, 211, failed=1, of=2, group=other)},
+                               {"phpunit": "failure"})
+    want = f"411/412 (worst of 2 legs: {other})<br>2 shards per leg:<br>• {other}, shard 2: 1 failed test"
+    check("cell-sharded-two-legs", cells.get("PHPUNIT_COUNTS") == want,
+          f"want {want!r}, got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
+
+    code, cells, log = compute(r, "cell-sharded-several-shards",
+                               {"phpunit-1.json": shard(1, 100, 99, failed=1), "phpunit-2.json": shard(2, 150, 150),
+                                "phpunit-3.json": shard(3, 162, 160, failed=2)},
+                               {"phpunit": "failure"})
+    check("cell-sharded-several-shards", cells.get("PHPUNIT_COUNTS") == "409/412<br>3 shards in total:<br>• Shard 1: 1 failed test<br>• Shard 3: 2 failed tests",
+          f"got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
+
+    many = {}
+    for v, version in enumerate(("stable31", "stable32", "stable33", "stable34", "stable35")):
+        for n in (1, 2):
+            many[f"phpunit-{v}-{n}.json"] = shard(n, 206, 205, failed=1, of=2, group=f"PHP 8.3, NC {version}, pgsql")
+            many[f"phpunit-{v}-{n}.json"]["total"] = 10
+    code, cells, log = compute(r, "cell-sharded-many-legs", many, {"phpunit": "failure"})
+    cell = cells.get("PHPUNIT_COUNTS", "")
+    check("cell-sharded-many-legs", cell.count("<br>• ") == 9 and "<br>2 shards per leg:<br>" in cell and cell.endswith("<br>• … and 2 more shards"),
+          f"want eight shards named and the other two counted, got {cell!r}\n{log}")
+
+    # One line per failed shard in the cell, failures and errors apart, the
+    # leg named only when there is more than one.
+    errored = shard(2, 150, 143, failed=7)
+    errored.update(failures=0, errored=7)
+    failing = shard(3, 162, 161, failed=1)
+    failing.update(failures=1, errored=0)
+    code, cells, log = compute(r, "list-one-leg", {"phpunit-1.json": shard(1, 100, 100), "phpunit-2.json": errored,
+                                                   "phpunit-3.json": failing}, {"phpunit": "failure"})
+    want = "404/412<br>3 shards in total:<br>• Shard 2: 7 errors<br>• Shard 3: 1 failure"
+    check("list-one-leg", cells.get("PHPUNIT_COUNTS") == want, f"want {want!r}, got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
+
+    mixed = shard(1, 206, 203, failed=3, of=2, group=other)
+    mixed.update(failures=2, errored=1)
+    code, cells, log = compute(r, "list-two-legs",
+                               {"phpunit-a1.json": shard(1, 206, 206, of=2), "phpunit-a2.json": shard(2, 206, 206, of=2),
+                                "phpunit-b1.json": mixed, "phpunit-b2.json": shard(2, 206, 206, of=2, group=other)},
+                               {"phpunit": "failure"})
+    want = f"409/412 (worst of 2 legs: {other})<br>2 shards per leg:<br>• {other}, shard 1: 2 failures, 1 error"
+    check("list-two-legs", cells.get("PHPUNIT_COUNTS") == want, f"want {want!r}, got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
+
+    code, cells, log = compute(r, "cell-sharded-missing-shard",
+                               {"phpunit-1.json": shard(1, 100, 100), "phpunit-2.json": shard(2, 150, 150)},
+                               {"phpunit": "failure"})
+    cell = cells.get("PHPUNIT_COUNTS", "")
+    want = "250/250 (counts from 2 of 3 shards)<br>3 shards in total:<br>• Shard 3: no test report"
+    check("cell-sharded-missing-shard", cell == want, f"want {want!r}, got {cell!r}\n{log}")
+
+    code, cells, log = compute(r, "cell-sharded-null-shard",
+                               {"phpunit-1.json": shard(1, 100, 100), "phpunit-2.json": shard(2, 150, 150),
+                                "phpunit-3.json": {"leg": "PHP 8.3, NC stable35, pgsql, shard 3 of 3", "run": None, "total": 3,
+                                                   "group": "PHP 8.3, NC stable35, pgsql", "shard": 3, "shards": 3}},
+                               {"phpunit": "failure"})
+    cell = cells.get("PHPUNIT_COUNTS", "")
+    want = "250/250 (counts from 2 of 3 shards)<br>3 shards in total:<br>• Shard 3: no test report"
+    check("cell-sharded-null-shard", cell == want, f"want the shard without counts as a line, {want!r}, got {cell!r}\n{log}")
+
+    # Playwright gets the same lines; it records no failure/error split.
+    pw = lambda n, run, passed: leg(f"shard {n}", run, passed, run - passed, total=6)  # noqa: E731
+    code, cells, log = compute(r, "playwright-sharded-failing",
+                               {f"playwright-shard-{n}.json": pw(n, 70, 70 - {2: 2, 5: 1}.get(n, 0)) for n in range(1, 7)},
+                               {"playwright": "failure"})
+    want = "417/420<br>6 shards in total:<br>• Shard 2: 2 failed tests<br>• Shard 5: 1 failed test"
+    check("playwright-sharded-failing", cells.get("PLAYWRIGHT_COUNTS") == want,
+          f"want {want!r}, got {cells.get('PLAYWRIGHT_COUNTS')!r}\n{log}")
+
+    code, cells, log = compute(r, "playwright-crashed-shard",
+                               {"playwright-shard-1.json": leg("shard 1", 70, 70, total=2),
+                                "playwright-shard-2.json": {"leg": "shard 2", "run": None, "total": 2}},
+                               {"playwright": "failure"})
+    want = "70/70 (counts from 1 of 2 shards)<br>2 shards in total:<br>• Shard 2: no test report"
+    check("playwright-crashed-shard", cells.get("PLAYWRIGHT_COUNTS") == want,
+          f"want {want!r}, got {cells.get('PLAYWRIGHT_COUNTS')!r}\n{log}")
 
     return failures
 
