@@ -3805,9 +3805,13 @@ jobs:
   # value runs one leg per combination, whose "Plan this shard" step fails
   # with the range; this job and `phpunit-shards` stay out of it, so that is
   # the only error.
+  #
+  # The `route` and `changes` conditions are the `phpunit` job's own, so the
+  # plan does not run on a docs-only or quick-lane run that runs no shard.
   phpunit-plan:
     name: "PHPUnit shard plan"
-    if: ${{ !cancelled() && contains(fromJSON('[2,3,4,5,6,7,8]'), inputs.phpunit-shards) && inputs.enable-php && inputs.enable-phpunit }}
+    needs: [route, changes]
+    if: ${{ !cancelled() && contains(fromJSON('[2,3,4,5,6,7,8]'), inputs.phpunit-shards) && needs.route.outputs.heavy != 'false' && inputs.enable-php && inputs.enable-phpunit && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
