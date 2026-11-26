@@ -4840,7 +4840,7 @@ jobs:
               # phpunit.xml cannot be read (absent or not XML), has no
               # <testsuites>, or its suites select no test file. A base without
               # PHPUnit at all is the branch above, with its own remedy.
-              echo "::error::The shard plan could not be made at merge base $MERGE_BASE (exit $PLAN; the planner's error above says why: its phpunit.xml is unreadable, has no <testsuites>, or selects no test file), so this shard has no part of the base suite to measure. Merge the current base branch ($BASE_REF) into this pull request, or rebase it onto a base whose phpunit.xml selects the test suite; while the base has no test files to measure, set phpunit-shards: 1 on this pull request. Refusing to report a ratchet that did not run."
+              echo "::error::The shard plan could not be made at merge base $MERGE_BASE (exit $PLAN; the planner's error above says why: its phpunit.xml is unreadable, has no <testsuites>, or selects no test file), so this shard has no part of the base suite to measure. Merge the current base branch ($BASE_REF) into this pull request, or rebase it onto a base whose phpunit.xml selects the test suite. Only if the planner said the base's suites select no test file: set phpunit-shards: 1 on this pull request until the base has test files. Refusing to report a ratchet that did not run."
             else
               echo "::error::PHPUnit is present at merge base $MERGE_BASE but produced no clover report there — the base suite could not run at all (check the PHPUnit output above this line). Refusing to report a ratchet that did not run."
             fi
