@@ -4804,8 +4804,8 @@ jobs:
           # reported with a cause the log does not support.
           BASE_HAS_RUNNER=yes
           [ -x ./vendor/bin/phpunit ] || BASE_HAS_RUNNER=no
+          PLAN=0
           if [ "$SHARDED" = "true" ]; then
-            PLAN=0
             ALLOW_EMPTY=1 python3 "$RUNNER_TEMP/phpunit-shard-plan.py" || PLAN=$?
             if [ "$PLAN" -eq 3 ]; then
               : > "$RUNNER_TEMP/coverage/base-$SHARD.empty"
@@ -4822,7 +4822,11 @@ jobs:
           # THE REMEDY AN ERROR NAMES HAS TO EXIST — the two ways this can fail
           # have different remedies, and the old single message named neither.
           if [ ! -s "$BASE_REPORT" ] && [ ! -e "$RUNNER_TEMP/coverage/base-$SHARD.empty" ]; then
-            if [ "$BASE_HAS_RUNNER" = "no" ]; then
+            if [ "$PLAN" -ne 0 ] && [ "$PLAN" -ne 3 ]; then
+              # The planner's own error above names the cause: the base's
+              # phpunit.xml has no <testsuites>, or its suites select no file.
+              echo "::error::The shard plan could not be made at merge base $MERGE_BASE (exit $PLAN; the planner's error above says why), so this shard has no part of the base suite to measure. Refusing to report a ratchet that did not run."
+            elif [ "$BASE_HAS_RUNNER" = "no" ]; then
               echo "::error::Merge base $MERGE_BASE has no ./vendor/bin/phpunit after composer install — that commit predates this repository's PHPUnit setup, so there is no coverage floor to measure against. Merge the current base branch ($BASE_REF) into this pull request, or rebase it onto a base that carries the test suite. Refusing to report a ratchet that did not run."
             else
               echo "::error::PHPUnit is present at merge base $MERGE_BASE but produced no clover report there — the base suite could not run at all (check the PHPUnit output above this line). Refusing to report a ratchet that did not run."
