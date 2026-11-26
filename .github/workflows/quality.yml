@@ -3856,7 +3856,9 @@ jobs:
         with:
           name: phpunit-shard-plan-durations
           path: ${{ runner.temp }}/phpunit-shard-plan/durations.json
-          retention-days: 1
+          # As long as the shards' coverage parts: "Re-run failed jobs" does
+          # not re-run this job, so its digest must still find the file then.
+          retention-days: 3
           if-no-files-found: error
 
   phpunit:
@@ -4544,7 +4546,7 @@ jobs:
               except OSError:
                   data = None
               if data is None or hashlib.sha256(data).hexdigest() != want:
-                  print(f"::error::The shard plan's durations ({durations_file}) are {'missing' if data is None else 'not the file phpunit-plan published'}. Every shard must plan from the same data, or a test file can land on no shard. Re-run the failed jobs.")
+                  print(f"::error::The shard plan's durations ({durations_file}) are {'missing' if data is None else 'not the file phpunit-plan published'}. Every shard must plan from the same data, or a test file can land on no shard. Re-run all jobs, which publishes the plan's durations again; re-running only the failed jobs reuses the published digest.")
                   sys.exit(1)
           try:
               known = {norm(k): float(v) for k, v in (json.loads(data or b"{}").get("files") or {}).items()}
