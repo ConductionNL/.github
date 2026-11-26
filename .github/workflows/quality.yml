@@ -3785,10 +3785,21 @@ jobs:
   # `phpunit-shards` job writes after each push, and a cache lookup by prefix
   # returns the newest entry at the moment of the lookup: shards starting a few
   # minutes apart could read two different entries. So the lookup happens once,
-  # here, and the shards read this job's output.
+  # here, and the shards read this job's snapshot.
   #
-  # No durations (a first run, an evicted cache, an unreadable file) is not an
-  # error: every file then weighs the same and the plan deals them out by count.
+  # AS AN ARTIFACT, NOT AS A JOB OUTPUT. A shard would receive an output
+  # through `env:`, and Linux refuses to start a process with one environment
+  # string over 128 KiB (MAX_ARG_STRLEN): the step dies with "Argument list
+  # too long" before bash runs. A suite the size of openregister's (2455 test
+  # files) records about 150 KB of durations, so the first push that cached
+  # them would stop every shard from starting. The output carries the file's
+  # SHA-256 instead, set only once the upload succeeded, and a shard plans
+  # only from a file with that digest: shards that read different data would
+  # split the files differently.
+  #
+  # No durations (a first run, an evicted cache, an unreadable file, a failed
+  # upload) is not an error: every file then weighs the same and the plan
+  # deals them out by count.
   phpunit-plan:
     name: "PHPUnit shard plan"
     if: ${{ !cancelled() && inputs.phpunit-shards > 1 && inputs.enable-php && inputs.enable-phpunit }}
@@ -3796,7 +3807,8 @@ jobs:
     timeout-minutes: 5
     permissions: {}
     outputs:
-      durations: ${{ steps.durations.outputs.durations }}
+      # Empty when the upload failed, so no shard waits for a file that is not there.
+      durations-sha256: ${{ steps.upload.outcome == 'success' && steps.durations.outputs.sha256 || '' }}
     steps:
       - name: Restore test file durations
         continue-on-error: true
@@ -3809,8 +3821,9 @@ jobs:
       - name: Publish the durations to the shards
         id: durations
         run: |
-          python3 - "$RUNNER_TEMP/phpunit-durations/durations.json" <<'PYEOF'
-          import json, os, sys
+          python3 - "$RUNNER_TEMP/phpunit-durations/durations.json" "$RUNNER_TEMP/phpunit-shard-plan/durations.json" <<'PYEOF'
+          import hashlib, json, os, sys
+          from pathlib import Path
           files = {}
           try:
               with open(sys.argv[1], encoding="utf-8") as fh:
@@ -3818,17 +3831,24 @@ jobs:
               files = {str(k): round(float(v), 2) for k, v in raw.items() if float(v) >= 0}
           except (OSError, ValueError, TypeError, AttributeError):
               print("No readable durations from an earlier run; the shards deal the test files out by count.")
-          text = json.dumps({"files": files}, separators=(",", ":"), sort_keys=True)
-          # A job's outputs share a 1 MB limit. Far above any suite measured so
-          # far, but past it the output would be cut off, and a cut-off plan is
-          # exactly the shard disagreement this job exists to prevent.
-          if len(text) > 500_000:
-              print(f"::warning::The durations of {len(files)} test files take {len(text)} bytes, over this job's output budget; the shards deal the files out by count.")
-              text = json.dumps({"files": {}})
-          print(f"Durations for {len(files)} test files.")
+          data = json.dumps({"files": files}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+          out = Path(sys.argv[2])
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_bytes(data)
+          print(f"Durations for {len(files)} test files, {len(data)} bytes.")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write(f"durations={text}\n")
+              fh.write(f"sha256={hashlib.sha256(data).hexdigest()}\n")
           PYEOF
+
+      - name: Upload the durations for the shards
+        id: upload
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: phpunit-shard-plan-durations
+          path: ${{ runner.temp }}/phpunit-shard-plan/durations.json
+          retention-days: 1
+          if-no-files-found: error
 
   phpunit:
     # NOT gated on php-quality — deliberately. `php-quality` is a matrix job, so
@@ -3927,7 +3947,7 @@ jobs:
     # a valid array before it exits non-zero, precisely so this stays true.
     #
     # `phpunit-plan` is a real edge too, with phpunit-shards above 1: the shard
-    # step reads its durations output. Unsharded it is skipped, and the
+    # steps read the digest of its durations file. Unsharded it is skipped, and the
     # `!cancelled()` in the `if:` keeps a skipped need from skipping this job.
     needs: [route, security, nextcloud-matrix, changes, phpunit-plan]
     # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
@@ -4403,17 +4423,32 @@ jobs:
       #
       # The program is written to a file because "Measure merge-base coverage"
       # runs it again on the merge base's files.
+      #
+      # The durations arrive as a file (`phpunit-plan` says why), with the
+      # digest that job published. A file that is missing or has another
+      # digest while one was published fails the leg: dealing this shard by
+      # count while the others deal by duration would put a file on no shard.
+      # Nothing published deals every shard out by count.
+      - name: Download the shard plan's durations
+        if: ${{ inputs.phpunit-shards != 1 && matrix.extra-database != true && needs.phpunit-plan.outputs.durations-sha256 != '' }}
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: phpunit-shard-plan-durations
+          path: ${{ runner.temp }}/phpunit-shard-plan
+
       - name: Plan this shard
         id: phpunit-shard-plan
         if: ${{ inputs.phpunit-shards != 1 && matrix.extra-database != true }}
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ inputs.phpunit-shards }}
-          DURATIONS: ${{ needs.phpunit-plan.outputs.durations }}
+          DURATIONS_SHA256: ${{ needs.phpunit-plan.outputs.durations-sha256 }}
+          DURATIONS_FILE: ${{ runner.temp }}/phpunit-shard-plan/durations.json
         run: |
           cd server/apps/${{ inputs.app-name }}
           cat > "$RUNNER_TEMP/phpunit-shard-plan.py" <<'PYEOF'
-          import json, os, re, statistics, subprocess, sys
+          import hashlib, json, os, re, statistics, subprocess, sys
           from pathlib import Path
           from xml.etree import ElementTree as ET
           from xml.sax.saxutils import escape
@@ -4491,8 +4526,19 @@ jobs:
               print(f"::error::The test suites in {config} select no test file, so there is nothing to split.")
               sys.exit(1)
 
+          durations_file = os.environ.get("DURATIONS_FILE") or ""
+          want = os.environ.get("DURATIONS_SHA256") or ""
+          data = b""
+          if want:
+              try:
+                  data = Path(durations_file).read_bytes() if durations_file else None
+              except OSError:
+                  data = None
+              if data is None or hashlib.sha256(data).hexdigest() != want:
+                  print(f"::error::The shard plan's durations ({durations_file}) are {'missing' if data is None else 'not the file phpunit-plan published'}. Every shard must plan from the same data, or a test file can land on no shard. Re-run the failed jobs.")
+                  sys.exit(1)
           try:
-              known = {norm(k): float(v) for k, v in (json.loads(os.environ.get("DURATIONS") or "{}").get("files") or {}).items()}
+              known = {norm(k): float(v) for k, v in (json.loads(data or b"{}").get("files") or {}).items()}
           except (ValueError, TypeError, AttributeError):
               known = {}
           measured = [known[f] for f in files if f in known]
@@ -4642,7 +4688,8 @@ jobs:
           SHARDED: ${{ inputs.phpunit-shards > 1 }}
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ inputs.phpunit-shards }}
-          DURATIONS: ${{ needs.phpunit-plan.outputs.durations }}
+          DURATIONS_SHA256: ${{ needs.phpunit-plan.outputs.durations-sha256 }}
+          DURATIONS_FILE: ${{ runner.temp }}/phpunit-shard-plan/durations.json
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
