@@ -5179,7 +5179,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout app
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           path: server/apps/${{ inputs.app-name }}
@@ -5260,7 +5260,7 @@ jobs:
           path: ${{ runner.temp }}/coverage
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2.40.0
         with:
           php-version: ${{ inputs.php-version }}
           extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, mysqli, pdo_mysql, zip, gd, curl, xml, json
