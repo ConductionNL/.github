@@ -5013,9 +5013,19 @@ jobs:
         # Sharded, every shard records its own part, named with its shard, and
         # GROUP names the leg the report adds the shards up into. `total` stays
         # the number of jobs that owe a count, which is now legs times shards.
+        #
+        # Every shard also records the names of ALL legs (`groups`), built from
+        # the matrix's own three vectors, so a leg whose every shard died
+        # before uploading is still named in the report rather than only
+        # counted. The three expressions are the matrix's, copied; the
+        # test-quality-test-counts.py case `groups-match-matrix` fails when
+        # they drift apart.
         env:
           LEG: "PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }}${{ inputs.phpunit-shards > 1 && format(', shard {0} of {1}', matrix.shard, inputs.phpunit-shards) || '' }}"
           GROUP: "PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }}"
+          GROUP_PHP: ${{ toJSON((inputs.reduce-pr-matrix && github.event_name == 'pull_request' && contains(fromJSON(inputs.reduce-pr-base-branches), github.base_ref)) && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions)) }}
+          GROUP_NEXTCLOUD: ${{ toJSON((inputs.reduce-pr-matrix && github.event_name == 'pull_request' && contains(fromJSON(inputs.reduce-pr-base-branches), github.base_ref)) && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches)) }}
+          GROUP_DATABASE: ${{ toJSON(join(fromJSON(inputs.database-test-matrix), ',') != '' && fromJSON(inputs.database-test-matrix) || fromJSON(format('["{0}"]', inputs.database))) }}
           SHARD: ${{ inputs.phpunit-shards > 1 && matrix.shard || '' }}
           SHARDS: ${{ inputs.phpunit-shards > 1 && inputs.phpunit-shards || '' }}
           TOTAL: ${{ strategy.job-total }}
@@ -5036,6 +5046,13 @@ jobs:
           shard = {}
           if os.environ.get("SHARDS"):
               shard = {"group": os.environ["GROUP"], "shard": int(os.environ["SHARD"]), "shards": int(os.environ["SHARDS"])}
+              try:
+                  vectors = [json.loads(os.environ[k]) for k in ("GROUP_PHP", "GROUP_NEXTCLOUD", "GROUP_DATABASE")]
+                  if not all(isinstance(v, list) for v in vectors):
+                      raise TypeError("a matrix vector is not a list")
+                  shard["groups"] = [f"PHP {p}, NC {n}, {d}" for p in vectors[0] for n in vectors[1] for d in vectors[2]]
+              except (KeyError, ValueError, TypeError):
+                  pass
           try:
               root = ET.parse(sys.argv[1]).getroot()
           except (OSError, ET.ParseError):
@@ -10277,12 +10294,15 @@ jobs:
               # `expected` is the matrix size the legs recorded themselves, so a
               # leg that left no file at all still shows as one that is missing.
               # A shard recorded without counts goes to `crashed`, so the cell
-              # can list it with the shards that failed.
-              legs, missing, expected, crashed = [], [], 0, []
+              # can list it with the shards that failed. `groups` is every leg
+              # a sharded PHPUnit matrix has, as any one shard recorded it, so
+              # a leg none of whose shards left a file is still named.
+              legs, missing, expected, crashed, groups = [], [], 0, [], set()
               for path in sorted(Path("test-counts").glob(f"{suite}*.json")):
                   try:
                       leg = json.loads(path.read_text(encoding="utf-8"))
                       expected = max(expected, int(leg.get("total") or 0))
+                      groups.update(str(g) for g in leg.get("groups") or [])
                       shard = shard_of(suite, leg)
                       if leg.get("run") is None:
                           if shard:
@@ -10302,7 +10322,7 @@ jobs:
                       legs.append(row)
                   except (OSError, ValueError, KeyError, TypeError, AttributeError):
                       missing.append(path.stem)
-              return legs, missing, expected, crashed
+              return legs, missing, expected, crashed, groups
 
           def fmt(leg):
               text = f"{leg['passed']}/{leg['run']}"
@@ -10327,7 +10347,7 @@ jobs:
           def plural(n, word):
               return f"{n} {word}{'' if n == 1 else 's'}"
 
-          def shard_lines(rows, crashed, legs):
+          def shard_lines(rows, crashed, legs, groups=()):
               """One line per shard that failed or left no test report, under the counts.
 
               A Markdown table cell holds no list, but GitHub (and pandoc, for
@@ -10336,6 +10356,8 @@ jobs:
               where the tool records them apart. A shard without a report either
               recorded none (`crashed`) or left no file at all, cancelled at
               its time limit, which shows as a number missing from its leg. A
+              leg in `groups` with no shard here at all gets one line of its
+              own, so the leg that left nothing is named, not only counted. A
               push runs every leg, and a test that fails everywhere would list
               every shard of every leg, so past eight lines the rest is counted;
               the checks list names them.
@@ -10351,14 +10373,18 @@ jobs:
                   for n in range(1, size[group] + 1):
                       if n not in numbers:
                           silent.append({"group": group, "shard": n, "shards": size[group]})
-              entries = sorted(failed + silent, key=lambda e: (e["group"], e["shard"]))
+              # Shard 0 sorts the whole-leg line before that leg's shards.
+              absent = [{"group": g, "shard": 0, "shards": max(size.values(), default=0)} for g in set(groups) - set(seen)]
+              entries = sorted(failed + silent + absent, key=lambda e: (e["group"], e["shard"]))
               if not entries:
                   return []
               # The shard count once, above the list, so each line is short.
               lines = [f"{entries[0]['shards']} shards {'in total' if legs == 1 else 'per leg'}:"]
               for e in entries[:8]:
                   name = f"Shard {e['shard']}" if legs == 1 else f"{e['group']}, shard {e['shard']}"
-                  if "failed" not in e:
+                  if not e["shard"]:
+                      name, what = e["group"], "no test report from any shard"
+                  elif "failed" not in e:
                       what = "no test report"
                   elif e.get("failures") is not None and e.get("errored") is not None:
                       parts = [plural(int(e["failures"]), "failure")] if e["failures"] else []
@@ -10374,7 +10400,7 @@ jobs:
           def cell(suite, result):
               if result not in ("success", "failure"):
                   return ""
-              legs, missing, expected, crashed = load(suite)
+              legs, missing, expected, crashed, groups = load(suite)
               if not legs:
                   return ""
               notes, bullets = [], []
@@ -10383,7 +10409,7 @@ jobs:
               unit = "shards" if suite == "playwright" or any(l.get("shard") for l in legs) else "legs"
               if suite == "phpunit":
                   raw, legs = legs, by_leg(legs)
-                  bullets = shard_lines(raw, crashed, len(legs))
+                  bullets = shard_lines(raw, crashed, len({l["leg"] for l in legs} | groups), groups)
                   shapes = {(l["passed"], l["run"], l["skipped"]) for l in legs}
                   worst = max(legs, key=lambda l: (l["failed"], -l["passed"]))
                   if len(shapes) == 1:

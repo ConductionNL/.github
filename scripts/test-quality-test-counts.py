@@ -93,6 +93,10 @@ MUTATIONS = [
      "cell-missing-leg", "no comparison against the recorded matrix size"),
     ("compute", "if n not in numbers:", "if False:",
      "cell-sharded-missing-shard", "a shard that left no file missing from the lines"),
+    ("compute", "for g in set(groups) - set(seen)]", "for g in ()]",
+     "cell-sharded-missing-leg", "a leg whose every shard left no file not named"),
+    ("phpunit", 'shard["groups"] = ', "_ = ",
+     "phpunit-sharded-groups", "a shard recorded without the matrix's legs"),
     ("compute", "crashed.append(dict(", "missing.append(str(",
      "playwright-crashed-shard", "a crashed shard left out of the lines"),
     ("compute", "bullets = shard_lines(legs, crashed, 1)", "pass",
@@ -511,6 +515,18 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
     check("phpunit-sharded-no-junit", got.get("run", "x") is None and got.get("shard") == 3,
           f"want run null on shard 3, got exit {proc.returncode} {got}\n{proc.stderr}")
 
+    # Every shard lists all legs of the matrix, built from its three vectors.
+    d = r.case_dir("phpunit-sharded-groups")
+    out = d / "test-counts" / "phpunit-leg.json"
+    proc = r.run("phpunit", d, [str(d / "absent.xml")],
+                 {"LEG": "PHP 8.3, NC stable35, pgsql, shard 1 of 2", "GROUP": "PHP 8.3, NC stable35, pgsql",
+                  "SHARD": "1", "SHARDS": "2", "TOTAL": "8", "OUT": str(out),
+                  "GROUP_PHP": '["8.3","8.4"]', "GROUP_NEXTCLOUD": '["stable34","stable35"]', "GROUP_DATABASE": '["pgsql"]'})
+    got = read_counts(d)
+    want = ["PHP 8.3, NC stable34, pgsql", "PHP 8.3, NC stable35, pgsql", "PHP 8.4, NC stable34, pgsql", "PHP 8.4, NC stable35, pgsql"]
+    check("phpunit-sharded-groups", got.get("groups") == want,
+          f"want every leg of the matrix {want}, got exit {proc.returncode} {got}\n{proc.stderr}")
+
     shard = lambda n, run, passed, failed=0, of=3, group="PHP 8.3, NC stable35, pgsql": leg(  # noqa: E731
         f"{group}, shard {n} of {of}", run, passed, failed, total=of, group=group, shard=n, shards=of)
 
@@ -591,6 +607,15 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
     want = "250/250 (counts from 2 of 3 shards)<br>3 shards in total:<br>• Shard 3: no test report"
     check("cell-sharded-null-shard", cell == want, f"want the shard without counts as a line, {want!r}, got {cell!r}\n{log}")
 
+    # A whole leg whose every shard died before uploading: only the matrix's
+    # list of legs, recorded by the other leg's shards, can name it.
+    both = ["PHP 8.3, NC stable35, pgsql", other]
+    alone = {f"phpunit-a{n}.json": dict(shard(n, 206, 206, of=2), total=4, groups=both) for n in (1, 2)}
+    code, cells, log = compute(r, "cell-sharded-missing-leg", alone, {"phpunit": "failure"})
+    want = f"412/412 (counts from 2 of 4 shards)<br>2 shards per leg:<br>• {other}: no test report from any shard"
+    check("cell-sharded-missing-leg", cells.get("PHPUNIT_COUNTS") == want,
+          f"want the leg that left no file named, {want!r}, got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
+
     # Playwright gets the same lines; it records no failure/error split.
     pw = lambda n, run, passed: leg(f"shard {n}", run, passed, run - passed, total=6)  # noqa: E731
     code, cells, log = compute(r, "playwright-sharded-failing",
@@ -608,6 +633,19 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
     check("playwright-crashed-shard", cells.get("PLAYWRIGHT_COUNTS") == want,
           f"want {want!r}, got {cells.get('PLAYWRIGHT_COUNTS')!r}\n{log}")
 
+    return failures
+
+
+def groups_match_matrix(workflow: Path) -> dict[str, str]:
+    """The phpunit counts step lists every leg from copies of the matrix's three vectors; they must not drift."""
+    job = yaml.safe_load(workflow.read_text(encoding="utf-8"))["jobs"]["phpunit"]
+    matrix = job["strategy"]["matrix"]
+    env = next(s for s in job["steps"] if s.get("id") == STEPS["phpunit"])["env"]
+    failures = {}
+    for key, vector in (("GROUP_PHP", "php-version"), ("GROUP_NEXTCLOUD", "nextcloud-ref"), ("GROUP_DATABASE", "database")):
+        want = "${{ toJSON(" + str(matrix[vector]).removeprefix("${{ ").removesuffix(" }}") + ") }}"
+        if str(env.get(key)) != want:
+            failures[f"groups-match-matrix ({key})"] = f"want the matrix's {vector} expression {want!r}, got {env.get(key)!r}"
     return failures
 
 
@@ -646,6 +684,7 @@ def main() -> int:
             return 0
 
         failures = assertions(programs, tmp)
+    failures.update(groups_match_matrix(Path(args.workflow)))
 
     for case, failure in failures.items():
         print(f"::error::{case}: {failure}")
