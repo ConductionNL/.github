@@ -3777,7 +3777,7 @@ jobs:
           sys.exit(1 if problems else 0)
           PYEOF
 
-  # ── THE SHARD PLAN'S ONE INPUT, READ ONCE (only when phpunit-shards > 1) ──
+  # ── THE SHARD PLAN'S ONE INPUT, READ ONCE (only when phpunit-shards is 2 to 8)
   #
   # Every shard computes its own part of the suite, so every shard must compute
   # it from the SAME data, or two shards split the files differently and a
@@ -3957,7 +3957,7 @@ jobs:
     # so a failed resolve does not delete these legs — the resolve step publishes
     # a valid array before it exits non-zero, precisely so this stays true.
     #
-    # `phpunit-plan` is a real edge too, with phpunit-shards above 1: the shard
+    # `phpunit-plan` is a real edge too, with phpunit-shards 2 to 8: the shard
     # steps read the digest of its durations file. Unsharded it is skipped, and the
     # `!cancelled()` in the `if:` keeps a skipped need from skipping this job.
     needs: [route, security, nextcloud-matrix, changes, phpunit-plan]
@@ -5160,7 +5160,7 @@ jobs:
 
   # ── PHPUNIT SHARDS: THE MERGED COVERAGE, ITS GUARD AND THE NEXT PLAN ──────
   #
-  # Only with phpunit-shards above 1. No shard holds the whole suite, so what
+  # Only with phpunit-shards 2 to 8. No shard holds the whole suite, so what
   # needs the whole suite happens here, after every shard has finished:
   #
   #  * the coverage leg's parts are merged into one clover report, the same
@@ -10165,7 +10165,7 @@ jobs:
     # whole change exists to remove, and it looks identical to a pass.
     #
     # `phpunit-plan` and `phpunit-shards` are on this list for the same reason
-    # as everything else: with phpunit-shards above 1 the merged coverage and
+    # as everything else: with phpunit-shards 2 to 8 the merged coverage and
     # its guard live in `phpunit-shards`, and a sharded run must not report
     # before that verdict exists. Unsharded both are skipped, which gates
     # nothing and waits for nothing.
