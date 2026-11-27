@@ -28,7 +28,9 @@ app (scripts/fixtures/coverage-merge) with a real coverage driver:
                  all each exit 1 and write no report.
 
 --positive-control makes the merge keep the first part only and requires
-`equal` to go red, so the comparison is shown to read the merge.
+`equal` to go red, with that merge exiting 0 and writing a report that covers
+fewer statements than the unsharded run, so the comparison is shown to read
+the merge and not a crash.
 
 --driver names the coverage driver the parts are written with: xdebug, as the
 shipped PHPUnit legs do (they pin Xdebug 3.5.3), or pcov. The suite measures
@@ -126,8 +128,8 @@ def clover(path: Path) -> dict:
     return {"files": files, "totals": totals}
 
 
-def assertions(plan: str, merge: str, tmp: Path, driver: str) -> dict[str, str]:
-    """Return {case: failure} for every case that does not hold."""
+def assertions(plan: str, merge: str, tmp: Path, driver: str) -> tuple[dict[str, str], dict]:
+    """Return {case: failure} for every case that does not hold, and how the all-parts merge ended."""
     failures: dict[str, str] = {}
 
     def check(case: str, ok: bool, detail: str) -> None:
@@ -164,6 +166,8 @@ def assertions(plan: str, merge: str, tmp: Path, driver: str) -> dict[str, str]:
     merged = tmp / "merged.xml"
     proc = run(["php", *NO_DRIVER, str(tmp / "merge.php"), str(merged), *parts], app)
     got = clover(merged) if proc.returncode == 0 and merged.is_file() else None
+    merge_run = {"exit": proc.returncode, "report": merged.is_file(), "got": got, "want": want,
+                 "log": proc.stdout + proc.stderr}
     check("equal", got == want,
           f"the merge of {SHARDS} parts differs from the unsharded run\nwant {want}\ngot  {got}\n{proc.stdout}{proc.stderr}")
 
@@ -184,7 +188,7 @@ def assertions(plan: str, merge: str, tmp: Path, driver: str) -> dict[str, str]:
         check(case, proc.returncode == 1 and not out.exists(),
               f"want exit 1 and no report, got exit {proc.returncode}, report written: {out.exists()}\n{proc.stderr}")
 
-    return failures
+    return failures, merge_run
 
 
 def main() -> int:
@@ -204,13 +208,27 @@ def main() -> int:
             if merge.count(DROP[0]) != 1:
                 print(f"::error::the anchor {DROP[0]!r} is not in the merge program exactly once.")
                 return 1
-            failures = assertions(plan, merge.replace(*DROP), Path(raw), args.driver)
+            failures, dropped = assertions(plan, merge.replace(*DROP), Path(raw), args.driver)
             if "equal" not in failures:
                 print("::error::a merge that keeps only the first part left case 'equal' green. This suite is not reading the merge.")
                 return 1
-            print(f"OK ({args.driver}): a merge that drops a part turns 'equal' red.")
+            # 'equal' also goes red when the merge crashes. Only a merge that
+            # ran, wrote a report and covered less shows the comparison reads it.
+            if dropped["exit"] != 0 or not dropped["report"] or dropped["got"] is None:
+                print(f"::error::the merge that keeps only the first part did not run cleanly (exit {dropped['exit']}, "
+                      f"report written: {dropped['report']}), so 'equal' went red for a crash, not for the dropped part."
+                      f"\n{dropped['log']}")
+                return 1
+            got_covered = dropped["got"]["totals"]["coveredstatements"]
+            want_covered = dropped["want"]["totals"]["coveredstatements"]
+            if got_covered >= want_covered:
+                print(f"::error::the merge that keeps only the first part covers {got_covered} statements, not fewer than "
+                      f"the unsharded run's {want_covered}, so 'equal' did not go red for the dropped part.")
+                return 1
+            print(f"OK ({args.driver}): a merge that drops a part exits 0, covers {got_covered} of the unsharded "
+                  f"run's {want_covered} statements, and turns 'equal' red.")
             return 0
-        failures = assertions(plan, merge, Path(raw), args.driver)
+        failures, _ = assertions(plan, merge, Path(raw), args.driver)
 
     for case, failure in failures.items():
         print(f"::error::{case}: {failure}")
