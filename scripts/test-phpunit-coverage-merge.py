@@ -30,10 +30,13 @@ app (scripts/fixtures/coverage-merge) with a real coverage driver:
 --positive-control makes the merge keep the first part only and requires
 `equal` to go red, so the comparison is shown to read the merge.
 
-Needs php with pcov or xdebug, and composer. Without them this suite FAILS:
-a coverage test that could not run is not a pass.
+--driver names the coverage driver the parts are written with: xdebug, as the
+shipped PHPUnit legs do (they pin Xdebug 3.5.3), or pcov. The suite measures
+with that driver only, prints its name and version, and FAILS when php does
+not load it, so a run never proves the merge with a driver the shards do not
+use. It also needs composer. A coverage test that could not run is not a pass.
 
-Usage:  test-phpunit-coverage-merge.py [--positive-control] [workflow.yml]
+Usage:  test-phpunit-coverage-merge.py --driver xdebug|pcov [--positive-control] [workflow.yml]
 Exit:   0 all assertions hold, 1 at least one failed or could not run.
 """
 from __future__ import annotations
@@ -82,14 +85,24 @@ def run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> subproc
     return subprocess.run(cmd, cwd=cwd, env={**os.environ, **(env or {})}, capture_output=True, text=True)
 
 
-def driver_flags() -> list[str]:
-    """The ini flags that switch on the coverage driver this php has, or exit when it has none."""
+# Per driver: the extension name `php -m` lists, and the ini flags that switch
+# it on and the other driver off, so only the requested one measures.
+DRIVERS = {
+    "xdebug": ("xdebug", ["-d", "xdebug.mode=coverage", "-d", "pcov.enabled=0"]),
+    "pcov": ("pcov", ["-d", "pcov.enabled=1", "-d", "xdebug.mode=off"]),
+}
+
+
+def driver_flags(driver: str) -> list[str]:
+    """The ini flags that measure with this driver, or exit when php does not load it."""
+    extension, flags = DRIVERS[driver]
     modules = run(["php", "-m"], Path.cwd()).stdout.lower().split()
-    if "pcov" in modules:
-        return ["-d", "pcov.enabled=1"]
-    if "xdebug" in modules:
-        return ["-d", "xdebug.mode=coverage"]
-    raise SystemExit("FATAL: php has neither pcov nor xdebug, so no coverage can be measured. This suite cannot run.")
+    if extension not in modules:
+        raise SystemExit(f"FATAL: php does not load {driver}, the driver this run was asked to measure with. "
+                         "This suite cannot run.")
+    version = run(["php", *flags, "-r", f"echo phpversion('{extension}');"], Path.cwd()).stdout.strip()
+    print(f"Coverage driver: {driver} {version or '(version unknown)'}")
+    return flags
 
 
 # The merge job installs no coverage driver; switch off whatever this php has.
@@ -113,7 +126,7 @@ def clover(path: Path) -> dict:
     return {"files": files, "totals": totals}
 
 
-def assertions(plan: str, merge: str, tmp: Path) -> dict[str, str]:
+def assertions(plan: str, merge: str, tmp: Path, driver: str) -> dict[str, str]:
     """Return {case: failure} for every case that does not hold."""
     failures: dict[str, str] = {}
 
@@ -121,12 +134,12 @@ def assertions(plan: str, merge: str, tmp: Path) -> dict[str, str]:
         if not ok:
             failures[case] = detail
 
+    on = driver_flags(driver)
     app = tmp / "app"
     shutil.copytree(FIXTURE, app, ignore=shutil.ignore_patterns("vendor"))
     installed = run(["composer", "install", "--no-progress", "--no-interaction", "--prefer-dist"], app)
     if installed.returncode != 0:
         raise SystemExit(f"FATAL: composer install failed in the fixture app:\n{installed.stderr}")
-    on = driver_flags()
     (tmp / "plan.py").write_text(plan, encoding="utf-8")
     (tmp / "merge.php").write_text(merge, encoding="utf-8")
 
@@ -177,6 +190,8 @@ def assertions(plan: str, merge: str, tmp: Path) -> dict[str, str]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("workflow", nargs="?", default=str(ROOT / ".github" / "workflows" / "quality.yml"))
+    ap.add_argument("--driver", required=True, choices=sorted(DRIVERS),
+                    help="the coverage driver to measure with; the run fails when php does not load it")
     ap.add_argument("--positive-control", action="store_true")
     args = ap.parse_args()
 
@@ -189,19 +204,19 @@ def main() -> int:
             if merge.count(DROP[0]) != 1:
                 print(f"::error::the anchor {DROP[0]!r} is not in the merge program exactly once.")
                 return 1
-            failures = assertions(plan, merge.replace(*DROP), Path(raw))
+            failures = assertions(plan, merge.replace(*DROP), Path(raw), args.driver)
             if "equal" not in failures:
                 print("::error::a merge that keeps only the first part left case 'equal' green. This suite is not reading the merge.")
                 return 1
-            print("OK: a merge that drops a part turns 'equal' red.")
+            print(f"OK ({args.driver}): a merge that drops a part turns 'equal' red.")
             return 0
-        failures = assertions(plan, merge, Path(raw))
+        failures = assertions(plan, merge, Path(raw), args.driver)
 
     for case, failure in failures.items():
         print(f"::error::{case}: {failure}")
     if failures:
         return 1
-    print(f"OK: {SHARDS} shards' coverage parts, merged by the shipped program without a coverage driver, report the same "
+    print(f"OK ({args.driver}): {SHARDS} shards' coverage parts, written with {args.driver} and merged by the shipped program without a coverage driver, report the same "
           "covered lines, statements and methods as one unsharded run; one part alone covers less, and a missing part, "
           "a file without coverage and no part at all are refused.")
     return 0
