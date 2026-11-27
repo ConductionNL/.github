@@ -59,6 +59,10 @@ FIXTURE = ROOT / "scripts" / "fixtures" / "coverage-merge"
 PLAN_STEP_ID = "phpunit-shard-plan"
 MERGE_STEP_NAME = "Merge the shards' coverage"
 SHARDS = 2
+# Every other name the "Plan this shard" program reads, cleared so the caller's
+# environment cannot steer it: no durations (the plan deals by count), the
+# default phpunit.xml in and phpunit-shard.xml out, and an empty shard refused.
+PLAN_ENV = {"DURATIONS_FILE": "", "DURATIONS_SHA256": "", "CONFIG": "", "OUT": "", "ALLOW_EMPTY": ""}
 # Keep the first part only: the merge a dropped part would produce.
 DROP = ("$merged->merge($part);", "// dropped")
 
@@ -151,7 +155,7 @@ def assertions(plan: str, merge: str, tmp: Path, driver: str) -> tuple[dict[str,
 
     parts = []
     for shard in range(1, SHARDS + 1):
-        planned = run([sys.executable, str(tmp / "plan.py")], app, {"SHARD": str(shard), "SHARDS": str(SHARDS), "DURATIONS": ""})
+        planned = run([sys.executable, str(tmp / "plan.py")], app, {**PLAN_ENV, "SHARD": str(shard), "SHARDS": str(SHARDS)})
         if planned.returncode != 0:
             raise SystemExit(f"FATAL: the plan failed for shard {shard}:\n{planned.stdout}{planned.stderr}")
         part = tmp / "coverage" / f"head-{shard}.cov"
