@@ -28,13 +28,19 @@ app (scripts/fixtures/coverage-merge) with a real coverage driver:
                  all each exit 1 and write no report.
 
 --positive-control makes the merge keep the first part only and requires
-`equal` to go red, so the comparison is shown to read the merge.
+`equal` to go red, with that merge exiting 0 and writing a report that covers
+fewer statements than the unsharded run, so the comparison is shown to read
+the merge and not a crash.
 
-Needs php with pcov or xdebug, and composer. Without them this suite FAILS:
-a coverage test that could not run is not a pass.
+--driver names the coverage driver the parts are written with: xdebug, as the
+shipped PHPUnit legs do (they pin Xdebug 3.5.3), or pcov. The suite measures
+with that driver only, prints its name and version, and FAILS when php does
+not load it, so a run never proves the merge with a driver the shards do not
+use. --driver-version, when given, also fails the run unless php reports
+exactly that driver version. It also needs composer. A coverage test that could not run is not a pass.
 
-Usage:  test-phpunit-coverage-merge.py [--positive-control] [workflow.yml]
-Exit:   0 all assertions hold, 1 at least one failed or could not run.
+Usage:  test-phpunit-coverage-merge.py --driver xdebug|pcov [--driver-version X.Y.Z] [--positive-control] [workflow.yml]
+Exit:   0 all assertions hold, 1 at least one failed or could not run, 2 bad arguments.
 """
 from __future__ import annotations
 
@@ -54,6 +60,10 @@ FIXTURE = ROOT / "scripts" / "fixtures" / "coverage-merge"
 PLAN_STEP_ID = "phpunit-shard-plan"
 MERGE_STEP_NAME = "Merge the shards' coverage"
 SHARDS = 2
+# Every other name the "Plan this shard" program reads, cleared so the caller's
+# environment cannot steer it: no durations (the plan deals by count), the
+# default phpunit.xml in and phpunit-shard.xml out, and an empty shard refused.
+PLAN_ENV = {"DURATIONS_FILE": "", "DURATIONS_SHA256": "", "CONFIG": "", "OUT": "", "ALLOW_EMPTY": ""}
 # Keep the first part only: the merge a dropped part would produce.
 DROP = ("$merged->merge($part);", "// dropped")
 
@@ -82,14 +92,27 @@ def run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> subproc
     return subprocess.run(cmd, cwd=cwd, env={**os.environ, **(env or {})}, capture_output=True, text=True)
 
 
-def driver_flags() -> list[str]:
-    """The ini flags that switch on the coverage driver this php has, or exit when it has none."""
+# Per driver: the extension name `php -m` lists, and the ini flags that switch
+# it on and the other driver off, so only the requested one measures.
+DRIVERS = {
+    "xdebug": ("xdebug", ["-d", "xdebug.mode=coverage", "-d", "pcov.enabled=0"]),
+    "pcov": ("pcov", ["-d", "pcov.enabled=1", "-d", "xdebug.mode=off"]),
+}
+
+
+def driver_flags(driver: str, expected_version: str | None) -> list[str]:
+    """The ini flags that measure with this driver, or exit when php does not load it at the expected version."""
+    extension, flags = DRIVERS[driver]
     modules = run(["php", "-m"], Path.cwd()).stdout.lower().split()
-    if "pcov" in modules:
-        return ["-d", "pcov.enabled=1"]
-    if "xdebug" in modules:
-        return ["-d", "xdebug.mode=coverage"]
-    raise SystemExit("FATAL: php has neither pcov nor xdebug, so no coverage can be measured. This suite cannot run.")
+    if extension not in modules:
+        raise SystemExit(f"FATAL: php does not load {driver}, the driver this run was asked to measure with. "
+                         "This suite cannot run.")
+    version = run(["php", *flags, "-r", f"echo phpversion('{extension}');"], Path.cwd()).stdout.strip()
+    print(f"Coverage driver: {driver} {version or '(version unknown)'}")
+    if expected_version is not None and version != expected_version:
+        raise SystemExit(f"FATAL: php loads {driver} {version or '(version unknown)'}, but this run was asked to measure "
+                         f"with {driver} {expected_version}, the version the shipped PHPUnit legs pin. This suite cannot run.")
+    return flags
 
 
 # The merge job installs no coverage driver; switch off whatever this php has.
@@ -113,20 +136,20 @@ def clover(path: Path) -> dict:
     return {"files": files, "totals": totals}
 
 
-def assertions(plan: str, merge: str, tmp: Path) -> dict[str, str]:
-    """Return {case: failure} for every case that does not hold."""
+def assertions(plan: str, merge: str, tmp: Path, driver: str, driver_version: str | None) -> tuple[dict[str, str], dict]:
+    """Return {case: failure} for every case that does not hold, and how the all-parts merge ended."""
     failures: dict[str, str] = {}
 
     def check(case: str, ok: bool, detail: str) -> None:
         if not ok:
             failures[case] = detail
 
+    on = driver_flags(driver, driver_version)
     app = tmp / "app"
     shutil.copytree(FIXTURE, app, ignore=shutil.ignore_patterns("vendor"))
     installed = run(["composer", "install", "--no-progress", "--no-interaction", "--prefer-dist"], app)
     if installed.returncode != 0:
         raise SystemExit(f"FATAL: composer install failed in the fixture app:\n{installed.stderr}")
-    on = driver_flags()
     (tmp / "plan.py").write_text(plan, encoding="utf-8")
     (tmp / "merge.php").write_text(merge, encoding="utf-8")
 
@@ -136,7 +159,7 @@ def assertions(plan: str, merge: str, tmp: Path) -> dict[str, str]:
 
     parts = []
     for shard in range(1, SHARDS + 1):
-        planned = run([sys.executable, str(tmp / "plan.py")], app, {"SHARD": str(shard), "SHARDS": str(SHARDS), "DURATIONS": ""})
+        planned = run([sys.executable, str(tmp / "plan.py")], app, {**PLAN_ENV, "SHARD": str(shard), "SHARDS": str(SHARDS)})
         if planned.returncode != 0:
             raise SystemExit(f"FATAL: the plan failed for shard {shard}:\n{planned.stdout}{planned.stderr}")
         part = tmp / "coverage" / f"head-{shard}.cov"
@@ -151,6 +174,8 @@ def assertions(plan: str, merge: str, tmp: Path) -> dict[str, str]:
     merged = tmp / "merged.xml"
     proc = run(["php", *NO_DRIVER, str(tmp / "merge.php"), str(merged), *parts], app)
     got = clover(merged) if proc.returncode == 0 and merged.is_file() else None
+    merge_run = {"exit": proc.returncode, "report": merged.is_file(), "got": got, "want": want,
+                 "log": proc.stdout + proc.stderr}
     check("equal", got == want,
           f"the merge of {SHARDS} parts differs from the unsharded run\nwant {want}\ngot  {got}\n{proc.stdout}{proc.stderr}")
 
@@ -171,12 +196,16 @@ def assertions(plan: str, merge: str, tmp: Path) -> dict[str, str]:
         check(case, proc.returncode == 1 and not out.exists(),
               f"want exit 1 and no report, got exit {proc.returncode}, report written: {out.exists()}\n{proc.stderr}")
 
-    return failures
+    return failures, merge_run
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("workflow", nargs="?", default=str(ROOT / ".github" / "workflows" / "quality.yml"))
+    ap.add_argument("--driver", required=True, choices=sorted(DRIVERS),
+                    help="the coverage driver to measure with; the run fails when php does not load it")
+    ap.add_argument("--driver-version", default=None,
+                    help="the exact driver version to measure with, e.g. 3.5.3; the run fails when php loads another")
     ap.add_argument("--positive-control", action="store_true")
     args = ap.parse_args()
 
@@ -189,19 +218,33 @@ def main() -> int:
             if merge.count(DROP[0]) != 1:
                 print(f"::error::the anchor {DROP[0]!r} is not in the merge program exactly once.")
                 return 1
-            failures = assertions(plan, merge.replace(*DROP), Path(raw))
+            failures, dropped = assertions(plan, merge.replace(*DROP), Path(raw), args.driver, args.driver_version)
             if "equal" not in failures:
                 print("::error::a merge that keeps only the first part left case 'equal' green. This suite is not reading the merge.")
                 return 1
-            print("OK: a merge that drops a part turns 'equal' red.")
+            # 'equal' also goes red when the merge crashes. Only a merge that
+            # ran, wrote a report and covered less shows the comparison reads it.
+            if dropped["exit"] != 0 or not dropped["report"] or dropped["got"] is None:
+                print(f"::error::the merge that keeps only the first part did not run cleanly (exit {dropped['exit']}, "
+                      f"report written: {dropped['report']}), so 'equal' went red for a crash, not for the dropped part."
+                      f"\n{dropped['log']}")
+                return 1
+            got_covered = dropped["got"]["totals"]["coveredstatements"]
+            want_covered = dropped["want"]["totals"]["coveredstatements"]
+            if got_covered >= want_covered:
+                print(f"::error::the merge that keeps only the first part covers {got_covered} statements, not fewer than "
+                      f"the unsharded run's {want_covered}, so 'equal' did not go red for the dropped part.")
+                return 1
+            print(f"OK ({args.driver}): a merge that drops a part exits 0, covers {got_covered} of the unsharded "
+                  f"run's {want_covered} statements, and turns 'equal' red.")
             return 0
-        failures = assertions(plan, merge, Path(raw))
+        failures, _ = assertions(plan, merge, Path(raw), args.driver, args.driver_version)
 
     for case, failure in failures.items():
         print(f"::error::{case}: {failure}")
     if failures:
         return 1
-    print(f"OK: {SHARDS} shards' coverage parts, merged by the shipped program without a coverage driver, report the same "
+    print(f"OK ({args.driver}): {SHARDS} shards' coverage parts, written with {args.driver} and merged by the shipped program without a coverage driver, report the same "
           "covered lines, statements and methods as one unsharded run; one part alone covers less, and a missing part, "
           "a file without coverage and no part at all are refused.")
     return 0

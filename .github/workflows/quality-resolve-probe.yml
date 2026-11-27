@@ -267,15 +267,27 @@ jobs:
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: "8.3"
-          coverage: pcov
+          # The parts are written with the driver the shipped PHPUnit legs use:
+          # quality.yml pins xdebug-3.5.3 in `extensions` and sets `coverage:
+          # xdebug` (read the comment there on why the pin matters: an
+          # unpinned `coverage: xdebug` picked up Xdebug 3.6.0alpha1 in
+          # 2026-09). setup-php runs `extensions` before `coverage`, so this
+          # builds 3.5.3 from PECL and `coverage: xdebug` keeps it. Proving the
+          # merge with pcov parts would not prove it for the parts the shards
+          # write. Move this pin together with the one in quality.yml.
+          extensions: xdebug-3.5.3
+          coverage: xdebug
           tools: composer:v2
 
       # POSITIVE CONTROL FIRST: a merge that drops a part must turn it red.
+      # `--driver xdebug --driver-version 3.5.3` fails the run when php does
+      # not load Xdebug 3.5.3 exactly, and prints the version it measured
+      # with. Move this version together with the pin above.
       - name: "Positive control, a merge that drops a part must fail the suite"
-        run: python3 scripts/test-phpunit-coverage-merge.py --positive-control .github/workflows/quality.yml
+        run: python3 scripts/test-phpunit-coverage-merge.py --driver xdebug --driver-version 3.5.3 --positive-control .github/workflows/quality.yml
 
       - name: "Assert the merged coverage equals an unsharded run"
-        run: python3 scripts/test-phpunit-coverage-merge.py .github/workflows/quality.yml
+        run: python3 scripts/test-phpunit-coverage-merge.py --driver xdebug --driver-version 3.5.3 .github/workflows/quality.yml
 
   quality-test-counts:
     name: "The report's test counts read real tool output"
