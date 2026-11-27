@@ -105,6 +105,8 @@ MUTATIONS = [
      "cell-sharded-failing-shard", "a failing shard not named in the cell"),
     ("compute", 'elif e.get("failures") is not None and e.get("errored") is not None:', "elif False:",
      "list-one-leg", "a shard's failures and errors read as one number"),
+    ("compute", "if not crashed and not groups:", "if True:",
+     "cell-sharded-all-crashed", "a cell left blank when every shard crashed"),
     ("compute", "raw, legs = legs, by_leg(legs)", "raw = legs",
      "cell-sharded-green", "a sharded leg's shards read as separate legs"),
     ("phpunit", 'if os.environ.get("SHARDS"):', "if False:",
@@ -615,6 +617,33 @@ def assertions(programs: dict[str, str], tmp: Path) -> dict[str, str]:
     want = f"412/412 (counts from 2 of 4 shards)<br>2 shards per leg:<br>• {other}: no test report from any shard"
     check("cell-sharded-missing-leg", cells.get("PHPUNIT_COUNTS") == want,
           f"want the leg that left no file named, {want!r}, got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
+
+    # Every shard crashed before PHPUnit counted a test: no counts, but the
+    # cell still names each shard.
+    null = lambda n, of=3, group="PHP 8.3, NC stable35, pgsql", total=3: {  # noqa: E731
+        "leg": f"{group}, shard {n} of {of}", "run": None, "total": total, "group": group, "shard": n, "shards": of}
+    code, cells, log = compute(r, "cell-sharded-all-crashed",
+                               {f"phpunit-{n}.json": null(n) for n in (1, 2, 3)}, {"phpunit": "failure"})
+    want = "3 shards in total:<br>• Shard 1: no test report<br>• Shard 2: no test report<br>• Shard 3: no test report"
+    check("cell-sharded-all-crashed", cells.get("PHPUNIT_COUNTS") == want,
+          f"want every crashed shard named, {want!r}, got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
+
+    both_crashed = {f"phpunit-{g}{n}.json": dict(null(n, of=2, group=group, total=4), groups=both)
+                    for g, group in (("a", both[0]), ("b", other)) for n in (1, 2)}
+    code, cells, log = compute(r, "cell-sharded-all-crashed", both_crashed, {"phpunit": "failure"})
+    want = (f"2 shards per leg:<br>• {both[0]}, shard 1: no test report<br>• {both[0]}, shard 2: no test report"
+            f"<br>• {other}, shard 1: no test report<br>• {other}, shard 2: no test report")
+    check("cell-sharded-all-crashed", cells.get("PHPUNIT_COUNTS") == want,
+          f"want every crashed shard of both legs named, {want!r}, got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
+
+    # A leg whose shards all crashed, beside a green leg: that leg is named.
+    beside = {f"phpunit-a{n}.json": dict(shard(n, 206, 206, of=2), total=4, groups=both) for n in (1, 2)}
+    beside.update({f"phpunit-b{n}.json": dict(null(n, of=2, group=other, total=4), groups=both) for n in (1, 2)})
+    code, cells, log = compute(r, "cell-sharded-crashed-leg", beside, {"phpunit": "failure"})
+    want = (f"412/412 (counts from 2 of 4 shards)<br>2 shards per leg:<br>• {other}, shard 1: no test report"
+            f"<br>• {other}, shard 2: no test report")
+    check("cell-sharded-crashed-leg", cells.get("PHPUNIT_COUNTS") == want,
+          f"want the crashed leg's shards named, {want!r}, got {cells.get('PHPUNIT_COUNTS')!r}\n{log}")
 
     # Playwright gets the same lines; it records no failure/error split.
     pw = lambda n, run, passed: leg(f"shard {n}", run, passed, run - passed, total=6)  # noqa: E731

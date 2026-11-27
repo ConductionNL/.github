@@ -3777,7 +3777,7 @@ jobs:
           sys.exit(1 if problems else 0)
           PYEOF
 
-  # ── THE SHARD PLAN'S ONE INPUT, READ ONCE (only when phpunit-shards > 1) ──
+  # ── THE SHARD PLAN'S ONE INPUT, READ ONCE (only when phpunit-shards is 2 to 8)
   #
   # Every shard computes its own part of the suite, so every shard must compute
   # it from the SAME data, or two shards split the files differently and a
@@ -3785,18 +3785,39 @@ jobs:
   # `phpunit-shards` job writes after each push, and a cache lookup by prefix
   # returns the newest entry at the moment of the lookup: shards starting a few
   # minutes apart could read two different entries. So the lookup happens once,
-  # here, and the shards read this job's output.
+  # here, and the shards read this job's snapshot.
   #
-  # No durations (a first run, an evicted cache, an unreadable file) is not an
-  # error: every file then weighs the same and the plan deals them out by count.
+  # AS AN ARTIFACT, NOT AS A JOB OUTPUT. A shard would receive an output
+  # through `env:`, and Linux refuses to start a process with one environment
+  # string over 128 KiB (MAX_ARG_STRLEN): the step dies with "Argument list
+  # too long" before bash runs. A suite the size of openregister's (2455 test
+  # files) records about 150 KB of durations, so the first push that cached
+  # them would stop every shard from starting. The output carries the file's
+  # SHA-256 instead, set only once the upload succeeded, and a shard plans
+  # only from a file with that digest: shards that read different data would
+  # split the files differently.
+  #
+  # No durations (a first run, an evicted cache, an unreadable file, a failed
+  # upload) is not an error: every file then weighs the same and the plan
+  # deals them out by count.
+  #
+  # Only for the shard counts the phpunit matrix expands, 2 to 8. Any other
+  # value runs one leg per combination, whose "Plan this shard" step fails
+  # with the range; this job and `phpunit-shards` stay out of it, so that is
+  # the only error.
+  #
+  # The `route` and `changes` conditions are the `phpunit` job's own, so the
+  # plan does not run on a docs-only or quick-lane run that runs no shard.
   phpunit-plan:
     name: "PHPUnit shard plan"
-    if: ${{ !cancelled() && inputs.phpunit-shards > 1 && inputs.enable-php && inputs.enable-phpunit }}
+    needs: [route, changes]
+    if: ${{ !cancelled() && contains(fromJSON('[2,3,4,5,6,7,8]'), inputs.phpunit-shards) && needs.route.outputs.heavy != 'false' && inputs.enable-php && inputs.enable-phpunit && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     outputs:
-      durations: ${{ steps.durations.outputs.durations }}
+      # Empty when the upload failed, so no shard waits for a file that is not there.
+      durations-sha256: ${{ steps.upload.outcome == 'success' && steps.durations.outputs.sha256 || '' }}
     steps:
       - name: Restore test file durations
         continue-on-error: true
@@ -3809,8 +3830,9 @@ jobs:
       - name: Publish the durations to the shards
         id: durations
         run: |
-          python3 - "$RUNNER_TEMP/phpunit-durations/durations.json" <<'PYEOF'
-          import json, os, sys
+          python3 - "$RUNNER_TEMP/phpunit-durations/durations.json" "$RUNNER_TEMP/phpunit-shard-plan/durations.json" <<'PYEOF'
+          import hashlib, json, os, sys
+          from pathlib import Path
           files = {}
           try:
               with open(sys.argv[1], encoding="utf-8") as fh:
@@ -3818,17 +3840,26 @@ jobs:
               files = {str(k): round(float(v), 2) for k, v in raw.items() if float(v) >= 0}
           except (OSError, ValueError, TypeError, AttributeError):
               print("No readable durations from an earlier run; the shards deal the test files out by count.")
-          text = json.dumps({"files": files}, separators=(",", ":"), sort_keys=True)
-          # A job's outputs share a 1 MB limit. Far above any suite measured so
-          # far, but past it the output would be cut off, and a cut-off plan is
-          # exactly the shard disagreement this job exists to prevent.
-          if len(text) > 500_000:
-              print(f"::warning::The durations of {len(files)} test files take {len(text)} bytes, over this job's output budget; the shards deal the files out by count.")
-              text = json.dumps({"files": {}})
-          print(f"Durations for {len(files)} test files.")
+          data = json.dumps({"files": files}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+          out = Path(sys.argv[2])
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_bytes(data)
+          print(f"Durations for {len(files)} test files, {len(data)} bytes.")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write(f"durations={text}\n")
+              fh.write(f"sha256={hashlib.sha256(data).hexdigest()}\n")
           PYEOF
+
+      - name: Upload the durations for the shards
+        id: upload
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: phpunit-shard-plan-durations
+          path: ${{ runner.temp }}/phpunit-shard-plan/durations.json
+          # As long as the shards' coverage parts: "Re-run failed jobs" does
+          # not re-run this job, so its digest must still find the file then.
+          retention-days: 3
+          if-no-files-found: error
 
   phpunit:
     # NOT gated on php-quality — deliberately. `php-quality` is a matrix job, so
@@ -3926,8 +3957,8 @@ jobs:
     # so a failed resolve does not delete these legs — the resolve step publishes
     # a valid array before it exits non-zero, precisely so this stays true.
     #
-    # `phpunit-plan` is a real edge too, with phpunit-shards above 1: the shard
-    # step reads its durations output. Unsharded it is skipped, and the
+    # `phpunit-plan` is a real edge too, with phpunit-shards 2 to 8: the shard
+    # steps read the digest of its durations file. Unsharded it is skipped, and the
     # `!cancelled()` in the `if:` keeps a skipped need from skipping this job.
     needs: [route, security, nextcloud-matrix, changes, phpunit-plan]
     # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
@@ -4403,17 +4434,32 @@ jobs:
       #
       # The program is written to a file because "Measure merge-base coverage"
       # runs it again on the merge base's files.
+      #
+      # The durations arrive as a file (`phpunit-plan` says why), with the
+      # digest that job published. A file that is missing or has another
+      # digest while one was published fails the leg: dealing this shard by
+      # count while the others deal by duration would put a file on no shard.
+      # Nothing published deals every shard out by count.
+      - name: Download the shard plan's durations
+        if: ${{ inputs.phpunit-shards != 1 && matrix.extra-database != true && needs.phpunit-plan.outputs.durations-sha256 != '' }}
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: phpunit-shard-plan-durations
+          path: ${{ runner.temp }}/phpunit-shard-plan
+
       - name: Plan this shard
         id: phpunit-shard-plan
         if: ${{ inputs.phpunit-shards != 1 && matrix.extra-database != true }}
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ inputs.phpunit-shards }}
-          DURATIONS: ${{ needs.phpunit-plan.outputs.durations }}
+          DURATIONS_SHA256: ${{ needs.phpunit-plan.outputs.durations-sha256 }}
+          DURATIONS_FILE: ${{ runner.temp }}/phpunit-shard-plan/durations.json
         run: |
           cd server/apps/${{ inputs.app-name }}
           cat > "$RUNNER_TEMP/phpunit-shard-plan.py" <<'PYEOF'
-          import json, os, re, statistics, subprocess, sys
+          import hashlib, json, os, re, statistics, subprocess, sys
           from pathlib import Path
           from xml.etree import ElementTree as ET
           from xml.sax.saxutils import escape
@@ -4491,8 +4537,19 @@ jobs:
               print(f"::error::The test suites in {config} select no test file, so there is nothing to split.")
               sys.exit(1)
 
+          durations_file = os.environ.get("DURATIONS_FILE") or ""
+          want = os.environ.get("DURATIONS_SHA256") or ""
+          data = b""
+          if want:
+              try:
+                  data = Path(durations_file).read_bytes() if durations_file else None
+              except OSError:
+                  data = None
+              if data is None or hashlib.sha256(data).hexdigest() != want:
+                  print(f"::error::The shard plan's durations ({durations_file}) are {'missing' if data is None else 'not the file phpunit-plan published'}. Every shard must plan from the same data, or a test file can land on no shard. Re-run all jobs, which publishes the plan's durations again; re-running only the failed jobs reuses the published digest.")
+                  sys.exit(1)
           try:
-              known = {norm(k): float(v) for k, v in (json.loads(os.environ.get("DURATIONS") or "{}").get("files") or {}).items()}
+              known = {norm(k): float(v) for k, v in (json.loads(data or b"{}").get("files") or {}).items()}
           except (ValueError, TypeError, AttributeError):
               known = {}
           measured = [known[f] for f in files if f in known]
@@ -4642,7 +4699,8 @@ jobs:
           SHARDED: ${{ inputs.phpunit-shards > 1 }}
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ inputs.phpunit-shards }}
-          DURATIONS: ${{ needs.phpunit-plan.outputs.durations }}
+          DURATIONS_SHA256: ${{ needs.phpunit-plan.outputs.durations-sha256 }}
+          DURATIONS_FILE: ${{ runner.temp }}/phpunit-shard-plan/durations.json
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -4757,8 +4815,8 @@ jobs:
           # reported with a cause the log does not support.
           BASE_HAS_RUNNER=yes
           [ -x ./vendor/bin/phpunit ] || BASE_HAS_RUNNER=no
+          PLAN=0
           if [ "$SHARDED" = "true" ]; then
-            PLAN=0
             ALLOW_EMPTY=1 python3 "$RUNNER_TEMP/phpunit-shard-plan.py" || PLAN=$?
             if [ "$PLAN" -eq 3 ]; then
               : > "$RUNNER_TEMP/coverage/base-$SHARD.empty"
@@ -4777,6 +4835,12 @@ jobs:
           if [ ! -s "$BASE_REPORT" ] && [ ! -e "$RUNNER_TEMP/coverage/base-$SHARD.empty" ]; then
             if [ "$BASE_HAS_RUNNER" = "no" ]; then
               echo "::error::Merge base $MERGE_BASE has no ./vendor/bin/phpunit after composer install — that commit predates this repository's PHPUnit setup, so there is no coverage floor to measure against. Merge the current base branch ($BASE_REF) into this pull request, or rebase it onto a base that carries the test suite. Refusing to report a ratchet that did not run."
+            elif [ "$PLAN" -ne 0 ] && [ "$PLAN" -ne 3 ]; then
+              # The planner's own error above names the cause: the base's
+              # phpunit.xml cannot be read (absent or not XML), has no
+              # <testsuites>, or its suites select no test file. A base without
+              # PHPUnit at all is the branch above, with its own remedy.
+              echo "::error::The shard plan could not be made at merge base $MERGE_BASE (exit $PLAN; the planner's error above says why: its phpunit.xml is unreadable, has no <testsuites>, or selects no test file), so this shard has no part of the base suite to measure. Merge the current base branch ($BASE_REF) into this pull request, or rebase it onto a base whose phpunit.xml selects the test suite. Only if the planner said the base's suites select no test file: set phpunit-shards: 1 on this pull request until the base has test files. Refusing to report a ratchet that did not run."
             else
               echo "::error::PHPUnit is present at merge base $MERGE_BASE but produced no clover report there — the base suite could not run at all (check the PHPUnit output above this line). Refusing to report a ratchet that did not run."
             fi
@@ -5096,7 +5160,7 @@ jobs:
 
   # ── PHPUNIT SHARDS: THE MERGED COVERAGE, ITS GUARD AND THE NEXT PLAN ──────
   #
-  # Only with phpunit-shards above 1. No shard holds the whole suite, so what
+  # Only with phpunit-shards 2 to 8. No shard holds the whole suite, so what
   # needs the whole suite happens here, after every shard has finished:
   #
   #  * the coverage leg's parts are merged into one clover report, the same
@@ -5125,14 +5189,15 @@ jobs:
   phpunit-shards:
     name: "PHPUnit shards"
     needs: [route, changes, phpunit]
-    if: ${{ !cancelled() && inputs.phpunit-shards > 1 && needs.route.outputs.heavy != 'false' && inputs.enable-php && inputs.enable-phpunit && needs.changes.outputs.code != 'false' }}
+    # The shard counts the matrix expands, as on `phpunit-plan`.
+    if: ${{ !cancelled() && contains(fromJSON('[2,3,4,5,6,7,8]'), inputs.phpunit-shards) && needs.route.outputs.heavy != 'false' && inputs.enable-php && inputs.enable-phpunit && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - name: Checkout app
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           path: server/apps/${{ inputs.app-name }}
@@ -5213,7 +5278,7 @@ jobs:
           path: ${{ runner.temp }}/coverage
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2.40.0
         with:
           php-version: ${{ inputs.php-version }}
           extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, mysqli, pdo_mysql, zip, gd, curl, xml, json
@@ -5228,10 +5293,22 @@ jobs:
       # Per database of the coverage leg: every shard's part must be there, a
       # missing one would under-report. On a pull request the shards agree on
       # one merge base, and every shard has a base part or an empty marker.
+      #
+      # The databases are the matrix's, from the inputs, not the ones whose
+      # artifacts happen to be there: a database none of whose shards uploaded
+      # anything is then a missing database, named, and not one nobody checks.
+      #
+      # No coverage leg in the matrix (php-version is not in
+      # php-test-versions, and the matrix is not reduced) means no coverage,
+      # as unsharded: the step says so and merges nothing.
       - name: Merge the shards' coverage
+        id: merge
         env:
           SHARDS: ${{ inputs.phpunit-shards }}
           PRIMARY_DATABASE: ${{ inputs.database }}
+          # The phpunit matrix's own `database` and `php-version` expressions.
+          EXPECTED_DATABASES: ${{ join(fromJSON(inputs.database-test-matrix), ',') != '' && toJSON(fromJSON(inputs.database-test-matrix)) || toJSON(fromJSON(format('["{0}"]', inputs.database))) }}
+          COVERAGE_LEG: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && contains(fromJSON(inputs.reduce-pr-base-branches), github.base_ref)) || contains(fromJSON(inputs.php-test-versions), inputs.php-version) }}
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
@@ -5262,10 +5339,14 @@ jobs:
           echo 'Merged ' . (count($argv) - 2) . " part(s) into {$argv[1]}.\n";
           PHPEOF
 
-          DATABASES="$( { find "$RUNNER_TEMP/coverage" -mindepth 1 -maxdepth 1 -type d -name 'phpunit-coverage-*-shard-*' -printf '%f\n' 2>/dev/null || true; } \
-            | sed -E 's/^phpunit-coverage-(.*)-shard-[0-9]+$/\1/' | sort -u)"
+          if [ "$COVERAGE_LEG" != "true" ]; then
+            echo "::notice::The PHPUnit matrix has no coverage leg (php-version is not in php-test-versions), so there is no coverage to merge or guard, as unsharded."
+            echo "coverage-leg=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          DATABASES="$(jq -r '.[]' <<< "$EXPECTED_DATABASES" | sort -u)"
           if [ -z "$DATABASES" ]; then
-            echo "::error::No shard of the coverage leg uploaded its coverage, so there is no report to merge (see the shards' 'Run PHPUnit tests' step). Refusing to report a coverage check that did not run."
+            echo "::error::No database in the PHPUnit matrix ($EXPECTED_DATABASES), so there is no coverage to merge. Refusing to report a coverage check that did not run."
             exit 1
           fi
           HEAD_SHA="$(git rev-parse HEAD)"
@@ -5311,7 +5392,7 @@ jobs:
       # once per database. The capability probes and the promotion exemption
       # are that step's, and its comments carry the evidence for each.
       - name: Guard coverage baseline
-        if: ${{ inputs.enable-coverage-guard }}
+        if: ${{ inputs.enable-coverage-guard && steps.merge.outputs.coverage-leg != 'false' }}
         env:
           EVENT_NAME: ${{ github.event_name }}
           # Through `env:`, never interpolated: a branch name is attacker text.
@@ -10084,7 +10165,7 @@ jobs:
     # whole change exists to remove, and it looks identical to a pass.
     #
     # `phpunit-plan` and `phpunit-shards` are on this list for the same reason
-    # as everything else: with phpunit-shards above 1 the merged coverage and
+    # as everything else: with phpunit-shards 2 to 8 the merged coverage and
     # its guard live in `phpunit-shards`, and a sharded run must not report
     # before that verdict exists. Unsharded both are skipped, which gates
     # nothing and waits for nothing.
@@ -10402,7 +10483,12 @@ jobs:
                   return ""
               legs, missing, expected, crashed, groups = load(suite)
               if not legs:
-                  return ""
+                  # Every shard crashed before it counted a test: no counts
+                  # line, but the shards are still named, one line each.
+                  if not crashed and not groups:
+                      return ""
+                  count = 1 if suite == "playwright" else len(set(groups) | {c["group"] for c in crashed})
+                  return "<br>".join(shard_lines([], crashed, count, groups))
               notes, bullets = [], []
               complete = not missing and len(legs) >= expected and not any(l["not_run"] for l in legs)
               rows = len(legs)

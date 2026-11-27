@@ -24,6 +24,10 @@ against a small app tree:
                  empty shard of the merge base (ALLOW_EMPTY) exits 3.
   * config       the written configuration keeps every other setting, lists
                  the shard's files in run order and drops defaultTestSuite.
+  * file input   the durations reach the plan as a file with the digest
+                 `phpunit-plan` published: a file over the kernel's 128 KiB
+                 limit for one environment string plans, a missing or other
+                 file fails the leg, and no step passes them through `env:`.
 
 --positive-control drops one file from the plan and requires the lossless case
 to go red, so this suite is shown to read the program's partition.
@@ -34,6 +38,7 @@ Exit:   0 all assertions hold, 1 at least one failed.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -112,8 +117,14 @@ def make_app(where: Path, default: str = "") -> Path:
 
 
 def plan(program: Path, app: Path, shard: int, shards, durations: dict | None = None, **env) -> tuple[int, list[str], str]:
-    full = {"PATH": f"{app.parent / 'bin'}:/usr/bin:/bin", "SHARD": str(shard), "SHARDS": str(shards),
-            "DURATIONS": json.dumps({"files": durations}) if durations is not None else "", **env}
+    full = {"PATH": f"{app.parent / 'bin'}:/usr/bin:/bin", "SHARD": str(shard), "SHARDS": str(shards)}
+    if durations is not None:
+        # As `phpunit-plan` publishes them: a file, and its digest.
+        data = json.dumps({"files": durations}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        path = app.parent / "durations.json"
+        path.write_bytes(data)
+        full.update(DURATIONS_FILE=str(path), DURATIONS_SHA256=hashlib.sha256(data).hexdigest())
+    full.update(env)
     out = app / "phpunit-shard.xml"
     out.unlink(missing_ok=True)
     proc = subprocess.run([sys.executable, str(program)], cwd=app, env=full, capture_output=True, text=True)
@@ -171,6 +182,27 @@ def assertions(program: Path, tmp: Path) -> dict[str, str]:
     code, files, log = plan(program, app, 1, 2, {"tests/Unit/ThetaTest.php": 30.0})
     check("durations-partial", code == 0 and files, f"durations for one file only: exit {code}\n{log}")
 
+    # Over 200 KB of durations, past what one environment string may hold.
+    large = {f"tests/Unit/Generated/Module{i:05d}/SomeRatherLongGeneratedNameTest.php": 1.5 for i in range(4000)}
+    large.update(durations)
+    seen = []
+    for shard in (1, 2, 3):
+        code, files, log = plan(program, app, shard, 3, large)
+        check("durations-large-file", code == 0, f"{len((app.parent / 'durations.json').read_bytes())} bytes of durations, shard {shard}: exit {code}\n{log}")
+        seen += files
+    check("durations-large-file", len((app.parent / "durations.json").read_bytes()) > 200_000 and sorted(seen) == sorted(FILES),
+          f"want every file once from a >200 KB durations file, got {sorted(seen)}")
+
+    code, files, log = plan(program, app, 1, 2, durations, DURATIONS_SHA256="0" * 64)
+    check("durations-other-file", code == 1 and "not the file phpunit-plan published" in log,
+          f"want exit 1 on a durations file with another digest, got {code}\n{log}")
+    code, files, log = plan(program, app, 1, 2, durations, DURATIONS_FILE=str(app.parent / "absent.json"))
+    check("durations-missing-file", code == 1 and "are missing" in log,
+          f"want exit 1 when the published durations file is absent, got {code}\n{log}")
+    code, files, log = plan(program, app, 1, 2, None, DURATIONS_FILE=str(app.parent / "absent.json"))
+    check("durations-none-published", code == 0 and "file count" in log,
+          f"want a plan by count when nothing was published, got {code}\n{log}")
+
     for bad in ("12", "0", "x", ""):
         code, files, log = plan(program, app, 1, bad)
         check("refuses-shard-count", code == 1 and "must be a whole number from 1 to 8" in log,
@@ -189,6 +221,26 @@ def assertions(program: Path, tmp: Path) -> dict[str, str]:
     check("config-keeps-settings", 'bootstrap="tests/bootstrap.php"' in written and "<source>" in written
           and "defaultTestSuite" not in written and written.count("<testsuite ") == 1,
           f"the written configuration lost a setting or kept defaultTestSuite:\n{written}")
+    return failures
+
+
+def wiring(workflow: Path) -> dict[str, str]:
+    """No step hands the durations over through `env:`; every planner reads the file."""
+    doc = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+    failures = {}
+    planners = 0
+    for name, job in doc["jobs"].items():
+        for step in job.get("steps") or []:
+            env = step.get("env") or {}
+            for key, value in env.items():
+                if "durations" in str(value) and "durations-sha256" not in str(value) and "phpunit-shard-plan/durations.json" not in str(value):
+                    failures["durations-through-env"] = f"{name} / {step.get('name')}: {key} = {value!r} passes the durations through the environment"
+            if "phpunit-shard-plan.py" in str(step.get("run") or ""):
+                planners += 1
+                if "DURATIONS_FILE" not in env or "DURATIONS_SHA256" not in env:
+                    failures["durations-file-wiring"] = f"{name} / {step.get('name')} runs the planner without DURATIONS_FILE and DURATIONS_SHA256"
+    if not planners:
+        failures["durations-file-wiring"] = "found no step that runs the planner"
     return failures
 
 
@@ -215,6 +267,7 @@ def main() -> int:
             return 0
         program.write_text(source, encoding="utf-8")
         failures = assertions(program, tmp / "run")
+    failures.update(wiring(Path(args.workflow)))
     for case, detail in failures.items():
         print(f"::error::{case}: {detail}")
     if failures:
