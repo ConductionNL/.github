@@ -280,13 +280,14 @@ jobs:
           tools: composer:v2
 
       # POSITIVE CONTROL FIRST: a merge that drops a part must turn it red.
-      # `--driver xdebug` fails the run when php does not load Xdebug and
-      # prints the version it measured with.
+      # `--driver xdebug --driver-version 3.5.3` fails the run when php does
+      # not load Xdebug 3.5.3 exactly, and prints the version it measured
+      # with. Move this version together with the pin above.
       - name: "Positive control, a merge that drops a part must fail the suite"
-        run: python3 scripts/test-phpunit-coverage-merge.py --driver xdebug --positive-control .github/workflows/quality.yml
+        run: python3 scripts/test-phpunit-coverage-merge.py --driver xdebug --driver-version 3.5.3 --positive-control .github/workflows/quality.yml
 
       - name: "Assert the merged coverage equals an unsharded run"
-        run: python3 scripts/test-phpunit-coverage-merge.py --driver xdebug .github/workflows/quality.yml
+        run: python3 scripts/test-phpunit-coverage-merge.py --driver xdebug --driver-version 3.5.3 .github/workflows/quality.yml
 
   quality-test-counts:
     name: "The report's test counts read real tool output"

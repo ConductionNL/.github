@@ -36,10 +36,11 @@ the merge and not a crash.
 shipped PHPUnit legs do (they pin Xdebug 3.5.3), or pcov. The suite measures
 with that driver only, prints its name and version, and FAILS when php does
 not load it, so a run never proves the merge with a driver the shards do not
-use. It also needs composer. A coverage test that could not run is not a pass.
+use. --driver-version, when given, also fails the run unless php reports
+exactly that driver version. It also needs composer. A coverage test that could not run is not a pass.
 
-Usage:  test-phpunit-coverage-merge.py --driver xdebug|pcov [--positive-control] [workflow.yml]
-Exit:   0 all assertions hold, 1 at least one failed or could not run.
+Usage:  test-phpunit-coverage-merge.py --driver xdebug|pcov [--driver-version X.Y.Z] [--positive-control] [workflow.yml]
+Exit:   0 all assertions hold, 1 at least one failed or could not run, 2 bad arguments.
 """
 from __future__ import annotations
 
@@ -99,8 +100,8 @@ DRIVERS = {
 }
 
 
-def driver_flags(driver: str) -> list[str]:
-    """The ini flags that measure with this driver, or exit when php does not load it."""
+def driver_flags(driver: str, expected_version: str | None) -> list[str]:
+    """The ini flags that measure with this driver, or exit when php does not load it at the expected version."""
     extension, flags = DRIVERS[driver]
     modules = run(["php", "-m"], Path.cwd()).stdout.lower().split()
     if extension not in modules:
@@ -108,6 +109,9 @@ def driver_flags(driver: str) -> list[str]:
                          "This suite cannot run.")
     version = run(["php", *flags, "-r", f"echo phpversion('{extension}');"], Path.cwd()).stdout.strip()
     print(f"Coverage driver: {driver} {version or '(version unknown)'}")
+    if expected_version is not None and version != expected_version:
+        raise SystemExit(f"FATAL: php loads {driver} {version or '(version unknown)'}, but this run was asked to measure "
+                         f"with {driver} {expected_version}, the version the shipped PHPUnit legs pin. This suite cannot run.")
     return flags
 
 
@@ -132,7 +136,7 @@ def clover(path: Path) -> dict:
     return {"files": files, "totals": totals}
 
 
-def assertions(plan: str, merge: str, tmp: Path, driver: str) -> tuple[dict[str, str], dict]:
+def assertions(plan: str, merge: str, tmp: Path, driver: str, driver_version: str | None) -> tuple[dict[str, str], dict]:
     """Return {case: failure} for every case that does not hold, and how the all-parts merge ended."""
     failures: dict[str, str] = {}
 
@@ -140,7 +144,7 @@ def assertions(plan: str, merge: str, tmp: Path, driver: str) -> tuple[dict[str,
         if not ok:
             failures[case] = detail
 
-    on = driver_flags(driver)
+    on = driver_flags(driver, driver_version)
     app = tmp / "app"
     shutil.copytree(FIXTURE, app, ignore=shutil.ignore_patterns("vendor"))
     installed = run(["composer", "install", "--no-progress", "--no-interaction", "--prefer-dist"], app)
@@ -200,6 +204,8 @@ def main() -> int:
     ap.add_argument("workflow", nargs="?", default=str(ROOT / ".github" / "workflows" / "quality.yml"))
     ap.add_argument("--driver", required=True, choices=sorted(DRIVERS),
                     help="the coverage driver to measure with; the run fails when php does not load it")
+    ap.add_argument("--driver-version", default=None,
+                    help="the exact driver version to measure with, e.g. 3.5.3; the run fails when php loads another")
     ap.add_argument("--positive-control", action="store_true")
     args = ap.parse_args()
 
@@ -212,7 +218,7 @@ def main() -> int:
             if merge.count(DROP[0]) != 1:
                 print(f"::error::the anchor {DROP[0]!r} is not in the merge program exactly once.")
                 return 1
-            failures, dropped = assertions(plan, merge.replace(*DROP), Path(raw), args.driver)
+            failures, dropped = assertions(plan, merge.replace(*DROP), Path(raw), args.driver, args.driver_version)
             if "equal" not in failures:
                 print("::error::a merge that keeps only the first part left case 'equal' green. This suite is not reading the merge.")
                 return 1
@@ -232,7 +238,7 @@ def main() -> int:
             print(f"OK ({args.driver}): a merge that drops a part exits 0, covers {got_covered} of the unsharded "
                   f"run's {want_covered} statements, and turns 'equal' red.")
             return 0
-        failures, _ = assertions(plan, merge, Path(raw), args.driver)
+        failures, _ = assertions(plan, merge, Path(raw), args.driver, args.driver_version)
 
     for case, failure in failures.items():
         print(f"::error::{case}: {failure}")
