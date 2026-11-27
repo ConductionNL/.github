@@ -91,10 +91,10 @@ test_gate120_register_version_scope.sh	20
 test_gate121_register_auth_dialect_scope.sh	15
 test_gate122_sig_maintainability_scope.sh	16
 test_gate123_sig_floor_scope.sh	15
-test_gate124_perf_budget.sh	60
+test_gate124_perf_budget.sh	105
 test_gate16_spec_coverage_scope.sh	38
 test_gate19_coverage_credibility.sh	4
-test_gate67_contract_parity_scope.sh	3
+test_gate67_contract_parity_scope.sh	80
 test_gate7_verb_object_guards.sh	0
 test_gate98_repair_registration_scope.sh	17
 test_gate_13_multiline_dialog.sh	35

@@ -828,6 +828,22 @@ fi
 #                          pipelinq 36, decidesk 29), which are the four with
 #                          the most e2e coverage. Per-repo opt-in:
 #                          HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1.
+#   67   openregister-contract-parity
+#                          PARTIAL, and only on a stableX.Y release line
+#                          (ADR-122): quality.yml sets
+#                          HYDRA_GATE_CONTRACT_PARITY_BLOCKING=0 on a pull
+#                          request into, or a push to, a stable* branch, and
+#                          the gate blocks everywhere else. The package runs at
+#                          main (gate 65 refuses any other pin), so a line cut
+#                          before a contract file reached main differs from
+#                          main's contract set on every pull request: measured
+#                          2026-11-26, openregister stable2.1 ships 5 contract
+#                          files against main's 19.
+#   124  perf-budget       PARTIAL on the same terms, switch
+#                          HYDRA_GATE_PERF_BUDGET_BLOCKING=0: a release line cut
+#                          before ADR-124 has no tests/performance/budget.json
+#                          and no definePerformanceSpec spec to add without
+#                          backporting the feature.
 #   112  newman-reach      .github#712. Shipped blocking and failed 10 of the
 #                          21 fleet repos within the hour, on inherited debt no
 #                          PR introduced (openregister alone: 53 findings).
@@ -870,7 +886,7 @@ fi
 #
 # All of them are worked down per app and flipped back individually; the
 # findings print on every run either way, so none is hidden.
-_ADVISORY_ALLOWED_GATES="7 19 46 112 113 114 115 116 122 123"
+_ADVISORY_ALLOWED_GATES="7 19 46 67 112 113 114 115 116 122 123 124"
 
 _runner_src="${GF_PKG_ROOT}/scripts/run-hydra-gates.sh"
 _warn_gates="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_runner_src}" \
