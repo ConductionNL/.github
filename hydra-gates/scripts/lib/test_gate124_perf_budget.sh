@@ -9,6 +9,11 @@
 #          workflow: PASS with the census line
 #   ARM 3  an app whose workflow runs `newman run` itself: FAIL
 #   ARM 4  a repository without appinfo/info.xml: NOT APPLICABLE
+#   ARM 5  ARM 1's app with HYDRA_GATE_PERF_BUDGET_BLOCKING=0 (what quality.yml
+#          sets on a stable* release line): WARNING, the finding still named,
+#          and the exit (the runner's failed-gate count) one lower than ARM 1;
+#          any other value still FAILs
+#   ARM 6  ARM 2's wired app with the switch at 0: still PASS
 #
 # The rule-by-rule arms (exceptions, the app id, the injected Newman test and
 # the time table) are in test_check_perf_budget.py.
@@ -37,9 +42,11 @@ _app() {  # <dir>: a wired fixture app
         > "$1/.github/workflows/code-quality.yml"
 }
 
-_run() {  # <dir>
-    mkdir -p "${WORK}/logs-$(basename "$1")"
-    (cd "$1" && HYDRA_GATE_LOG_DIR="${WORK}/logs-$(basename "$1")" bash "${RUNNER}" . 2>&1)
+_run() {  # <dir> [VAR=value ...]
+    local _dir="$1"
+    shift
+    mkdir -p "${WORK}/logs-$(basename "${_dir}")"
+    (cd "${_dir}" && env HYDRA_GATE_LOG_DIR="${WORK}/logs-$(basename "${_dir}")" "$@" bash "${RUNNER}" . 2>&1)
 }
 
 _verdict() {
@@ -50,6 +57,7 @@ echo "-- ARM 1: no budget file: FAIL --"
 _app "${WORK}/nobudget"
 rm "${WORK}/nobudget/tests/performance/budget.json"
 _out="$(_run "${WORK}/nobudget")"
+_rc_blocking=$?
 case "$(_verdict "${_out}")" in
     *FAIL*) _ok "an app without a budget file fails" ;;
     *)      _bad "expected FAIL, got: $(_verdict "${_out}")" ;;
@@ -88,6 +96,37 @@ mkdir -p "${WORK}/notapp"
 case "$(_verdict "$(_run "${WORK}/notapp")")" in
     *"NOT APPLICABLE"*) _ok "a repository without appinfo/info.xml is not applicable" ;;
     *)                  _bad "expected NOT APPLICABLE, got: $(_verdict "$(_run "${WORK}/notapp")")" ;;
+esac
+
+echo "-- ARM 5: no budget file, switch at 0: WARNING, not counted --"
+_out="$(_run "${WORK}/nobudget" HYDRA_GATE_PERF_BUDGET_BLOCKING=0)"
+_rc_advisory=$?
+case "$(_verdict "${_out}")" in
+    *"WARNING"*"NOT BLOCKING this run"*) _ok "with the switch at 0 the same app warns" ;;
+    *)                                   _bad "expected WARNING, got: $(_verdict "${_out}")" ;;
+esac
+if printf '%s\n' "${_out}" | grep -q '^  tests/performance/budget.json is missing'; then
+    _ok "the warning still names the missing file"
+else
+    _bad "the warning does not name tests/performance/budget.json"
+fi
+# Same tree as ARM 1, so every other gate reports the same; only 124 may move.
+if [ "$((_rc_blocking - _rc_advisory))" -eq 1 ]; then
+    _ok "the exit drops from ${_rc_blocking} to ${_rc_advisory}: gate 124 is no longer counted as failed"
+else
+    _bad "expected the switch to lower the exit by exactly 1, got ${_rc_blocking} then ${_rc_advisory}"
+fi
+_out="$(_run "${WORK}/nobudget" HYDRA_GATE_PERF_BUDGET_BLOCKING=false)"
+case "$(_verdict "${_out}")" in
+    *FAIL*) _ok "any value but a literal 0 keeps it blocking" ;;
+    *)      _bad "expected FAIL with the switch at 'false', got: $(_verdict "${_out}")" ;;
+esac
+
+echo "-- ARM 6: a wired app, switch at 0: PASS --"
+_out="$(_run "${WORK}/wired" HYDRA_GATE_PERF_BUDGET_BLOCKING=0)"
+case "$(_verdict "${_out}")" in
+    *PASS*) _ok "a wired app passes with the switch at 0" ;;
+    *)      _bad "expected PASS, got: $(_verdict "${_out}")" ;;
 esac
 
 if [ "${_fail_n}" -gt 0 ]; then

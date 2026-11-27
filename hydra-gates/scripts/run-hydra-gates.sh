@@ -11354,7 +11354,24 @@ elif [ "${_orcp_rc}" -eq 4 ]; then
 else
     _orcp_n=$(grep -cE '^FAIL ' "${_orcp_log}" 2>/dev/null || true)
     case "${_orcp_n}" in ''|*[!0-9]*) _orcp_n=1 ;; esac
-    _fail 67 "openregister-contract-parity" "${_orcp_n} contract file(s) out of step between lib/Contract/ and hydra-gates/contracts/ — a published contract with two definitions is the drift ADR-084 forbids; see ${_orcp_log}"
+    # HYDRA_GATE_CONTRACT_PARITY_BLOCKING — blocking unless it is exactly "0".
+    #
+    # The shipped copy this gate compares against is the gate package's, and
+    # CI resolves the package at @main (gate 65 fails any other pin). A release
+    # line (stableX.Y, ADR-122) cut before a contract file was added to main
+    # therefore differs from main's contract set on every pull request, and no
+    # pull request to that line can fix it short of backporting the feature.
+    # quality.yml sets "0" for pull requests to, and pushes on, a stable*
+    # branch; the gate still runs and names every file, it just does not fail
+    # the run. A crash (above) still fails in both modes: that is not drift.
+    # Any value other than "0" (unset, "1", a typo) keeps it blocking.
+    if [ "${HYDRA_GATE_CONTRACT_PARITY_BLOCKING:-1}" = "0" ]; then
+        # The run stays green here, so nobody opens the log: print the files.
+        sed -n 's/^FAIL /  /p' "${_orcp_log}" 2>/dev/null
+        _warn 67 "openregister-contract-parity" "${_orcp_n} contract file(s) out of step between lib/Contract/ and hydra-gates/contracts/ (each named above). NOT BLOCKING this run: HYDRA_GATE_CONTRACT_PARITY_BLOCKING=0, which quality.yml sets on a stable* release line, because that line is compared against the contract set of the gate package's main and cannot match it without backporting. Blocking everywhere else. See ${_orcp_log}"
+    else
+        _fail 67 "openregister-contract-parity" "${_orcp_n} contract file(s) out of step between lib/Contract/ and hydra-gates/contracts/ — a published contract with two definitions is the drift ADR-084 forbids; see ${_orcp_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -14022,7 +14039,20 @@ else
             if _helper_finished "${_pb_log}" '^\[gate-124\] perf-budget: FAIL: [0-9]+ finding'; then
                 grep -E '^  [^ ]' "${_pb_log}" 2>/dev/null
                 _pb_n=$(sed -n 's/^\[gate-124\] perf-budget: FAIL: \([0-9]*\) finding.*/\1/p' "${_pb_log}" | tail -1)
-                _fail 124 "perf-budget" "${_pb_n:-1} finding(s): the app's speed budget is not declared or not wired (ADR-124). Each is named above. See ${_pb_log}"
+                # HYDRA_GATE_PERF_BUDGET_BLOCKING — blocking unless it is
+                # exactly "0". The gate is repo-wide, so a release line
+                # (stableX.Y, ADR-122) cut before ADR-124 has no budget file
+                # and no performance spec, and no pull request to that line
+                # can add them short of backporting the feature. quality.yml
+                # sets "0" for pull requests to, and pushes on, a stable*
+                # branch; the findings above are still printed. A checker
+                # that did not finish stays SKIPPED below in both modes. Any
+                # value other than "0" (unset, "1", a typo) keeps it blocking.
+                if [ "${HYDRA_GATE_PERF_BUDGET_BLOCKING:-1}" = "0" ]; then
+                    _warn 124 "perf-budget" "${_pb_n:-1} finding(s): the app's speed budget is not declared or not wired (ADR-124). Each is named above. NOT BLOCKING this run: HYDRA_GATE_PERF_BUDGET_BLOCKING=0, which quality.yml sets on a stable* release line, because that line was cut before the budget was required and cannot add it without backporting. Blocking everywhere else. See ${_pb_log}"
+                else
+                    _fail 124 "perf-budget" "${_pb_n:-1} finding(s): the app's speed budget is not declared or not wired (ADR-124). Each is named above. See ${_pb_log}"
+                fi
             else
                 _skip 124 "perf-budget" wiring "check_perf_budget.py exited 1 without its FAIL summary, so it did not finish and nothing is verified by this run. Checker output: ${_pb_why:-<empty>}. See ${_pb_log}."
             fi

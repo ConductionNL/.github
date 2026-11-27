@@ -8816,6 +8816,19 @@ jobs:
           # sends) the gate writes the SIG risk profile here instead of
           # ratcheting; the step after the gates publishes it.
           HYDRA_GATE_SIG_MAINTAINABILITY_BLOCKING: ${{ inputs.hydra-gates-sig-blocking && '1' || '0' }}
+          # Gates 67 (openregister-contract-parity) and 124 (perf-budget) judge
+          # the whole tree against what the gate package's main expects: main's
+          # contract set, and the speed budget ADR-124 requires. A stableX.Y
+          # release line (ADR-122) cut before either cannot meet them without
+          # backporting features, and the package cannot be pinned to the
+          # line's age (gate 65 fails any hydra-gates-ref other than main). So
+          # on a pull request into a stable* branch, and on a push to one, both
+          # report as warnings; everywhere else they block. A push has no
+          # base_ref, so its branch is read from github.ref (refs/heads/...),
+          # which also keeps a tag push out. Explicit '1'/'0' as above; the
+          # runner demotes the gate only on a literal "0".
+          HYDRA_GATE_CONTRACT_PARITY_BLOCKING: ${{ (startsWith(github.base_ref, 'stable') || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/stable'))) && '0' || '1' }}
+          HYDRA_GATE_PERF_BUDGET_BLOCKING: ${{ (startsWith(github.base_ref, 'stable') || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/stable'))) && '0' || '1' }}
           HYDRA_GATE_SIG_REPORT_DIR: ${{ runner.temp }}/sig-profile
           HYDRA_GATE_TOOLS_DIR: ${{ runner.temp }}/hydra-sig-cache/tools
           HYDRA_GATE_SIG_CACHE: ${{ runner.temp }}/hydra-sig-cache/sig-units.json

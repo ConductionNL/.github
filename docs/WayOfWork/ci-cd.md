@@ -413,6 +413,10 @@ permanently false. Neither errors at the point of the change.
 — openregister's `lib/Contract/` and the one shipped in hydra-gates — byte
 identical, in both directions. Two definitions of a published contract is the
 drift the ADR forbids, and an intention to keep them in step is not a mechanism.
+On a pull request into a `stable*` release line, and on a push to one, it
+reports a WARNING instead of failing (as does gate-124 `perf-budget`): the gate
+package runs at `main`, so a line cut before a contract file was added cannot
+match it without backporting. Everywhere else it blocks.
 
 ## Where the configuration lives
 
