@@ -52,6 +52,11 @@ on:
         required: false
         type: string
         default: ""
+      extra-rsync-includes:
+        description: "rsync --include flags placed before the default excludes, for runtime files under an excluded path (e.g. --include='/data/' --include='/data/templates/***')"
+        required: false
+        type: string
+        default: ""
       branch-model:
         # `development`: the dev -> beta -> main promotion flow.
         # `main`: ADR-122. Work lands on main, which carries the next line in
@@ -1490,7 +1495,10 @@ jobs:
           # docs/ stays out except docs/features.json: the Features and roadmap
           # page reads it on the server, and without it that page is empty on
           # every install.
+          # extra-rsync-includes goes first: rsync applies the first matching
+          # rule, so an app can ship runtime files the excludes below leave out.
           rsync -a --progress \
+            ${{ inputs.extra-rsync-includes }} \
             --exclude='/package' \
             --exclude='/.git' \
             --exclude='/.github' \
